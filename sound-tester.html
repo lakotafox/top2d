@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sound Tester - Game Preview</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #111; overflow: hidden; display: flex; }
+
+        #gameArea {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+            border: 2px solid #333;
+        }
+
+        #soundPanel {
+            width: 320px;
+            background: #1a1a2e;
+            padding: 15px;
+            overflow-y: auto;
+            height: 100vh;
+            border-left: 2px solid #4af;
+        }
+
+        h2 { color: #4af; margin: 0 0 15px 0; font-size: 16px; font-family: monospace; }
+        h3 { color: #4af; margin: 15px 0 10px 0; font-size: 13px; font-family: monospace; }
+
+        .section {
+            background: #2a2a4e;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            margin: 8px 0 4px;
+            color: #aaa;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        input[type="range"] { width: 100%; }
+        .value { color: #4af; }
+
+        select {
+            width: 100%;
+            padding: 6px;
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        button {
+            background: #4af;
+            color: #000;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 3px;
+        }
+        button:hover { background: #5bf; }
+        button.active { background: #0a5; color: #fff; }
+        button.small { padding: 4px 8px; font-size: 10px; }
+
+        .sound-set {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .sound-btn {
+            padding: 4px 8px;
+            font-size: 10px;
+            background: #333;
+            border: 2px solid transparent;
+        }
+        .sound-btn:hover { background: #444; }
+        .sound-btn.playing { background: #4af; color: #000; }
+        .sound-btn.selected { background: #0a5; color: #fff; border: 2px solid #4af; }
+
+        #status {
+            color: #888;
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 10px;
+        }
+
+        .load-section {
+            border: 2px dashed #444;
+            padding: 15px;
+            text-align: center;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+        .load-section:hover { border-color: #4af; }
+
+        input[type="file"] { display: none; }
+
+        .file-label {
+            display: inline-block;
+            background: #4af;
+            color: #000;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .file-label:hover { background: #5bf; }
+
+        #instructions {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            color: #666;
+            font-family: monospace;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameArea">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div id="soundPanel">
+        <h2>Sound Tester</h2>
+
+        <div class="load-section">
+            <label class="file-label" for="projectFile">Load Project JSON</label>
+            <input type="file" id="projectFile" accept=".json">
+            <div style="color:#888; font-size:10px; margin-top:8px;" id="projectStatus">No project loaded</div>
+        </div>
+
+        <div class="load-section">
+            <label class="file-label" for="soundFolder">Load Sound Folder</label>
+            <input type="file" id="soundFolder" multiple accept="audio/*" webkitdirectory>
+            <div style="color:#888; font-size:10px; margin-top:8px;" id="soundStatus">No sounds loaded</div>
+        </div>
+
+        <div class="section">
+            <h3>Sound Set</h3>
+            <select id="soundSetSelect">
+                <option value="">-- Select Sound Set --</option>
+            </select>
+            <div class="sound-set" id="soundButtons"></div>
+        </div>
+
+        <div class="section">
+            <h3>Settings</h3>
+
+            <label>Volume: <span class="value" id="volumeVal">50%</span></label>
+            <input type="range" id="volume" min="0" max="100" value="50">
+
+            <label>Step Interval: <span class="value" id="intervalVal">200ms</span></label>
+            <input type="range" id="interval" min="80" max="400" value="200">
+
+            <label>Pitch Variation: <span class="value" id="pitchVal">10%</span></label>
+            <input type="range" id="pitch" min="0" max="30" value="10">
+        </div>
+
+        <div class="section">
+            <h3>Quick Load Presets</h3>
+            <button onclick="loadPreset('grass')">Grass Walk</button>
+            <button onclick="loadPreset('grass-short')">Grass Short</button>
+            <button onclick="loadPreset('dirt')">Dirt Walk</button>
+            <button onclick="loadPreset('dirt-short')">Dirt Short</button>
+        </div>
+
+        <div id="status">WASD to walk</div>
+    </div>
+
+    <div id="instructions">WASD/Arrows = Walk | Sound panel on right</div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game state
+        let projectData = null;
+        let playerImg = new Image();
+        let tilesetImages = [];
+        let layers = [];
+        let mapCols = 40;
+        let mapRows = 30;
+
+        const player = {
+            x: 200, y: 200,
+            width: 20, height: 40,
+            speed: 3,
+            direction: 'down',
+            moving: false,
+            frame: 0,
+            frameTimer: 0
+        };
+
+        let playerScale = 1.7;
+        const TILE_SCALE = 4;
+        const gridSize = 16;
+
+        // Sound state
+        let soundSets = {}; // { 'Grass Walk': [ArrayBuffer, ...], ... }
+        let currentSoundSet = null;
+        let currentSounds = [];
+        let lastSoundIndex = -1;
+        let lockedSoundIndex = -1; // -1 = random, 0+ = locked to specific sound
+        let audioContext = null;
+        let isWalking = false;
+        let walkInterval = null;
+
+        // Input
+        const keys = {};
+
+        // Canvas setup
+        function resizeCanvas() {
+            const gameArea = document.getElementById('gameArea');
+            canvas.width = gameArea.clientWidth - 40;
+            canvas.height = window.innerHeight - 40;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Load project
+        document.getElementById('projectFile').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                projectData = JSON.parse(text);
+
+                // Load map dimensions
+                mapCols = projectData.mapCols || 40;
+                mapRows = projectData.mapRows || 30;
+
+                // Load layers
+                layers = projectData.layers || [];
+
+                // Load tilesets
+                tilesetImages = [];
+                if (projectData.tilesets && projectData.tilesets.length > 0) {
+                    for (const ts of projectData.tilesets) {
+                        if (ts && ts.data) {
+                            const img = new Image();
+                            img.src = ts.data;
+                            tilesetImages.push(img);
+                        }
+                    }
+                }
+
+                // Set player start position
+                if (projectData.playerPreviewPos) {
+                    const tileSize = gridSize * TILE_SCALE;
+                    player.x = projectData.playerPreviewPos.x * tileSize + tileSize / 2;
+                    player.y = projectData.playerPreviewPos.y * tileSize + tileSize / 2;
+                }
+
+                document.getElementById('projectStatus').textContent = 'Loaded: ' + file.name + ' (' + layers.length + ' layers, ' + tilesetImages.length + ' tilesets)';
+                document.getElementById('projectStatus').style.color = '#4af';
+            } catch (err) {
+                document.getElementById('projectStatus').textContent = 'Error: ' + err.message;
+                document.getElementById('projectStatus').style.color = '#f44';
+            }
+        });
+
+        // Load sounds from folder
+        document.getElementById('soundFolder').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            soundSets = {};
+
+            for (const file of files) {
+                // Parse folder structure from path
+                const pathParts = file.webkitRelativePath.split('/');
+                if (pathParts.length < 2) continue;
+
+                // Get category from path (e.g., "Walk/Grass/file.wav" -> "Grass")
+                let category = pathParts.slice(1, -1).join(' - ') || 'Default';
+                const fileName = pathParts[pathParts.length - 1];
+
+                // Skip non-audio files
+                if (!file.type.startsWith('audio/') && !fileName.endsWith('.wav') && !fileName.endsWith('.mp3')) {
+                    continue;
+                }
+
+                // Create category if needed
+                if (!soundSets[category]) {
+                    soundSets[category] = [];
+                }
+
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    soundSets[category].push({
+                        name: fileName,
+                        data: arrayBuffer
+                    });
+                } catch (err) {
+                    console.warn('Could not load:', file.name);
+                }
+            }
+
+            // Update UI
+            updateSoundSetSelect();
+
+            const totalSounds = Object.values(soundSets).reduce((sum, arr) => sum + arr.length, 0);
+            document.getElementById('soundStatus').textContent = `Loaded ${totalSounds} sounds in ${Object.keys(soundSets).length} sets`;
+            document.getElementById('soundStatus').style.color = '#4af';
+        });
+
+        function updateSoundSetSelect() {
+            const select = document.getElementById('soundSetSelect');
+            select.innerHTML = '<option value="">-- Select Sound Set --</option>';
+
+            for (const setName of Object.keys(soundSets).sort()) {
+                const option = document.createElement('option');
+                option.value = setName;
+                option.textContent = `${setName} (${soundSets[setName].length})`;
+                select.appendChild(option);
+            }
+        }
+
+        document.getElementById('soundSetSelect').addEventListener('change', (e) => {
+            selectSoundSet(e.target.value);
+        });
+
+        function selectSoundSet(setName) {
+            currentSoundSet = setName;
+            currentSounds = soundSets[setName] || [];
+            lockedSoundIndex = -1; // Reset to random when changing sets
+            updateSoundButtons();
+            document.getElementById('status').textContent = `Using: ${setName} (${currentSounds.length} sounds)`;
+        }
+
+        function updateSoundButtons() {
+            const container = document.getElementById('soundButtons');
+            container.innerHTML = '';
+
+            // Add "Random" button first
+            const randomBtn = document.createElement('button');
+            randomBtn.className = 'sound-btn' + (lockedSoundIndex === -1 ? ' selected' : '');
+            randomBtn.textContent = 'RND';
+            randomBtn.title = 'Random (cycle through all)';
+            randomBtn.onclick = () => {
+                lockedSoundIndex = -1;
+                updateSoundButtons();
+                document.getElementById('status').textContent = `Using: ${currentSoundSet} (Random)`;
+            };
+            container.appendChild(randomBtn);
+
+            currentSounds.forEach((sound, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'sound-btn' + (lockedSoundIndex === i ? ' selected' : '');
+                btn.textContent = (i + 1);
+                btn.title = sound.name + ' (click to lock)';
+                btn.onclick = () => {
+                    lockedSoundIndex = i;
+                    updateSoundButtons();
+                    playSound(i, true);
+                    document.getElementById('status').textContent = `Locked to: #${i + 1} - ${sound.name}`;
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        // Audio
+        function getAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioContext;
+        }
+
+        async function playSound(index = -1, highlight = false) {
+            if (currentSounds.length === 0) return;
+
+            const ctx = getAudioContext();
+            if (ctx.state === 'suspended') await ctx.resume();
+
+            // Use locked sound if set, otherwise pick random
+            if (index < 0) {
+                if (lockedSoundIndex >= 0) {
+                    index = lockedSoundIndex;
+                } else {
+                    // Pick random sound (avoid repeating)
+                    do {
+                        index = Math.floor(Math.random() * currentSounds.length);
+                    } while (index === lastSoundIndex && currentSounds.length > 1);
+                }
+            }
+            lastSoundIndex = index;
+
+            // Highlight (offset by 1 because RND button is first)
+            if (highlight) {
+                document.querySelectorAll('.sound-btn').forEach((el, i) => {
+                    el.classList.toggle('playing', i === index + 1);
+                });
+                setTimeout(() => {
+                    document.querySelectorAll('.sound-btn').forEach(el => el.classList.remove('playing'));
+                }, 150);
+            }
+
+            try {
+                const audioData = currentSounds[index].data.slice(0);
+                const audioBuffer = await ctx.decodeAudioData(audioData);
+
+                const source = ctx.createBufferSource();
+                source.buffer = audioBuffer;
+
+                const gainNode = ctx.createGain();
+                gainNode.gain.value = document.getElementById('volume').value / 100;
+
+                const pitchVar = document.getElementById('pitch').value / 100;
+                source.playbackRate.value = 1 + (Math.random() - 0.5) * 2 * pitchVar;
+
+                source.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                source.start();
+            } catch (err) {
+                console.error('Error playing sound:', err);
+            }
+        }
+
+        // Walking
+        function startWalking() {
+            if (isWalking) return;
+            isWalking = true;
+            playSound(-1, true);
+
+            const interval = parseInt(document.getElementById('interval').value);
+            walkInterval = setInterval(() => playSound(-1, true), interval);
+        }
+
+        function stopWalking() {
+            isWalking = false;
+            if (walkInterval) {
+                clearInterval(walkInterval);
+                walkInterval = null;
+            }
+        }
+
+        // Input
+        document.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(e.key.toLowerCase())) {
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('keyup', e => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        // Player sprite animation frames (matching game test exactly)
+        const idleFrames = {
+            down: [0, 1, 2],
+            up: [3, 4, 5],
+            right: [6, 7, 8],
+            left: [6, 7, 8]
+        };
+        const walkFrames = {
+            down: { row: 0, cols: [9, 10, 11, 12] },
+            up: { row: 0, cols: [13, 14, 15] },
+            right: { row: 1, cols: [1, 2, 3, 4] },
+            left: { row: 1, cols: [1, 2, 3, 4] }
+        };
+
+        // Game loop
+        function update() {
+            let dx = 0, dy = 0;
+            player.moving = false;
+
+            if (keys['w'] || keys['arrowup']) { dy = -1; player.direction = 'up'; player.moving = true; }
+            if (keys['s'] || keys['arrowdown']) { dy = 1; player.direction = 'down'; player.moving = true; }
+            if (keys['a'] || keys['arrowleft']) { dx = -1; player.direction = 'left'; player.moving = true; }
+            if (keys['d'] || keys['arrowright']) { dx = 1; player.direction = 'right'; player.moving = true; }
+
+            if (dx !== 0 && dy !== 0) {
+                dx *= 0.707;
+                dy *= 0.707;
+            }
+
+            player.x += dx * player.speed;
+            player.y += dy * player.speed;
+
+            // Sound
+            if (player.moving && !isWalking) {
+                startWalking();
+            } else if (!player.moving && isWalking) {
+                stopWalking();
+            }
+
+            // Animation
+            player.frameTimer++;
+            if (player.frameTimer >= 8) {
+                player.frameTimer = 0;
+                player.frame = (player.frame + 1) % 4;
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const tileSize = gridSize * TILE_SCALE;
+
+            // Camera centered on player
+            const camX = player.x - canvas.width / 2;
+            const camY = player.y - canvas.height / 2;
+
+            ctx.imageSmoothingEnabled = false;
+
+            // Draw all layers
+            for (let li = 0; li < layers.length; li++) {
+                const layer = layers[li];
+                if (!layer) continue;
+
+                for (let y = 0; y < mapRows; y++) {
+                    if (!layer[y]) continue;
+                    for (let x = 0; x < mapCols; x++) {
+                        const cell = layer[y][x];
+                        if (!cell) continue;
+
+                        const px = Math.floor(x * tileSize - camX);
+                        const py = Math.floor(y * tileSize - camY);
+
+                        // Skip off-screen tiles
+                        if (px < -tileSize || px > canvas.width || py < -tileSize || py > canvas.height) continue;
+
+                        if (cell.type === 'tile') {
+                            const tileset = tilesetImages[cell.tilesetIndex || 0];
+                            if (tileset && tileset.complete) {
+                                ctx.drawImage(tileset, cell.x, cell.y, gridSize, gridSize, px, py, tileSize, tileSize);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Draw simple grid if no layers loaded
+            if (layers.length === 0) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                const offsetX = -player.x % tileSize + canvas.width / 2;
+                const offsetY = -player.y % tileSize + canvas.height / 2;
+                for (let x = offsetX; x < canvas.width; x += tileSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, canvas.height);
+                    ctx.stroke();
+                }
+                for (let y = offsetY; y < canvas.height; y += tileSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.stroke();
+                }
+            }
+
+            // Draw player (matching game test exactly)
+            const sx = canvas.width / 2 - player.width / 2;
+            const sy = canvas.height / 2 - player.height / 2;
+
+            const frameWidth = 64;
+            const frameHeight = 64;
+            const drawW = Math.round(64 * playerScale);
+            const drawH = Math.round(64 * playerScale);
+
+            let row = 0, col = 0;
+            let flipX = false;
+
+            if (player.moving) {
+                const walk = walkFrames[player.direction];
+                row = walk.row;
+                col = walk.cols[player.frame % walk.cols.length];
+                if (player.direction === 'left') flipX = true;
+            } else {
+                row = 0;
+                col = idleFrames[player.direction][player.frame % idleFrames[player.direction].length];
+                if (player.direction === 'left') flipX = true;
+            }
+
+            // Center sprite on collision box (matching game test)
+            const spriteX = sx + player.width / 2 - drawW / 2;
+            const spriteY = sy - 15;
+
+            ctx.imageSmoothingEnabled = false;
+            if (playerImg.complete && playerImg.naturalWidth > 0) {
+                if (flipX) {
+                    ctx.save();
+                    ctx.translate(spriteX + drawW, spriteY);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(playerImg, col * frameWidth, row * frameHeight, frameWidth, frameHeight, 0, 0, drawW, drawH);
+                    ctx.restore();
+                } else {
+                    ctx.drawImage(playerImg, col * frameWidth, row * frameHeight, frameWidth, frameHeight, spriteX, spriteY, drawW, drawH);
+                }
+            } else {
+                // Fallback rectangle
+                ctx.fillStyle = '#4a7';
+                ctx.fillRect(sx, sy, player.width, player.height);
+            }
+
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Slider updates
+        document.getElementById('volume').oninput = e => {
+            document.getElementById('volumeVal').textContent = e.target.value + '%';
+        };
+
+        document.getElementById('interval').oninput = e => {
+            document.getElementById('intervalVal').textContent = e.target.value + 'ms';
+            if (isWalking) {
+                clearInterval(walkInterval);
+                walkInterval = setInterval(() => playSound(-1, true), parseInt(e.target.value));
+            }
+        };
+
+        document.getElementById('pitch').oninput = e => {
+            document.getElementById('pitchVal').textContent = e.target.value + '%';
+        };
+
+        // Preset loader (for files in assets/sounds)
+        async function loadPreset(preset) {
+            const presets = {
+                'grass': ['step1.wav', 'step2.wav', 'step3.wav', 'step4.wav'],
+                'grass-short': ['step1.wav', 'step2.wav'],
+                'dirt': ['step1.wav', 'step2.wav', 'step3.wav', 'step4.wav'],
+                'dirt-short': ['step1.wav', 'step2.wav']
+            };
+
+            const files = presets[preset];
+            if (!files) return;
+
+            currentSounds = [];
+            for (const file of files) {
+                try {
+                    const response = await fetch('assets/sounds/' + file);
+                    const arrayBuffer = await response.arrayBuffer();
+                    currentSounds.push({ name: file, data: arrayBuffer });
+                } catch (e) {
+                    console.warn('Could not load preset:', file);
+                }
+            }
+
+            currentSoundSet = preset;
+            updateSoundButtons();
+            document.getElementById('status').textContent = `Using preset: ${preset} (${currentSounds.length} sounds)`;
+        }
+
+        // Load player sprite
+        playerImg.src = 'assets/player_sprite.png';
+
+        // Start
+        gameLoop();
+        loadPreset('grass');
+    </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "props": [
+    {
+      "name": "bush_break",
+      "action": "break",
+      "file": "assets/tiles_grass.png",
+      "note": "Use prop-editor.html to define exact frame coordinates"
+    }
+  ],
+  "instructions": "Open prop-editor.html to define props with frames and hitboxes. Open tile-categorizer.html to categorize terrain tiles."
+}
