@@ -7900,6 +7900,36 @@
             console.error('No opener window found!');
         }
 
+        // Debug/UI functions (must be global for onclick handlers)
+        let showCollision = false;
+        let showSounds = false;
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log('Fullscreen error:', err);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+        function toggleCollision() {
+            showCollision = !showCollision;
+            document.querySelectorAll('#debugButtons button')[1].classList.toggle('active', showCollision);
+        }
+        function toggleSoundDebug() {
+            showSounds = !showSounds;
+            document.querySelectorAll('#debugButtons button')[2].classList.toggle('active', showSounds);
+        }
+        function toggleDebugPanel() {
+            const panel = document.getElementById('debugPanel');
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+            document.querySelectorAll('#debugButtons button')[3].classList.toggle('active', panel.style.display === 'block');
+        }
+        function closeGame() {
+            window.close();
+        }
+
         function initGame() {
         console.log('Initializing game with project data:', projectData);
 
@@ -8474,13 +8504,22 @@
         let ambientSounds = {}; // "x,y" -> { source, gainNode, playing }
 
         // Debug flags
-        let showSounds = false;
         let showLayers = false; // L key to toggle layer debug
 
         // Initialize audio context on first user interaction (LAZY - don't decode all sounds)
         function initAudio() {
-            if (audioContext) return;
+            if (audioContext) {
+                // iOS requires resume after user gesture
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+                return;
+            }
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            // iOS may start suspended - resume it
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
             console.log('Audio context initialized (lazy mode - sounds decode on first play)');
             console.log('Sounds available:', soundsData.length);
             console.log('Tile sounds:', Object.keys(tileSoundsData).length);
@@ -8781,8 +8820,10 @@
             ctx.drawImage(lightCanvas, 0, 0);
         }
 
-        // Initialize audio on first key press
+        // Initialize audio on first user interaction (key or touch)
         document.addEventListener('keydown', () => initAudio(), { once: true });
+        document.addEventListener('touchstart', () => initAudio(), { once: true });
+        document.addEventListener('click', () => initAudio(), { once: true });
 
         // Adjustable settings
         let playerScale = 1.7;
@@ -8935,9 +8976,6 @@
         // Camera
         const camera = { x: 0, y: 0 };
 
-        // Debug
-        let showCollision = false;
-
         // Input
         const keys = {};
 
@@ -8956,17 +8994,6 @@
             }
         });
         document.addEventListener('keyup', e => keys[e.key] = false);
-
-        // Fullscreen toggle
-        function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => {
-                    console.log('Fullscreen error:', err);
-                });
-            } else {
-                document.exitFullscreen();
-            }
-        }
 
         // Virtual Joystick controls - appears where user touches left half
         const joystickBase = document.getElementById('joystickBase');
@@ -9021,6 +9048,7 @@
             joystickBase.classList.remove('active');
             joystickThumb.style.left = '50%';
             joystickThumb.style.top = '50%';
+            joystickThumb.style.transform = 'translate(-50%, -50%)';
             keys['ArrowUp'] = false;
             keys['ArrowDown'] = false;
             keys['ArrowLeft'] = false;
@@ -9045,6 +9073,7 @@
             joystickCenter = { x: touch.clientX, y: touch.clientY };
             joystickThumb.style.left = '50%';
             joystickThumb.style.top = '50%';
+            joystickThumb.style.transform = 'translate(-50%, -50%)';
         }, { passive: false });
 
         leftTouchZone.addEventListener('touchmove', (e) => {
@@ -9090,24 +9119,6 @@
                 }
             }
         });
-
-        // Debug button functions
-        function toggleCollision() {
-            showCollision = !showCollision;
-            document.querySelectorAll('#debugButtons button')[0].classList.toggle('active', showCollision);
-        }
-        function toggleSoundDebug() {
-            showSounds = !showSounds;
-            document.querySelectorAll('#debugButtons button')[1].classList.toggle('active', showSounds);
-        }
-        function toggleDebugPanel() {
-            const panel = document.getElementById('debugPanel');
-            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
-            document.querySelectorAll('#debugButtons button')[2].classList.toggle('active', panel.style.display === 'block');
-        }
-        function closeGame() {
-            window.close();
-        }
 
         // Pixel-level collision check on ALL layers
         function checkCollision(x, y, w, h) {
