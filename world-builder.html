@@ -486,6 +486,69 @@
             align-items: center;
         }
         .placed-npc-item button { padding: 2px 8px; font-size: 10px; background: #a55; }
+
+        /* Hamburger menu and resize handle */
+        .mode-tabs-header {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #2a2a3e;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .hamburger-btn {
+            background: #444;
+            border: none;
+            color: #fff;
+            font-size: 20px;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .hamburger-btn:hover { background: #555; }
+        #currentModeLabel {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .mode-tabs.collapsed {
+            display: none;
+        }
+        .resize-handle {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            background: #333;
+            cursor: ew-resize;
+            z-index: 100;
+        }
+        .resize-handle:hover, .resize-handle.active {
+            background: #4af;
+        }
+        .left-panel {
+            position: relative;
+            min-width: 200px;
+            max-width: 500px;
+        }
+
+        /* Mobile/Touch friendly styles */
+        @media (max-width: 1024px), (pointer: coarse) {
+            .toolbar button, .tool-buttons button, .zoom-controls button {
+                min-height: 44px;
+                min-width: 44px;
+                font-size: 14px;
+                padding: 8px 12px;
+            }
+            .sidebar { width: 280px; }
+            .mode-buttons button { padding: 10px 15px; font-size: 13px; }
+            #mapCanvas { touch-action: none; }
+            #paintTilesetCanvas { touch-action: none; }
+            .mode-tabs-header { display: flex; }
+            .mode-tabs { display: none; }
+            .mode-tabs.expanded { display: flex; }
+        }
     </style>
 </head>
 <body>
@@ -589,14 +652,19 @@
 
     <!-- PHASE 3: BUILD -->
     <div id="buildPhase" class="phase">
-        <div class="panel left-panel">
-            <div class="mode-tabs">
+        <div class="panel left-panel" id="leftPanel">
+            <div class="mode-tabs-header">
+                <button id="menuToggle" class="hamburger-btn" onclick="toggleModeMenu()">☰</button>
+                <span id="currentModeLabel">Tiles</span>
+            </div>
+            <div class="mode-tabs" id="modeTabs">
                 <button id="tileMode" class="active" onclick="setMode('tile')">Tiles</button>
                 <button id="npcMode" onclick="setMode('npc')">NPCs</button>
                 <button id="animPropMode" onclick="setMode('animProp')">Animated</button>
                 <button id="soundMode" onclick="setMode('sound')">Sounds</button>
                 <button id="lightingMode" onclick="setMode('lighting')">Lights</button>
             </div>
+            <div class="resize-handle" id="sidebarResize"></div>
 
             <!-- TILE MODE -->
             <div id="tileModeContent">
@@ -609,12 +677,16 @@
                     </div>
                 </div>
 
-                <h3>Rotation (R key)</h3>
-                <div class="tool-buttons">
+                <h3>Transform</h3>
+                <div class="tool-buttons" style="margin-bottom:8px;">
                     <button id="rot0" class="active" onclick="setRotation(0)">0°</button>
                     <button id="rot90" onclick="setRotation(90)">90°</button>
                     <button id="rot180" onclick="setRotation(180)">180°</button>
                     <button id="rot270" onclick="setRotation(270)">270°</button>
+                </div>
+                <div class="tool-buttons">
+                    <button id="flipBtn" onclick="toggleFlipH()" style="flex:1;">Flip H (I)</button>
+                    <button id="eraseBtn" onclick="toggleEraseMode()" style="flex:1; background:#a55;">Erase (E)</button>
                 </div>
 
                 <h3>Tileset</h3>
@@ -924,7 +996,11 @@
                     <span id="zoomLevel">2x</span>
                     <button onclick="zoomIn()">+</button>
                 </div>
-                <span id="toolHint">Left: paint | Right: erase</span>
+                <div class="zoom-controls">
+                    <button id="undoBtn" onclick="undo()" title="Undo">↩</button>
+                    <button id="redoBtn" onclick="redo()" title="Redo">↪</button>
+                </div>
+                <span id="toolHint">Paint | R:rotate | I:flip | E:erase</span>
             </div>
             <div class="map-viewport" id="mapViewport">
                 <!-- Expand buttons -->
@@ -1179,6 +1255,8 @@
         let selectedTiles = []; // Array of {x, y} for multi-tile selection
         let hoverMapPos = null; // Current hover position on map for preview
         let tileRotation = 0; // 0, 90, 180, 270 degrees
+        let tileFlippedH = false; // Flip tile horizontally
+        let eraseMode = false; // Erase tiles instead of painting
 
         // Layers
         let layers = []; // Array of layer data, each layer is a 2D array like map
@@ -2027,6 +2105,14 @@
                     e.preventDefault();
                     rotateNext();
                 }
+                if (e.key === 'i' || e.key === 'I') {
+                    e.preventDefault();
+                    toggleFlipH();
+                }
+                if (e.key === 'e' || e.key === 'E') {
+                    e.preventDefault();
+                    toggleEraseMode();
+                }
             }
         });
 
@@ -2276,12 +2362,74 @@
             document.getElementById('soundModeContent').style.display = m === 'sound' ? 'block' : 'none';
             document.getElementById('lightingModeContent').style.display = m === 'lighting' ? 'block' : 'none';
 
+            // Update mode label for mobile
+            const labels = { tile: 'Tiles', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights' };
+            document.getElementById('currentModeLabel').textContent = labels[m] || m;
+
+            // Collapse menu on mobile after selection
+            document.getElementById('modeTabs').classList.remove('expanded');
+
             // Update lists when switching modes
             if (m === 'npc') updateNpcList();
 
             // Redraw map to show appropriate overlays
             renderMap();
         }
+
+        function toggleModeMenu() {
+            document.getElementById('modeTabs').classList.toggle('expanded');
+        }
+
+        // Sidebar resize functionality
+        (function() {
+            const panel = document.getElementById('leftPanel');
+            const handle = document.getElementById('sidebarResize');
+            if (!panel || !handle) return;
+
+            let isResizing = false;
+
+            handle.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                handle.classList.add('active');
+                document.body.style.cursor = 'ew-resize';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                const newWidth = e.clientX;
+                if (newWidth >= 200 && newWidth <= 500) {
+                    panel.style.width = newWidth + 'px';
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isResizing = false;
+                handle.classList.remove('active');
+                document.body.style.cursor = '';
+            });
+
+            // Touch support for resize
+            handle.addEventListener('touchstart', (e) => {
+                isResizing = true;
+                handle.classList.add('active');
+                e.preventDefault();
+            }, { passive: false });
+
+            document.addEventListener('touchmove', (e) => {
+                if (!isResizing) return;
+                const touch = e.touches[0];
+                const newWidth = touch.clientX;
+                if (newWidth >= 200 && newWidth <= 500) {
+                    panel.style.width = newWidth + 'px';
+                }
+            }, { passive: false });
+
+            document.addEventListener('touchend', () => {
+                isResizing = false;
+                handle.classList.remove('active');
+            });
+        })();
 
         // ===== SOUND MANAGEMENT =====
         function loadSound(event) {
@@ -2640,17 +2788,48 @@
             setRotation(rotations[(idx + 1) % 4]);
         }
 
-        // Draw a tile with rotation
-        function drawRotatedTile(ctx, img, srcX, srcY, srcSize, destX, destY, destSize, rotation) {
-            if (rotation === 0) {
-                ctx.drawImage(img, srcX, srcY, srcSize, srcSize, destX, destY, destSize, destSize);
-            } else {
-                ctx.save();
-                ctx.translate(destX + destSize / 2, destY + destSize / 2);
-                ctx.rotate(rotation * Math.PI / 180);
-                ctx.drawImage(img, srcX, srcY, srcSize, srcSize, -destSize / 2, -destSize / 2, destSize, destSize);
-                ctx.restore();
+        function toggleFlipH() {
+            tileFlippedH = !tileFlippedH;
+            updateFlipButton();
+            updateSelectedTilePreview();
+            renderMap();
+        }
+
+        function updateFlipButton() {
+            const btn = document.getElementById('flipBtn');
+            if (btn) {
+                btn.style.background = tileFlippedH ? '#4a4' : '';
+                btn.textContent = tileFlippedH ? 'Flip H ✓' : 'Flip H (I)';
             }
+        }
+
+        function toggleEraseMode() {
+            eraseMode = !eraseMode;
+            updateEraseButton();
+        }
+
+        function updateEraseButton() {
+            const btn = document.getElementById('eraseBtn');
+            if (btn) {
+                btn.style.background = eraseMode ? '#f55' : '#a55';
+                btn.textContent = eraseMode ? 'Erase ✓' : 'Erase (E)';
+            }
+        }
+
+        // Draw a tile with rotation and optional horizontal flip
+        function drawRotatedTile(ctx, img, srcX, srcY, srcSize, destX, destY, destSize, rotation, flipped) {
+            ctx.save();
+            ctx.translate(destX + destSize / 2, destY + destSize / 2);
+
+            if (rotation !== 0) {
+                ctx.rotate(rotation * Math.PI / 180);
+            }
+            if (flipped) {
+                ctx.scale(-1, 1); // Flip horizontally
+            }
+
+            ctx.drawImage(img, srcX, srcY, srcSize, srcSize, -destSize / 2, -destSize / 2, destSize, destSize);
+            ctx.restore();
         }
 
         // Draw player preview placeholder on map
@@ -2821,6 +3000,62 @@
             tilesetSelecting = false;
         });
 
+        // Touch support for tileset selection
+        paintTilesetCanvas.addEventListener('touchstart', (e) => {
+            if (mode !== 'tile') return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = paintTilesetCanvas.getBoundingClientRect();
+            const displayZoom = 2;
+            const x = Math.floor((touch.clientX - rect.left) / displayZoom / gridSize) * gridSize;
+            const y = Math.floor((touch.clientY - rect.top) / displayZoom / gridSize) * gridSize;
+
+            selectionStart = { x, y };
+            tilesetSelecting = true;
+        }, { passive: false });
+
+        paintTilesetCanvas.addEventListener('touchmove', (e) => {
+            if (!tilesetSelecting || mode !== 'tile') return;
+            e.preventDefault();
+            updateTileSelectionTouch(e.touches[0]);
+        }, { passive: false });
+
+        paintTilesetCanvas.addEventListener('touchend', (e) => {
+            if (!tilesetSelecting || mode !== 'tile') return;
+            tilesetSelecting = false;
+        });
+
+        function updateTileSelectionTouch(touch) {
+            const rect = paintTilesetCanvas.getBoundingClientRect();
+            const displayZoom = 2;
+            const x = Math.floor((touch.clientX - rect.left) / displayZoom / gridSize) * gridSize;
+            const y = Math.floor((touch.clientY - rect.top) / displayZoom / gridSize) * gridSize;
+
+            const minX = Math.min(selectionStart.x, x);
+            const minY = Math.min(selectionStart.y, y);
+            const maxX = Math.max(selectionStart.x, x);
+            const maxY = Math.max(selectionStart.y, y);
+
+            selectedTiles = [];
+            for (let ty = minY; ty <= maxY; ty += gridSize) {
+                for (let tx = minX; tx <= maxX; tx += gridSize) {
+                    selectedTiles.push({ x: tx, y: ty });
+                }
+            }
+
+            const selWidth = (maxX - minX) / gridSize + 1;
+            const selHeight = (maxY - minY) / gridSize + 1;
+
+            document.getElementById('selectedPreview').style.display = 'flex';
+            document.getElementById('selectedInfo').textContent = `${selWidth}x${selHeight} tiles`;
+            document.getElementById('selectedCollisionInfo').textContent = '';
+
+            selectedTileData = { x: minX, y: minY, width: selWidth, height: selHeight };
+
+            updateSelectedPreview();
+            drawPaintTileset();
+        }
+
         function updateTileSelection(e) {
             const rect = paintTilesetCanvas.getBoundingClientRect();
             const displayZoom = 2;
@@ -2870,13 +3105,22 @@
             ctx.imageSmoothingEnabled = false;
             ctx.clearRect(0, 0, previewSize, previewSize);
 
-            // Draw selected tiles to preview with rotation
+            // Draw selected tiles to preview with rotation and flip
             const scale = Math.min(previewSize / (selWidth * gridSize), previewSize / (selHeight * gridSize));
             for (const tile of selectedTiles) {
-                const drawX = ((tile.x - selectedTileData.x) / gridSize) * gridSize * scale;
-                const drawY = ((tile.y - selectedTileData.y) / gridSize) * gridSize * scale;
-                drawRotatedTile(ctx, tilesetImg, tile.x, tile.y, gridSize, drawX, drawY, gridSize * scale, tileRotation);
+                // Calculate tile position relative to selection
+                const tileCol = (tile.x - selectedTileData.x) / gridSize;
+                const tileRow = (tile.y - selectedTileData.y) / gridSize;
+                // Mirror X position when flipped
+                const drawCol = tileFlippedH ? (selWidth - 1 - tileCol) : tileCol;
+                const drawX = drawCol * gridSize * scale;
+                const drawY = tileRow * gridSize * scale;
+                drawRotatedTile(ctx, tilesetImg, tile.x, tile.y, gridSize, drawX, drawY, gridSize * scale, tileRotation, tileFlippedH);
             }
+        }
+
+        function updateSelectedTilePreview() {
+            updateSelectedPreview();
         }
 
         // ===== UNDO/REDO SYSTEM =====
@@ -3061,7 +3305,11 @@
             }
 
             if (e.button === 0) {
-                painting = true;
+                if (eraseMode) {
+                    erasing = true;
+                } else {
+                    painting = true;
+                }
                 paintAt(x, y);
             }
             if (e.button === 2) {
@@ -3124,6 +3372,53 @@
             erasing = false;
         });
         mapCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // Touch support for mobile
+        mapCanvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = mapCanvas.getBoundingClientRect();
+            const tileSize = gridSize * zoom;
+            const x = Math.floor((touch.clientX - rect.left) / tileSize);
+            const y = Math.floor((touch.clientY - rect.top) / tileSize);
+
+            if (eraseMode) {
+                erasing = true;
+            } else {
+                painting = true;
+            }
+            hoverMapPos = { x, y };
+            paintAt(x, y);
+            renderMap();
+        }, { passive: false });
+
+        mapCanvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = mapCanvas.getBoundingClientRect();
+            const tileSize = gridSize * zoom;
+            const x = Math.floor((touch.clientX - rect.left) / tileSize);
+            const y = Math.floor((touch.clientY - rect.top) / tileSize);
+
+            if (hoverMapPos?.x !== x || hoverMapPos?.y !== y) {
+                hoverMapPos = { x, y };
+                renderMap();
+            }
+
+            if (painting || erasing) {
+                paintAt(x, y);
+            }
+        }, { passive: false });
+
+        mapCanvas.addEventListener('touchend', (e) => {
+            if (painting || erasing) {
+                commitStroke();
+            }
+            painting = false;
+            erasing = false;
+            hoverMapPos = null;
+            renderMap();
+        });
 
         // Animated prop placement helpers - stores directly in layer like tiles
         // Supports multi-tile props based on frame size
@@ -3292,6 +3587,10 @@
                 height: height
             };
 
+            // Reset flip when copying from map (copied tiles have their own transforms)
+            tileFlippedH = false;
+            updateFlipButton();
+
             // Update preview
             updateCopiedPreview();
 
@@ -3419,7 +3718,9 @@
                             if (mx >= mapCols - 2) expandMapCols();
 
                             if (mx >= 0 && my >= 0 && mx < mapCols && my < mapRows) {
-                                const tileX = selectedTileData.x + dx * gridSize;
+                                // When flipped, mirror the source tile positions horizontally
+                                const srcDx = tileFlippedH ? (selW - 1 - dx) : dx;
+                                const tileX = selectedTileData.x + srcDx * gridSize;
                                 const tileY = selectedTileData.y + dy * gridSize;
 
                                 saveForUndo(mx, my, map[my][mx]); // Save for undo
@@ -3428,8 +3729,8 @@
                                     // Paint as prop with propIndex (collision is painted separately in prop panel)
                                     map[my][mx] = { type: 'prop', x: tileX, y: tileY, propIndex: currentPropIndex };
                                 } else {
-                                    // Paint as tile with rotation
-                                    map[my][mx] = { type: 'tile', x: tileX, y: tileY, rotation: tileRotation, tilesetIndex: currentTilesetIndex };
+                                    // Paint as tile with rotation and flip
+                                    map[my][mx] = { type: 'tile', x: tileX, y: tileY, rotation: tileRotation, flipped: tileFlippedH, tilesetIndex: currentTilesetIndex };
                                 }
                             }
                         }
@@ -3498,7 +3799,7 @@
                             if (cell.type === 'tile') {
                                 // Use the correct tileset for this tile
                                 const cellTileset = tilesets[cell.tilesetIndex || 0]?.img || tilesetImg;
-                                drawRotatedTile(mapCtx, cellTileset, cell.x, cell.y, gridSize, px, py, tileSize, cell.rotation || 0);
+                                drawRotatedTile(mapCtx, cellTileset, cell.x, cell.y, gridSize, px, py, tileSize, cell.rotation || 0, cell.flipped || false);
 
                                 // Show collision only on current layer
                                 if (layerIdx === currentLayer) {
@@ -3619,7 +3920,7 @@
                                     if (srcCell.type === 'tile') {
                                         const cellTileset = tilesets[srcCell.tilesetIndex || 0]?.img || tilesetImg;
                                         if (cellTileset) {
-                                            drawRotatedTile(mapCtx, cellTileset, srcCell.x, srcCell.y, gridSize, px, py, tileSize, srcCell.rotation || 0);
+                                            drawRotatedTile(mapCtx, cellTileset, srcCell.x, srcCell.y, gridSize, px, py, tileSize, srcCell.rotation || 0, srcCell.inverted || false);
                                         }
                                     } else if (srcCell.type === 'prop') {
                                         const propIdx = srcCell.propIndex || 0;
@@ -3642,14 +3943,16 @@
                                 const mx = hoverMapPos.x + dx;
                                 const my = hoverMapPos.y + dy;
                                 if (mx >= 0 && mx < mapCols && my >= 0 && my < mapRows) {
-                                    const tileX = selectedTileData.x + dx * gridSize;
+                                    // Mirror source tile position when flipped
+                                    const srcDx = tileFlippedH ? (selW - 1 - dx) : dx;
+                                    const tileX = selectedTileData.x + srcDx * gridSize;
                                     const tileY = selectedTileData.y + dy * gridSize;
                                     const px = mx * tileSize;
                                     const py = my * tileSize;
                                     if (selectedTileData.isProp) {
                                         mapCtx.drawImage(sourceImg, tileX, tileY, gridSize, gridSize, px, py, tileSize, tileSize);
                                     } else {
-                                        drawRotatedTile(mapCtx, sourceImg, tileX, tileY, gridSize, px, py, tileSize, tileRotation);
+                                        drawRotatedTile(mapCtx, sourceImg, tileX, tileY, gridSize, px, py, tileSize, tileRotation, tileFlippedH);
                                     }
                                 }
                             }
@@ -8107,6 +8410,22 @@
             }
         }
 
+        // Helper for drawing tiles with rotation and flip in test game
+        function drawTileWithEffects(ctx, img, srcX, srcY, srcSize, destX, destY, destSize, rotation, flipped) {
+            ctx.save();
+            ctx.translate(destX + destSize / 2, destY + destSize / 2);
+
+            if (rotation !== 0) {
+                ctx.rotate(rotation * Math.PI / 180);
+            }
+            if (flipped) {
+                ctx.scale(-1, 1); // Flip horizontally
+            }
+
+            ctx.drawImage(img, srcX, srcY, srcSize, srcSize, -destSize / 2, -destSize / 2, destSize, destSize);
+            ctx.restore();
+        }
+
         function drawLayer(li, camX, camY, tileSize) {
             if (!layerVisibility[li]) return 0;
             const layer = layers[li];
@@ -8133,17 +8452,8 @@
                         // Use correct tileset for this tile
                         const cellTileset = tilesetImages[cell.tilesetIndex || 0] || tilesetImages[0];
                         if (cellTileset) {
-                            // Draw with rotation
-                            const rot = cell.rotation || 0;
-                            if (rot === 0) {
-                                ctx.drawImage(cellTileset, cell.x, cell.y, gridSize, gridSize, px, py, tileSize + overlap, tileSize + overlap);
-                            } else {
-                                ctx.save();
-                                ctx.translate(px + tileSize / 2, py + tileSize / 2);
-                                ctx.rotate(rot * Math.PI / 180);
-                                ctx.drawImage(cellTileset, cell.x, cell.y, gridSize, gridSize, -tileSize / 2, -tileSize / 2, tileSize + overlap, tileSize + overlap);
-                                ctx.restore();
-                            }
+                            // Draw with rotation and inversion
+                            drawTileWithEffects(ctx, cellTileset, cell.x, cell.y, gridSize, px, py, tileSize + overlap, cell.rotation || 0, cell.flipped || false);
                         } else {
                             // Fallback: draw colored rectangle if tileset not loaded
                             ctx.fillStyle = '#4a7c59';
@@ -8511,16 +8821,7 @@
 
             if (cellTileset) {
                 ctx.imageSmoothingEnabled = false;
-                const rot = cell.rotation || 0;
-                if (rot === 0) {
-                    ctx.drawImage(cellTileset, cell.x, cell.y, gridSize, gridSize, px, py, tileSize + overlap, tileSize + overlap);
-                } else {
-                    ctx.save();
-                    ctx.translate(px + tileSize / 2, py + tileSize / 2);
-                    ctx.rotate(rot * Math.PI / 180);
-                    ctx.drawImage(cellTileset, cell.x, cell.y, gridSize, gridSize, -tileSize / 2, -tileSize / 2, tileSize + overlap, tileSize + overlap);
-                    ctx.restore();
-                }
+                drawTileWithEffects(ctx, cellTileset, cell.x, cell.y, gridSize, px, py, tileSize + overlap, cell.rotation || 0, cell.flipped || false);
             }
 
             // Draw collision overlay if debug enabled
@@ -8561,15 +8862,11 @@
 
             ctx.imageSmoothingEnabled = false;
 
-            // Handle rotation
+            // Handle rotation or flip
             const rot = cell.rotation || 0;
-            if (rot !== 0) {
-                // For rotated tiles, just draw full tile (rotation + split is complex)
-                ctx.save();
-                ctx.translate(px + tileSize / 2, py + tileSize / 2);
-                ctx.rotate(rot * Math.PI / 180);
-                ctx.drawImage(cellTileset, cell.x, cell.y, gridSize, gridSize, -tileSize / 2, -tileSize / 2, tileSize + overlap, tileSize + overlap);
-                ctx.restore();
+            if (rot !== 0 || cell.flipped) {
+                // For rotated/flipped tiles, just draw full tile (rotation + split is complex)
+                drawTileWithEffects(ctx, cellTileset, cell.x, cell.y, gridSize, px, py, tileSize + overlap, rot, cell.flipped || false);
                 return;
             }
 
