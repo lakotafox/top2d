@@ -7242,52 +7242,64 @@
         }
 
         // ===== TEST MAP =====
-        let testWindowRef = null; // Reference to test window for streaming
-        let soundsToStream = []; // Sounds to send after window loads
+        let testChannel = null; // BroadcastChannel for isolated tab communication
+        let testLogs = []; // Logs saved to localStorage for crash recovery
+
+        function logTestEvent(msg, type = 'info') {
+            const entry = { time: Date.now(), msg, type };
+            testLogs.push(entry);
+            localStorage.setItem('testGameCrashLog', JSON.stringify(testLogs));
+            console.log('[TestMap]', msg);
+        }
 
         function testMap() {
-            // Get current project data directly (don't rely on storage)
+            // Clear previous logs
+            testLogs = [];
+            logTestEvent('Starting test game...');
+
+            // Get current project data
             const projectDataForTest = getProjectData();
-
-            // Check if mobile - strip sound data to prevent crash
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            soundsToStream = []; // Reset
 
+            logTestEvent('Mobile: ' + isMobile + ', Sounds: ' + (projectDataForTest.sounds?.length || 0));
+
+            // On mobile, strip sound data - will stream via BroadcastChannel
+            let soundsToStream = [];
             if (isMobile && projectDataForTest.sounds && projectDataForTest.sounds.length > 0) {
-                // Store full sound data for streaming later
                 soundsToStream = projectDataForTest.sounds.map(s => ({ ...s }));
-                // Strip the base64 data from embedded JSON (keep metadata only)
                 projectDataForTest.sounds = projectDataForTest.sounds.map(s => ({
-                    name: s.name,
-                    duration: s.duration,
-                    type: s.type
-                    // data field stripped - will be streamed via postMessage
+                    name: s.name, duration: s.duration, type: s.type
                 }));
                 projectDataForTest.soundsWillStream = true;
-                console.log('Mobile detected: stripped ' + soundsToStream.length + ' sounds for streaming');
+                logTestEvent('Stripped ' + soundsToStream.length + ' sounds for streaming');
             }
 
             const projectDataJSON = JSON.stringify(projectDataForTest);
-
-            // Check project size - warn user if still large
             const dataSize = projectDataJSON.length;
-            if (dataSize > 30000000 && isMobile) { // 30MB threshold for mobile
-                const sizeMB = (dataSize / 1000000).toFixed(1);
-                if (!confirm('Project size is ' + sizeMB + 'MB (sounds excluded). May still be slow. Continue?')) {
-                    return;
-                }
-            } else if (dataSize > 80000000) { // 80MB for desktop
-                const sizeMB = (dataSize / 1000000).toFixed(1);
-                if (!confirm('Project size is ' + sizeMB + 'MB. Very large projects may be slow. Continue?')) {
-                    return;
-                }
-            }
+            const sizeMB = (dataSize / 1000000).toFixed(1);
+            logTestEvent('Project size: ' + sizeMB + 'MB');
 
-            // Close existing test window if any, then open fresh (fullscreen)
-            const testWindow = window.open('about:blank', 'MapTest', 'width=' + screen.width + ',height=' + screen.height);
-            testWindowRef = testWindow;
-            testWindow.document.open();
-            testWindow.document.write(`
+            // Setup BroadcastChannel for isolated communication
+            if (testChannel) testChannel.close();
+            testChannel = new BroadcastChannel('test-game-channel');
+            testChannel.onmessage = (e) => {
+                if (e.data.type === 'log') {
+                    logTestEvent('[Game] ' + e.data.msg, e.data.level || 'info');
+                } else if (e.data.type === 'ready') {
+                    logTestEvent('Test game ready, sending data...');
+                    // Send project data
+                    testChannel.postMessage({ type: 'project-data', data: projectDataJSON });
+                    // Stream sounds with delay
+                    if (soundsToStream.length > 0) {
+                        streamSounds(soundsToStream);
+                    }
+                }
+            };
+
+            logTestEvent('Opening test window with noopener...');
+
+            // Create minimal loader HTML
+            const loaderHTML = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -7623,9 +7635,39 @@
 
         showLoading(0, 1);
 
-        // Load project data directly from editor (embedded)
-        const projectData = ${projectDataJSON};
-        console.log('Loaded project data:', projectData);
+        // Load project data - either embedded (desktop) or via BroadcastChannel (mobile)
+        let projectData = null;
+        const USE_BROADCAST = ${isMobile ? 'true' : 'false'};
+
+        if (USE_BROADCAST) {
+            // Mobile: wait for data via BroadcastChannel (process isolated)
+            console.log('Waiting for project data via BroadcastChannel...');
+            const channel = new BroadcastChannel('test-game-channel');
+            channel.postMessage({ type: 'ready' });
+            channel.onmessage = function(e) {
+                if (e.data.type === 'project-data') {
+                    console.log('Received project data via BroadcastChannel');
+                    projectData = JSON.parse(e.data.data);
+                    channel.postMessage({ type: 'log', msg: 'Project data received' });
+                    initGame();
+                } else if (e.data.type === 'sound-data') {
+                    const { index, data, name } = e.data;
+                    if (projectData && projectData.sounds && projectData.sounds[index]) {
+                        projectData.sounds[index].data = data;
+                        console.log('Received sound', index, name);
+                        channel.postMessage({ type: 'log', msg: 'Sound received: ' + name });
+                    }
+                }
+            };
+        } else {
+            // Desktop: use embedded data
+            projectData = ${projectDataJSON};
+            console.log('Loaded embedded project data');
+            initGame();
+        }
+
+        function initGame() {
+        console.log('Initializing game with project data:', projectData);
 
         const gridSize = projectData.gridSize || 16;
         const mapRows = projectData.mapRows || 30;
@@ -10005,54 +10047,50 @@
         }
 
         // Game loop is started when all tilesets load (see tileset loading code above)
+        } // end initGame()
     <\/script>
 </body>
 </html>
-            `);
-            testWindow.document.close();
+            `;
 
-            // Stream sounds to test game on mobile (after window loads)
-            if (soundsToStream.length > 0) {
-                console.log('Starting sound streaming to test game...');
-                let soundIndex = 0;
+            // Open with blob URL + noopener for process isolation (prevents builder crash if test crashes)
+            const blob = new Blob([loaderHTML], { type: 'text/html' });
+            const blobURL = URL.createObjectURL(blob);
+            logTestEvent('Opening blob URL with noopener...');
+            window.open(blobURL, '_blank', 'noopener,noreferrer');
 
-                function streamNextSound() {
-                    if (soundIndex >= soundsToStream.length) {
-                        console.log('All sounds streamed');
-                        if (testWindowRef && !testWindowRef.closed) {
-                            testWindowRef.postMessage({ type: 'sounds-complete' }, '*');
-                        }
-                        return;
-                    }
-
-                    const sound = soundsToStream[soundIndex];
-                    console.log('Streaming sound', soundIndex + 1, '/', soundsToStream.length, '-', sound.name);
-
-                    if (testWindowRef && !testWindowRef.closed) {
-                        testWindowRef.postMessage({
-                            type: 'sound-data',
-                            index: soundIndex,
-                            data: sound.data,
-                            name: sound.name
-                        }, '*');
-                    }
-
-                    soundIndex++;
-                    // Delay between sounds to let iPad breathe
-                    setTimeout(streamNextSound, 500);
-                }
-
-                // Wait for test game to load before streaming
-                setTimeout(streamNextSound, 2000);
-            }
+            // Store sounds for streaming function
+            window._soundsToStream = soundsToStream;
         }
 
-        // Listen for messages from test game
-        window.addEventListener('message', function(e) {
-            if (e.data && e.data.type === 'test-game-log') {
-                console.log('[TestGame]', e.data.msg);
+        // Stream sounds via BroadcastChannel (called when test game signals ready)
+        function streamSounds(sounds) {
+            logTestEvent('Starting to stream ' + sounds.length + ' sounds...');
+            let index = 0;
+
+            function sendNext() {
+                if (index >= sounds.length) {
+                    logTestEvent('All sounds streamed');
+                    testChannel.postMessage({ type: 'sounds-complete' });
+                    return;
+                }
+
+                const sound = sounds[index];
+                logTestEvent('Streaming sound ' + (index + 1) + '/' + sounds.length + ': ' + sound.name);
+                testChannel.postMessage({
+                    type: 'sound-data',
+                    index: index,
+                    data: sound.data,
+                    name: sound.name
+                });
+
+                index++;
+                // Delay between sounds to let iPad breathe
+                setTimeout(sendNext, 500);
             }
-        });
+
+            sendNext();
+        }
     </script>
 </body>
 </html>
