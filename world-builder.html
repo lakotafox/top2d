@@ -97,6 +97,7 @@
             background: #2a2a4e;
             padding: 15px;
             overflow-y: scroll;
+            overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
         }
 
@@ -519,21 +520,37 @@
         }
         .resize-handle {
             position: absolute;
-            right: 0;
-            top: 0;
-            bottom: 0;
-            width: 6px;
-            background: #333;
+            right: -12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 60px;
+            background: #444;
+            border: 2px solid #555;
+            border-radius: 8px;
             cursor: ew-resize;
             z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .resize-handle::before {
+            content: '⋮⋮';
+            color: #888;
+            font-size: 14px;
+            letter-spacing: 2px;
         }
         .resize-handle:hover, .resize-handle.active {
             background: #4af;
+            border-color: #4af;
+        }
+        .resize-handle:hover::before, .resize-handle.active::before {
+            color: #000;
         }
         .left-panel {
             position: relative;
-            min-width: 200px;
-            max-width: 500px;
+            min-width: 100px;
+            max-width: 600px;
         }
 
         /* Mobile/Touch friendly styles */
@@ -2557,7 +2574,7 @@
             document.addEventListener('mousemove', (e) => {
                 if (!isResizing) return;
                 const newWidth = e.clientX;
-                if (newWidth >= 200 && newWidth <= 500) {
+                if (newWidth >= 100 && newWidth <= 600) {
                     panel.style.width = newWidth + 'px';
                 }
             });
@@ -2579,7 +2596,7 @@
                 if (!isResizing) return;
                 const touch = e.touches[0];
                 const newWidth = touch.clientX;
-                if (newWidth >= 200 && newWidth <= 500) {
+                if (newWidth >= 100 && newWidth <= 600) {
                     panel.style.width = newWidth + 'px';
                 }
             }, { passive: false });
