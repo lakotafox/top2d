@@ -7242,17 +7242,38 @@
         }
 
         // ===== TEST MAP =====
+        let testWindowRef = null; // Reference to test window for streaming
+        let soundsToStream = []; // Sounds to send after window loads
+
         function testMap() {
             // Get current project data directly (don't rely on storage)
             const projectDataForTest = getProjectData();
+
+            // Check if mobile - strip sound data to prevent crash
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            soundsToStream = []; // Reset
+
+            if (isMobile && projectDataForTest.sounds && projectDataForTest.sounds.length > 0) {
+                // Store full sound data for streaming later
+                soundsToStream = projectDataForTest.sounds.map(s => ({ ...s }));
+                // Strip the base64 data from embedded JSON (keep metadata only)
+                projectDataForTest.sounds = projectDataForTest.sounds.map(s => ({
+                    name: s.name,
+                    duration: s.duration,
+                    type: s.type
+                    // data field stripped - will be streamed via postMessage
+                }));
+                projectDataForTest.soundsWillStream = true;
+                console.log('Mobile detected: stripped ' + soundsToStream.length + ' sounds for streaming');
+            }
+
             const projectDataJSON = JSON.stringify(projectDataForTest);
 
-            // Check project size - warn user on mobile if large
+            // Check project size - warn user if still large
             const dataSize = projectDataJSON.length;
-            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
             if (dataSize > 30000000 && isMobile) { // 30MB threshold for mobile
                 const sizeMB = (dataSize / 1000000).toFixed(1);
-                if (!confirm('Project size is ' + sizeMB + 'MB. Large projects may crash on mobile devices. Continue anyway?')) {
+                if (!confirm('Project size is ' + sizeMB + 'MB (sounds excluded). May still be slow. Continue?')) {
                     return;
                 }
             } else if (dataSize > 80000000) { // 80MB for desktop
@@ -7264,6 +7285,7 @@
 
             // Close existing test window if any, then open fresh (fullscreen)
             const testWindow = window.open('about:blank', 'MapTest', 'width=' + screen.width + ',height=' + screen.height);
+            testWindowRef = testWindow;
             testWindow.document.open();
             testWindow.document.write(`
 <!DOCTYPE html>
@@ -7419,9 +7441,69 @@
         }
         #debugButtons button:hover { background: rgba(100,100,100,0.7); }
         #debugButtons button.active { background: rgba(74,175,89,0.7); border-color: #4af; }
+
+        /* Loading overlay - shows immediately before JS runs */
+        #loadingOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #111;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            font-family: monospace;
+            color: white;
+        }
+        #loadingOverlay.hidden { display: none; }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #333;
+            border-top-color: #4af;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        #loadingText {
+            font-size: 18px;
+            color: #4af;
+            margin-bottom: 15px;
+        }
+        #loadingProgress {
+            width: 250px;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        #loadingBar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #4af, #6cf);
+            transition: width 0.2s ease;
+        }
+        #loadingPercent {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #888;
+        }
     </style>
 </head>
 <body>
+    <!-- Loading overlay shows immediately -->
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <div id="loadingText">Loading Game...</div>
+        <div id="loadingProgress"><div id="loadingBar"></div></div>
+        <div id="loadingPercent">0%</div>
+    </div>
     <canvas id="game"></canvas>
     <div id="touchControls">
         <div class="joystick-base" id="joystickBase">
@@ -7520,28 +7602,25 @@
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        // Show loading message with percentage
+        // Show loading message with percentage - updates HTML overlay
         function showLoading(current, total) {
-            ctx.fillStyle = '#111';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#4af';
-            ctx.font = '24px monospace';
-            ctx.textAlign = 'center';
             const percent = total > 0 ? Math.round((current / total) * 100) : 0;
-            ctx.fillText('Loading... ' + current + '/' + total + ' (' + percent + '%)', canvas.width / 2, canvas.height / 2);
 
-            // Draw progress bar
-            const barWidth = 300;
-            const barHeight = 20;
-            const barX = (canvas.width - barWidth) / 2;
-            const barY = canvas.height / 2 + 30;
-            ctx.fillStyle = '#333';
-            ctx.fillRect(barX, barY, barWidth, barHeight);
-            ctx.fillStyle = '#4af';
-            ctx.fillRect(barX, barY, barWidth * (percent / 100), barHeight);
-            ctx.strokeStyle = '#555';
-            ctx.strokeRect(barX, barY, barWidth, barHeight);
+            // Update HTML loading overlay (visible immediately)
+            const loadingBar = document.getElementById('loadingBar');
+            const loadingPercent = document.getElementById('loadingPercent');
+            const loadingText = document.getElementById('loadingText');
+            if (loadingBar) loadingBar.style.width = percent + '%';
+            if (loadingPercent) loadingPercent.textContent = current + '/' + total + ' (' + percent + '%)';
+            if (loadingText && current > 0) loadingText.textContent = 'Loading Assets...';
         }
+
+        // Hide loading overlay when game starts
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) overlay.classList.add('hidden');
+        }
+
         showLoading(0, 1);
 
         // Load project data directly from editor (embedded)
@@ -7617,6 +7696,8 @@
             if (imagesLoaded >= imagesToLoad && !gameStarted) {
                 console.log('All images loaded, starting game...');
                 gameStarted = true;
+                gameStartTime = Date.now();
+                hideLoading();
                 findStartPos();
                 gameLoop();
             }
@@ -7627,15 +7708,20 @@
         imagesToLoad += animatedPropsData.filter(p => p && p.spriteData).length; // Animated props
         imagesToLoad += propsData.filter(p => p && p.data).length; // Regular props with valid data
         if (projectData.propImageData && propsData.length === 0) imagesToLoad += 1; // Legacy single prop
+        imagesToLoad += (projectData.npcs || []).filter(n => n && n.spriteData).length; // NPC sprites
         imagesToLoad += 1; // Player sprite
 
-        console.log('Total images to load:', imagesToLoad);
+        // Detect mobile for staggered loading
+        const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        console.log('Total images to load:', imagesToLoad, isMobileDevice ? '(mobile - staggered loading)' : '');
 
         // Safety check - if somehow no images to load, start anyway
         if (imagesToLoad === 0) {
             console.warn('No images to load, starting game immediately');
             imagesToLoad = 1;
             imagesLoaded = 1;
+            gameStartTime = Date.now();
+            hideLoading();
             findStartPos();
             gameLoop();
         }
@@ -7645,6 +7731,8 @@
             if (!gameStarted) {
                 console.warn('Timeout reached, starting game with', imagesLoaded, '/', imagesToLoad, 'images loaded');
                 gameStarted = true;
+                gameStartTime = Date.now();
+                hideLoading();
                 findStartPos();
                 gameLoop();
             }
@@ -7775,16 +7863,37 @@
         };
 
         // === SOUND SYSTEM ===
-        const soundsData = projectData.sounds || [];
+        let soundsData = projectData.sounds || []; // 'let' so we can receive streamed sounds
         const tileSoundsData = projectData.tileSounds || {};
         const playerSoundsData = projectData.playerSounds || {
             walk: { soundIndex: -1, interval: 200, volume: 0.5, pitchVariation: 0.1 },
             attack: { soundIndex: -1, volume: 0.7 }
         };
+        const soundsWillStream = projectData.soundsWillStream || false;
+        let soundsStreamedCount = 0;
+
         console.log('=== SOUND DATA LOADED ===');
         console.log('Sounds array:', soundsData.length, soundsData);
+        console.log('Sounds will stream:', soundsWillStream);
         console.log('Tile sounds:', Object.keys(tileSoundsData).length, tileSoundsData);
         console.log('Player sounds:', playerSoundsData);
+
+        // Listen for streamed sound data from builder (mobile only)
+        if (soundsWillStream) {
+            console.log('Waiting for sound data to stream from builder...');
+            window.addEventListener('message', function(e) {
+                if (e.data && e.data.type === 'sound-data') {
+                    const { index, data, name } = e.data;
+                    if (soundsData[index]) {
+                        soundsData[index].data = data;
+                        soundsStreamedCount++;
+                        console.log('Received sound', index, name, '(' + soundsStreamedCount + '/' + soundsData.length + ')');
+                    }
+                } else if (e.data && e.data.type === 'sounds-complete') {
+                    console.log('All sounds received from builder');
+                }
+            });
+        }
 
         // === LIGHTING SYSTEM ===
         const currentMapName = 'main'; // Default map name for lighting keys
@@ -7821,12 +7930,19 @@
         const placedNpcsData = projectData.placedNpcs || [];
         const npcImages = [];
 
-        // Load NPC sprites
+        // Load NPC sprites (counted in imagesToLoad)
         npcsData.forEach((npc, i) => {
             if (npc && npc.spriteData) {
                 const img = new Image();
                 img.onload = () => {
-                    console.log('NPC sprite loaded:', npc.name);
+                    console.log('NPC sprite loaded:', npc.name, '(' + (imagesLoaded + 1) + '/' + imagesToLoad + ')');
+                    imagesLoaded++;
+                    checkAllImagesLoaded();
+                };
+                img.onerror = () => {
+                    console.error('Failed to load NPC sprite:', npc.name);
+                    imagesLoaded++;
+                    checkAllImagesLoaded();
                 };
                 img.src = npc.spriteData;
                 npcImages[i] = img;
@@ -8069,6 +8185,11 @@
         let audioContext = null;
         let soundBuffers = {}; // soundIndex -> AudioBuffer
         let soundsDecoding = {}; // Track sounds currently being decoded
+        let decodeQueue = []; // Queue of sounds waiting to decode
+        let isDecoding = false; // Currently decoding a sound
+        const DECODE_DELAY = 500; // ms between each decode (give iPad breathing room)
+        let gameStartTime = 0; // Track when game started for sound delay
+        const SOUND_STARTUP_DELAY = 1500; // Wait 1.5 seconds before starting ambient sounds
 
         // Walk sound timing
         let lastWalkSoundTime = 0;
@@ -8090,38 +8211,68 @@
             console.log('Player sounds:', playerSoundsData);
         }
 
-        // Decode a single sound on demand (lazy loading)
+        // Queue a sound for decoding (one at a time with delays for iPad)
         function decodeSound(idx, callback) {
+            // Already decoded
+            if (soundBuffers[idx]) {
+                if (callback) callback(soundBuffers[idx]);
+                return;
+            }
+            // Already in queue or decoding
+            if (soundsDecoding[idx]) return;
+
             const sound = soundsData[idx];
             if (!sound || !sound.data) {
                 console.warn('No sound data for index', idx);
                 return;
             }
-            if (soundsDecoding[idx]) {
-                // Already decoding, wait for it
-                return;
-            }
+
+            // Mark as queued and add to queue
             soundsDecoding[idx] = true;
+            decodeQueue.push({ idx, callback });
+            processDecodeQueue();
+        }
+
+        // Process decode queue one at a time with delays
+        function processDecodeQueue() {
+            if (isDecoding || decodeQueue.length === 0) return;
+
+            isDecoding = true;
+            const { idx, callback } = decodeQueue.shift();
+            const sound = soundsData[idx];
 
             try {
                 const base64 = sound.data.split(',')[1];
                 const binary = atob(base64);
-                // Optimized: Use Uint8Array.from instead of manual loop (less memory)
                 const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
                 const audioBuffer = bytes.buffer.slice(0);
 
                 audioContext.decodeAudioData(audioBuffer, (buffer) => {
                     soundBuffers[idx] = buffer;
                     soundsDecoding[idx] = false;
-                    console.log('Sound', idx, sound.name, 'decoded on demand');
+                    console.log('Sound', idx, sound.name, 'decoded (' + decodeQueue.length + ' in queue)');
                     if (callback) callback(buffer);
+
+                    // Wait before processing next sound
+                    setTimeout(() => {
+                        isDecoding = false;
+                        processDecodeQueue();
+                    }, DECODE_DELAY);
                 }, (err) => {
                     console.error('Failed to decode sound', idx, err);
                     soundsDecoding[idx] = false;
+                    setTimeout(() => {
+                        isDecoding = false;
+                        processDecodeQueue();
+                    }, DECODE_DELAY);
                 });
             } catch (e) {
                 console.error('Error decoding sound', idx, ':', e.message);
                 soundsDecoding[idx] = false;
+                setTimeout(() => {
+                    isDecoding = false;
+                    processDecodeQueue();
+                }, DECODE_DELAY);
             }
         }
 
@@ -8172,6 +8323,11 @@
         // Update ambient sounds based on player position with smooth fading
         function updateAmbientSounds() {
             if (!audioContext) return;
+
+            // Delay ambient sounds on startup to prevent iPad crashes
+            if (gameStartTime && Date.now() - gameStartTime < SOUND_STARTUP_DELAY) {
+                return;
+            }
 
             const tileSize = gridSize * TILE_SCALE;
             const playerTileX = Math.floor(player.x / tileSize);
@@ -9854,7 +10010,49 @@
 </html>
             `);
             testWindow.document.close();
+
+            // Stream sounds to test game on mobile (after window loads)
+            if (soundsToStream.length > 0) {
+                console.log('Starting sound streaming to test game...');
+                let soundIndex = 0;
+
+                function streamNextSound() {
+                    if (soundIndex >= soundsToStream.length) {
+                        console.log('All sounds streamed');
+                        if (testWindowRef && !testWindowRef.closed) {
+                            testWindowRef.postMessage({ type: 'sounds-complete' }, '*');
+                        }
+                        return;
+                    }
+
+                    const sound = soundsToStream[soundIndex];
+                    console.log('Streaming sound', soundIndex + 1, '/', soundsToStream.length, '-', sound.name);
+
+                    if (testWindowRef && !testWindowRef.closed) {
+                        testWindowRef.postMessage({
+                            type: 'sound-data',
+                            index: soundIndex,
+                            data: sound.data,
+                            name: sound.name
+                        }, '*');
+                    }
+
+                    soundIndex++;
+                    // Delay between sounds to let iPad breathe
+                    setTimeout(streamNextSound, 500);
+                }
+
+                // Wait for test game to load before streaming
+                setTimeout(streamNextSound, 2000);
+            }
         }
+
+        // Listen for messages from test game
+        window.addEventListener('message', function(e) {
+            if (e.data && e.data.type === 'test-game-log') {
+                console.log('[TestGame]', e.data.msg);
+            }
+        });
     </script>
 </body>
 </html>
