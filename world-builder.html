@@ -7456,6 +7456,9 @@
         <h3 style="margin-top:15px;">Lighting</h3>
         <label>Darkness: <span class="value" id="darknessVal">0</span>%</label>
         <input type="range" id="darknessSlider" min="0" max="100" step="5" value="0">
+        <label style="margin-top:10px;"><input type="checkbox" id="torchEnabled"> Player Torch</label>
+        <label>Torch Radius: <span class="value" id="torchRadiusVal">4</span></label>
+        <input type="range" id="torchRadiusSlider" min="1" max="15" step="1" value="4">
         <label style="margin-top:10px;"><input type="checkbox" id="cycleEnabled"> Enable Day/Night Cycle</label>
         <label>Cycle Time: <span class="value" id="dayLengthVal">1</span> min</label>
         <input type="range" id="dayLengthSlider" min="1" max="10" step="0.5" value="1">
@@ -8408,6 +8411,16 @@
         document.getElementById('darknessSlider').addEventListener('input', (e) => {
             manualDarkness = parseInt(e.target.value);
             document.getElementById('darknessVal').textContent = manualDarkness;
+        });
+
+        document.getElementById('torchEnabled').addEventListener('change', (e) => {
+            lightingSettingsData.playerLight = e.target.checked;
+            console.log('Player torch:', e.target.checked ? 'ON' : 'OFF');
+        });
+
+        document.getElementById('torchRadiusSlider').addEventListener('input', (e) => {
+            lightingSettingsData.playerLightRadius = parseInt(e.target.value);
+            document.getElementById('torchRadiusVal').textContent = e.target.value;
         });
 
         document.getElementById('cycleEnabled').addEventListener('change', (e) => {
