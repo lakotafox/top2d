@@ -561,14 +561,12 @@
     <!-- PHASE 1: LOAD -->
     <div id="loadPhase" class="phase active">
         <div class="load-box">
-            <h1>World Builder</h1>
-            <p>Load a tileset to begin</p>
-            <input type="file" id="fileInput" accept="image/*" onchange="loadTileset(event)">
-            <button onclick="document.getElementById('fileInput').click()" style="padding:15px 30px; font-size:14px;">Load Tileset</button>
-            <br><br>
-            <button onclick="console.log('Button clicked'); loadProject();" style="background:#555;">Load Saved Project</button>
-            <button onclick="document.getElementById('projectFileInputWelcome').click()" style="background:#2a7;">Load From File</button>
+            <h1>Adventure Crafter</h1>
+            <p style="color:#888; margin-bottom:20px;">2D World Builder</p>
+            <input type="file" id="fileInput" accept="image/*" onchange="loadTileset(event)" style="display:none;">
             <input type="file" id="projectFileInputWelcome" accept=".json" style="display:none;" onchange="uploadProject(event)">
+            <button onclick="document.getElementById('fileInput').click()" style="padding:15px 40px; font-size:16px; background:#4a7c59; margin:10px;">Start Fresh</button>
+            <button onclick="document.getElementById('projectFileInputWelcome').click()" style="padding:15px 40px; font-size:16px; background:#2a7; margin:10px;">Load Save</button>
         </div>
     </div>
 
@@ -994,9 +992,8 @@
                 <button onclick="undo()" id="undoBtn" title="Undo (Ctrl+Z)" style="background:#555;">↶ Undo</button>
                 <button onclick="redo()" id="redoBtn" title="Redo (Ctrl+Y)" style="background:#555;">↷ Redo</button>
                 <button onclick="clearMap()">Clear</button>
-                <button onclick="saveProject()">Quick Save</button>
-                <button onclick="downloadProject()" style="background:#2a7;">Download File</button>
-                <button onclick="document.getElementById('projectFileInput').click()" style="background:#555;">Load File</button>
+                <button onclick="downloadProject()" style="background:#2a7;">Save</button>
+                <button onclick="document.getElementById('projectFileInput').click()" style="background:#555;">Load</button>
                 <input type="file" id="projectFileInput" accept=".json" style="display:none;" onchange="uploadProject(event)">
                 <button onclick="exportConfig()">Export</button>
                 <button onclick="testMap()" style="background:#e74c3c;">Test Map</button>
@@ -3000,22 +2997,20 @@
 
             const px = playerPreviewPos.x * tileSize;
             const py = playerPreviewPos.y * tileSize;
-            const scale = zoom;
+
+            // Draw at ~1.7 tiles tall to match test game (playerScale default)
+            const drawSize = tileSize * 1.7;
 
             // Draw the actual player sprite if available (idle frame = first 64x64)
             if (playerSpriteImg && playerSpriteImg.complete) {
-                const spriteSize = 64;
-                const destSize = spriteSize * scale;
                 // Draw idle frame (first frame, facing down)
-                mapCtx.drawImage(playerSpriteImg, 0, 0, spriteSize, spriteSize, px, py, destSize, destSize);
+                mapCtx.drawImage(playerSpriteImg, 0, 0, 64, 64, px, py, drawSize, drawSize);
             } else {
                 // Fallback: simple placeholder
-                const playerWidth = 28 * scale;
-                const playerHeight = 64 * scale;
                 mapCtx.fillStyle = '#f0a';
-                mapCtx.fillRect(px + 8 * scale, py + 8 * scale, 12 * scale, 48 * scale);
+                mapCtx.fillRect(px + drawSize * 0.3, py + drawSize * 0.1, drawSize * 0.4, drawSize * 0.7);
                 mapCtx.beginPath();
-                mapCtx.arc(px + 14 * scale, py + 10 * scale, 8 * scale, 0, Math.PI * 2);
+                mapCtx.arc(px + drawSize * 0.5, py + drawSize * 0.15, drawSize * 0.15, 0, Math.PI * 2);
                 mapCtx.fill();
             }
 
@@ -3024,16 +3019,15 @@
             mapCtx.font = '10px sans-serif';
             mapCtx.textAlign = 'center';
             const labelWidth = mapCtx.measureText('SPAWN').width + 6;
-            mapCtx.fillRect(px + 32 * scale - labelWidth / 2, py - 16, labelWidth, 14);
+            mapCtx.fillRect(px + drawSize / 2 - labelWidth / 2, py - 14, labelWidth, 12);
             mapCtx.fillStyle = '#4f8';
-            mapCtx.fillText('SPAWN', px + 32 * scale, py - 5);
+            mapCtx.fillText('SPAWN', px + drawSize / 2, py - 4);
 
             // Spawn marker outline
             mapCtx.strokeStyle = '#4f8';
             mapCtx.lineWidth = 2;
             mapCtx.setLineDash([4, 4]);
-            const spriteSize = playerSpriteImg ? 64 * scale : 28 * scale;
-            mapCtx.strokeRect(px - 2, py - 2, spriteSize + 4, spriteSize + 4);
+            mapCtx.strokeRect(px - 2, py - 2, drawSize + 4, drawSize + 4);
             mapCtx.setLineDash([]);
         }
 
@@ -7322,56 +7316,55 @@
             z-index: 2001;
         }
 
-        /* Touch controls */
+        /* Touch controls - Virtual Joystick */
         #touchControls {
             position: fixed;
-            bottom: 20px;
-            left: 20px;
+            bottom: 30px;
+            left: 30px;
             z-index: 1000;
             display: none;
         }
         @media (pointer: coarse), (max-width: 800px) {
             #touchControls { display: block; }
         }
-        .touch-dpad {
+        .joystick-base {
+            width: 120px;
+            height: 120px;
+            background: rgba(255,255,255,0.15);
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
             position: relative;
-            width: 140px;
-            height: 140px;
+            touch-action: none;
         }
-        .dpad-btn {
-            position: absolute;
+        .joystick-thumb {
             width: 50px;
             height: 50px;
-            background: rgba(255,255,255,0.3);
-            border: 2px solid rgba(255,255,255,0.5);
-            border-radius: 10px;
-            font-size: 20px;
-            color: white;
-            cursor: pointer;
-            touch-action: manipulation;
+            background: rgba(255,255,255,0.5);
+            border: 2px solid rgba(255,255,255,0.7);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
         }
-        .dpad-btn:active { background: rgba(255,255,255,0.6); }
-        .dpad-up { top: 0; left: 45px; }
-        .dpad-down { bottom: 0; left: 45px; }
-        .dpad-left { top: 45px; left: 0; }
-        .dpad-right { top: 45px; right: 0; }
         .touch-actions {
             position: fixed;
-            bottom: 40px;
-            right: 20px;
+            bottom: 50px;
+            right: 30px;
         }
         .action-btn {
-            width: 70px;
-            height: 70px;
-            background: rgba(255,100,100,0.4);
-            border: 2px solid rgba(255,100,100,0.6);
+            width: 80px;
+            height: 80px;
+            background: rgba(255,100,100,0.3);
+            border: 3px solid rgba(255,100,100,0.5);
             border-radius: 50%;
-            font-size: 30px;
+            font-size: 32px;
             color: white;
             cursor: pointer;
             touch-action: manipulation;
         }
-        .action-btn:active { background: rgba(255,100,100,0.7); }
+        .action-btn:active { background: rgba(255,100,100,0.6); }
 
         /* Debug buttons */
         #debugButtons {
@@ -7399,11 +7392,8 @@
 <body>
     <canvas id="game"></canvas>
     <div id="touchControls">
-        <div class="touch-dpad">
-            <button class="dpad-btn dpad-up" data-key="ArrowUp">▲</button>
-            <button class="dpad-btn dpad-left" data-key="ArrowLeft">◀</button>
-            <button class="dpad-btn dpad-right" data-key="ArrowRight">▶</button>
-            <button class="dpad-btn dpad-down" data-key="ArrowDown">▼</button>
+        <div class="joystick-base" id="joystickBase">
+            <div class="joystick-thumb" id="joystickThumb"></div>
         </div>
         <div class="touch-actions">
             <button class="action-btn" id="attackBtn">⚔</button>
@@ -7415,7 +7405,7 @@
         <button onclick="toggleDebugPanel()">P</button>
         <button onclick="closeGame()">✕</button>
     </div>
-    <div id="info">Arrows/Dpad to move | Tap ⚔ or SPACE to attack</div>
+    <div id="info">Arrows/Joystick to move | Tap ⚔ or SPACE to attack</div>
     <div id="debugPanel">
         <h3>Player Settings</h3>
         <label>Scale: <span class="value" id="scaleVal">1.7</span></label>
@@ -8455,21 +8445,81 @@
         });
         document.addEventListener('keyup', e => keys[e.key] = false);
 
-        // Touch controls for D-pad
-        document.querySelectorAll('.dpad-btn').forEach(btn => {
-            const key = btn.dataset.key;
-            btn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                keys[key] = true;
-            }, { passive: false });
-            btn.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                keys[key] = false;
-            });
-            btn.addEventListener('mousedown', () => keys[key] = true);
-            btn.addEventListener('mouseup', () => keys[key] = false);
-            btn.addEventListener('mouseleave', () => keys[key] = false);
-        });
+        // Virtual Joystick controls
+        const joystickBase = document.getElementById('joystickBase');
+        const joystickThumb = document.getElementById('joystickThumb');
+        let joystickActive = false;
+        let joystickCenter = { x: 0, y: 0 };
+        const joystickMaxDist = 40;
+        const joystickDeadzone = 10;
+
+        function updateJoystick(touchX, touchY) {
+            const dx = touchX - joystickCenter.x;
+            const dy = touchY - joystickCenter.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            // Clamp to max distance
+            let clampedX = dx;
+            let clampedY = dy;
+            if (dist > joystickMaxDist) {
+                clampedX = (dx / dist) * joystickMaxDist;
+                clampedY = (dy / dist) * joystickMaxDist;
+            }
+
+            // Move thumb
+            joystickThumb.style.left = (60 + clampedX) + 'px';
+            joystickThumb.style.top = (60 + clampedY) + 'px';
+            joystickThumb.style.transform = 'translate(-50%, -50%)';
+
+            // Reset keys
+            keys['ArrowUp'] = false;
+            keys['ArrowDown'] = false;
+            keys['ArrowLeft'] = false;
+            keys['ArrowRight'] = false;
+
+            // Set keys based on direction (if outside deadzone)
+            if (dist > joystickDeadzone) {
+                const angle = Math.atan2(dy, dx);
+                // Right: -45 to 45 degrees
+                if (angle > -Math.PI/4 && angle < Math.PI/4) keys['ArrowRight'] = true;
+                // Down: 45 to 135 degrees
+                if (angle > Math.PI/4 && angle < 3*Math.PI/4) keys['ArrowDown'] = true;
+                // Left: 135 to -135 degrees
+                if (angle > 3*Math.PI/4 || angle < -3*Math.PI/4) keys['ArrowLeft'] = true;
+                // Up: -135 to -45 degrees
+                if (angle > -3*Math.PI/4 && angle < -Math.PI/4) keys['ArrowUp'] = true;
+            }
+        }
+
+        function resetJoystick() {
+            joystickActive = false;
+            joystickThumb.style.left = '50%';
+            joystickThumb.style.top = '50%';
+            joystickThumb.style.transform = 'translate(-50%, -50%)';
+            keys['ArrowUp'] = false;
+            keys['ArrowDown'] = false;
+            keys['ArrowLeft'] = false;
+            keys['ArrowRight'] = false;
+        }
+
+        joystickBase.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            joystickActive = true;
+            const rect = joystickBase.getBoundingClientRect();
+            joystickCenter = { x: rect.left + 60, y: rect.top + 60 };
+            const touch = e.touches[0];
+            updateJoystick(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        joystickBase.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!joystickActive) return;
+            const touch = e.touches[0];
+            updateJoystick(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        joystickBase.addEventListener('touchend', resetJoystick);
+        joystickBase.addEventListener('touchcancel', resetJoystick);
 
         // Attack button
         document.getElementById('attackBtn').addEventListener('touchstart', (e) => {
