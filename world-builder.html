@@ -223,8 +223,7 @@
             background: #111;
             padding: 5px;
             border-radius: 5px;
-            overflow-y: scroll;
-            overflow-x: hidden;
+            overflow: scroll;
             -webkit-overflow-scrolling: touch;
             max-height: 300px;
         }
@@ -549,7 +548,7 @@
             .mode-buttons button { padding: 10px 15px; font-size: 13px; }
             #mapCanvas { touch-action: none; }
             #paintTilesetCanvas { touch-action: manipulation; }
-            .tileset-container { touch-action: pan-y; }
+            .tileset-container { touch-action: pan-x pan-y; }
             .map-viewport { touch-action: pan-x pan-y; }
             .panel { touch-action: pan-y; }
             .mode-tabs-header { display: flex; }
@@ -727,6 +726,7 @@
                     <div style="flex:1;">
                         <input type="file" id="playerSpriteInput" accept="image/*" onchange="loadPlayerSprite(event)" style="display:none;">
                         <button onclick="document.getElementById('playerSpriteInput').click()" style="width:100%; margin-bottom:5px;">Upload Sprite</button>
+                        <button id="setSpawnBtn" onclick="toggleSetSpawnMode()" style="width:100%; margin-bottom:5px; background:#555;">Set Spawn</button>
                         <div id="playerSpriteInfo" style="font-size:10px; color:#888;">Default sprite</div>
                     </div>
                 </div>
@@ -1278,7 +1278,7 @@
         let playerLayerIndex = 1; // Which layer position the player appears at
         let playerPreviewPos = { x: 5, y: 5 }; // Position on map for player preview
         let playerPreviewVisible = true;
-        let draggingPlayer = false; // For dragging player preview
+        let setSpawnMode = false; // For setting player spawn position
 
         // Brush settings
         let brushPainting = false;
@@ -1946,6 +1946,140 @@
 
         collisionTilesetCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
+        // Touch support for collision canvas (mobile/iPad)
+        collisionTilesetCanvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent scrolling while drawing
+            const touch = e.touches[0];
+
+            // Handle split tool mode
+            if (collisionTool === 'split') {
+                handleSplitClickTouch(touch);
+                return;
+            }
+
+            // Start painting collision
+            brushPainting = true;
+            paintCollisionAtTouch(touch, collisionTool === 'paint');
+        }, { passive: false });
+
+        collisionTilesetCanvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Prevent scrolling while drawing
+            const touch = e.touches[0];
+
+            // Handle dragging split line
+            if (draggingSplitLine && selectedSplitTile) {
+                handleSplitDragTouch(touch);
+                return;
+            }
+
+            if (brushPainting) paintCollisionAtTouch(touch, collisionTool === 'paint');
+        }, { passive: false });
+
+        collisionTilesetCanvas.addEventListener('touchend', () => {
+            draggingSplitLine = false;
+            brushPainting = false;
+            brushErasing = false;
+        });
+
+        collisionTilesetCanvas.addEventListener('touchcancel', () => {
+            draggingSplitLine = false;
+            brushPainting = false;
+            brushErasing = false;
+        });
+
+        // Touch versions of paint/split functions
+        function paintCollisionAtTouch(touch, addCollision) {
+            const rect = collisionTilesetCanvas.getBoundingClientRect();
+            const px = Math.floor((touch.clientX - rect.left) / collisionZoom);
+            const py = Math.floor((touch.clientY - rect.top) / collisionZoom);
+
+            if (!tilesetImg || px < 0 || py < 0 || px >= tilesetImg.naturalWidth || py >= tilesetImg.naturalHeight) return;
+
+            const tileX = Math.floor(px / gridSize) * gridSize;
+            const tileY = Math.floor(py / gridSize) * gridSize;
+            const key = currentTilesetIndex + ':' + tileX + ',' + tileY;
+
+            if (!collisionMasks[key]) {
+                collisionMasks[key] = Array(gridSize).fill(null).map(() => Array(gridSize).fill(false));
+            }
+
+            const localX = px - tileX;
+            const localY = py - tileY;
+            const halfBrush = Math.floor(brushSize / 2);
+
+            for (let by = -halfBrush; by <= halfBrush; by++) {
+                for (let bx = -halfBrush; bx <= halfBrush; bx++) {
+                    const targetX = localX + bx;
+                    const targetY = localY + by;
+                    if (targetX >= 0 && targetX < gridSize && targetY >= 0 && targetY < gridSize) {
+                        collisionMasks[key][targetY][targetX] = addCollision;
+                    }
+                }
+            }
+
+            drawCollisionTileset();
+            updateCollisionStats();
+        }
+
+        function handleSplitClickTouch(touch) {
+            const rect = collisionTilesetCanvas.getBoundingClientRect();
+            const px = Math.floor((touch.clientX - rect.left) / collisionZoom);
+            const py = Math.floor((touch.clientY - rect.top) / collisionZoom);
+
+            if (!tilesetImg || px < 0 || py < 0 || px >= tilesetImg.naturalWidth || py >= tilesetImg.naturalHeight) return;
+
+            const tileX = Math.floor(px / gridSize) * gridSize;
+            const tileY = Math.floor(py / gridSize) * gridSize;
+
+            selectedSplitTile = { x: tileX, y: tileY, tilesetIndex: currentTilesetIndex };
+            draggingSplitLine = true;
+
+            const key = currentTilesetIndex + ':' + tileX + ',' + tileY;
+            const localY = py - tileY;
+            const clampedY = Math.max(0, Math.min(gridSize, localY));
+
+            if (flatLineMode) {
+                tileSplitLines[key] = new Array(gridSize).fill(clampedY);
+                document.getElementById('splitYInput').value = clampedY;
+            } else {
+                if (!tileSplitLines[key]) {
+                    const defaultY = parseInt(document.getElementById('splitYInput').value) || Math.floor(gridSize / 2);
+                    tileSplitLines[key] = new Array(gridSize).fill(defaultY);
+                }
+                const localX = px - tileX;
+                const clampedX = Math.max(0, Math.min(gridSize - 1, localX));
+                tileSplitLines[key][clampedX] = clampedY;
+            }
+
+            document.getElementById('splitYInput').max = gridSize;
+            drawCollisionTileset();
+        }
+
+        function handleSplitDragTouch(touch) {
+            if (!selectedSplitTile || !draggingSplitLine) return;
+
+            const rect = collisionTilesetCanvas.getBoundingClientRect();
+            const px = Math.floor((touch.clientX - rect.left) / collisionZoom);
+            const py = Math.floor((touch.clientY - rect.top) / collisionZoom);
+
+            const key = currentTilesetIndex + ':' + selectedSplitTile.x + ',' + selectedSplitTile.y;
+            if (!tileSplitLines[key]) return;
+
+            const localY = py - selectedSplitTile.y;
+            const clampedY = Math.max(0, Math.min(gridSize, localY));
+
+            if (flatLineMode) {
+                tileSplitLines[key] = new Array(gridSize).fill(clampedY);
+                document.getElementById('splitYInput').value = clampedY;
+            } else {
+                const localX = px - selectedSplitTile.x;
+                const clampedX = Math.max(0, Math.min(gridSize - 1, localX));
+                tileSplitLines[key][clampedX] = clampedY;
+            }
+
+            drawCollisionTileset();
+        }
+
         // Paint collision pixels with brush
         function paintCollisionAt(e, addCollision) {
             const rect = collisionTilesetCanvas.getBoundingClientRect();
@@ -2332,6 +2466,24 @@
             playerPreviewVisible = !playerPreviewVisible;
             renderLayerList();
             renderMap();
+        }
+
+        function toggleSetSpawnMode() {
+            setSpawnMode = !setSpawnMode;
+            const btn = document.getElementById('setSpawnBtn');
+            const canvas = document.getElementById('mapCanvas');
+
+            if (setSpawnMode) {
+                btn.style.background = '#4af';
+                btn.style.color = '#000';
+                btn.textContent = 'Click Map to Set Spawn';
+                canvas.style.cursor = 'crosshair';
+            } else {
+                btn.style.background = '#555';
+                btn.style.color = 'white';
+                btn.textContent = 'Set Spawn';
+                canvas.style.cursor = grabToolActive ? 'grab' : 'crosshair';
+            }
         }
 
         function movePlayerLayerUp() {
@@ -2842,67 +2994,47 @@
             ctx.restore();
         }
 
-        // Draw player preview placeholder on map
+        // Draw player preview on map (uses actual sprite if loaded)
         function drawPlayerPreview(tileSize) {
             mapCtx.globalAlpha = 1;
 
-            const playerWidth = 28;
-            const playerHeight = 64;
             const px = playerPreviewPos.x * tileSize;
             const py = playerPreviewPos.y * tileSize;
-
-            // Draw player silhouette (simple humanoid shape)
             const scale = zoom;
 
-            // Body
-            mapCtx.fillStyle = '#f0a';
-            mapCtx.fillRect(px + 6 * scale, py + 16 * scale, 16 * scale, 32 * scale);
-
-            // Head
-            mapCtx.beginPath();
-            mapCtx.arc(px + 14 * scale, py + 10 * scale, 8 * scale, 0, Math.PI * 2);
-            mapCtx.fill();
-
-            // Legs
-            mapCtx.fillRect(px + 6 * scale, py + 48 * scale, 6 * scale, 14 * scale);
-            mapCtx.fillRect(px + 16 * scale, py + 48 * scale, 6 * scale, 14 * scale);
-
-            // Arms
-            mapCtx.fillRect(px + 0 * scale, py + 20 * scale, 6 * scale, 20 * scale);
-            mapCtx.fillRect(px + 22 * scale, py + 20 * scale, 6 * scale, 20 * scale);
-
-            // Outline
-            mapCtx.strokeStyle = '#fff';
-            mapCtx.lineWidth = 2;
-            mapCtx.strokeRect(px, py, 28 * scale, 64 * scale);
+            // Draw the actual player sprite if available (idle frame = first 64x64)
+            if (playerSpriteImg && playerSpriteImg.complete) {
+                const spriteSize = 64;
+                const destSize = spriteSize * scale;
+                // Draw idle frame (first frame, facing down)
+                mapCtx.drawImage(playerSpriteImg, 0, 0, spriteSize, spriteSize, px, py, destSize, destSize);
+            } else {
+                // Fallback: simple placeholder
+                const playerWidth = 28 * scale;
+                const playerHeight = 64 * scale;
+                mapCtx.fillStyle = '#f0a';
+                mapCtx.fillRect(px + 8 * scale, py + 8 * scale, 12 * scale, 48 * scale);
+                mapCtx.beginPath();
+                mapCtx.arc(px + 14 * scale, py + 10 * scale, 8 * scale, 0, Math.PI * 2);
+                mapCtx.fill();
+            }
 
             // Label
             mapCtx.fillStyle = 'rgba(0,0,0,0.7)';
             mapCtx.font = '10px sans-serif';
             mapCtx.textAlign = 'center';
-            const labelWidth = mapCtx.measureText('PLAYER').width + 6;
-            mapCtx.fillRect(px + 14 * scale - labelWidth / 2, py - 16, labelWidth, 14);
-            mapCtx.fillStyle = '#f0a';
-            mapCtx.fillText('PLAYER', px + 14 * scale, py - 5);
+            const labelWidth = mapCtx.measureText('SPAWN').width + 6;
+            mapCtx.fillRect(px + 32 * scale - labelWidth / 2, py - 16, labelWidth, 14);
+            mapCtx.fillStyle = '#4f8';
+            mapCtx.fillText('SPAWN', px + 32 * scale, py - 5);
 
-            // Drag handle indicator
-            if (mode === 'tile') {
-                mapCtx.strokeStyle = '#fff';
-                mapCtx.setLineDash([3, 3]);
-                mapCtx.strokeRect(px - 2, py - 2, 28 * scale + 4, 64 * scale + 4);
-                mapCtx.setLineDash([]);
-            }
-        }
-
-        // Check if a click is within the player preview bounds
-        function isClickOnPlayer(clickX, clickY, tileSize) {
-            const px = playerPreviewPos.x * tileSize;
-            const py = playerPreviewPos.y * tileSize;
-            const playerWidth = 28 * zoom;
-            const playerHeight = 64 * zoom;
-
-            return clickX >= px && clickX <= px + playerWidth &&
-                   clickY >= py && clickY <= py + playerHeight;
+            // Spawn marker outline
+            mapCtx.strokeStyle = '#4f8';
+            mapCtx.lineWidth = 2;
+            mapCtx.setLineDash([4, 4]);
+            const spriteSize = playerSpriteImg ? 64 * scale : 28 * scale;
+            mapCtx.strokeRect(px - 2, py - 2, spriteSize + 4, spriteSize + 4);
+            mapCtx.setLineDash([]);
         }
 
         function drawPaintTileset() {
@@ -3247,10 +3379,13 @@
             const x = Math.floor((e.clientX - rect.left) / tileSize);
             const y = Math.floor((e.clientY - rect.top) / tileSize);
 
-            // Check if clicking on player preview (to drag it)
-            if (playerPreviewVisible && isClickOnPlayer(e.clientX - rect.left, e.clientY - rect.top, tileSize)) {
-                draggingPlayer = true;
-                mapCanvas.style.cursor = 'move';
+            // Set spawn mode - click anywhere to place player spawn
+            if (setSpawnMode) {
+                playerPreviewPos.x = x;
+                playerPreviewPos.y = y;
+                playerPreviewVisible = true;
+                toggleSetSpawnMode(); // Turn off set spawn mode after placing
+                renderMap();
                 return;
             }
 
@@ -3355,14 +3490,6 @@
             const x = Math.floor((e.clientX - rect.left) / tileSize);
             const y = Math.floor((e.clientY - rect.top) / tileSize);
 
-            // Handle dragging player preview
-            if (draggingPlayer) {
-                playerPreviewPos.x = x;
-                playerPreviewPos.y = y;
-                renderMap();
-                return;
-            }
-
             if (copyMode && copyStart) {
                 // Update copy selection
                 copyEnd = { x, y };
@@ -3387,11 +3514,6 @@
         });
 
         window.addEventListener('mouseup', (e) => {
-            // Stop dragging player
-            if (draggingPlayer) {
-                draggingPlayer = false;
-                mapCanvas.style.cursor = grabToolActive ? 'grab' : 'crosshair';
-            }
             if (copyMode && copyStart && copyEnd) {
                 // Finish copy selection
                 finishCopyFromMap();
@@ -7117,6 +7239,39 @@
         }
         #debugPanel button:hover { background: #5a9c69; }
 
+        /* Debug log for iPad (no console) */
+        #debugLog {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.9);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 10px;
+            padding: 8px;
+            border-radius: 5px;
+            display: none;
+            z-index: 2000;
+        }
+        #debugLog.visible { display: block; }
+        #debugLog .error { color: #f44; }
+        #debugLog .warn { color: #fa0; }
+        #toggleLogBtn {
+            position: fixed;
+            bottom: 170px;
+            left: 10px;
+            background: rgba(0,100,0,0.8);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 2001;
+        }
+
         /* Touch controls */
         #touchControls {
             position: fixed;
@@ -7235,6 +7390,49 @@
         <div id="timeDisplay" style="color:#4f8;margin-top:5px;"></div>
         <button onclick="copySettings()">Copy Settings</button>
     </div>
+    <button id="toggleLogBtn" onclick="toggleDebugLog()">Show Log</button>
+    <div id="debugLog"></div>
+    <script>
+        // Debug log for iPad (captures console output)
+        const debugLogEl = document.getElementById('debugLog');
+        let debugLogVisible = false;
+
+        function toggleDebugLog() {
+            debugLogVisible = !debugLogVisible;
+            debugLogEl.classList.toggle('visible', debugLogVisible);
+            document.getElementById('toggleLogBtn').textContent = debugLogVisible ? 'Hide Log' : 'Show Log';
+        }
+
+        function logToScreen(msg, type = 'log') {
+            const line = document.createElement('div');
+            line.className = type;
+            line.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+            debugLogEl.appendChild(line);
+            debugLogEl.scrollTop = debugLogEl.scrollHeight;
+            // Keep only last 50 lines
+            while (debugLogEl.children.length > 50) {
+                debugLogEl.removeChild(debugLogEl.firstChild);
+            }
+        }
+
+        // Capture console methods
+        const origLog = console.log;
+        const origWarn = console.warn;
+        const origError = console.error;
+        console.log = (...args) => { origLog(...args); logToScreen(args.join(' '), 'log'); };
+        console.warn = (...args) => { origWarn(...args); logToScreen(args.join(' '), 'warn'); };
+        console.error = (...args) => { origError(...args); logToScreen(args.join(' '), 'error'); };
+
+        // Capture uncaught errors
+        window.onerror = (msg, url, line, col, error) => {
+            logToScreen('ERROR: ' + msg + ' at line ' + line, 'error');
+        };
+        window.onunhandledrejection = (e) => {
+            logToScreen('PROMISE ERROR: ' + e.reason, 'error');
+        };
+
+        logToScreen('Debug log initialized');
+    </script>
     <script>
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
