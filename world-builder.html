@@ -703,6 +703,9 @@
                     <button onclick="document.getElementById('addTilesetInput').click()" style="padding:5px 10px;" title="Add tileset">+</button>
                     <button onclick="deleteTileset()" style="padding:5px 10px; background:#a55;" title="Delete tileset">×</button>
                 </div>
+                <div style="display:flex; gap:5px; margin-bottom:5px;">
+                    <button id="tileSelectModeBtn" onclick="toggleTileSelectMode()" style="flex:1; background:#555;">Select Tiles</button>
+                </div>
                 <div class="tileset-container">
                     <canvas id="paintTilesetCanvas"></canvas>
                 </div>
@@ -2984,6 +2987,25 @@
 
         // Multi-tile selection on tileset
         let tilesetSelecting = false;
+        let tileSelectModeActive = false;
+
+        function toggleTileSelectMode() {
+            tileSelectModeActive = !tileSelectModeActive;
+            const btn = document.getElementById('tileSelectModeBtn');
+            const canvas = document.getElementById('paintTilesetCanvas');
+
+            if (tileSelectModeActive) {
+                btn.style.background = '#4af';
+                btn.style.color = '#000';
+                btn.textContent = 'Select Mode ON';
+                canvas.style.touchAction = 'none';
+            } else {
+                btn.style.background = '#555';
+                btn.style.color = 'white';
+                btn.textContent = 'Select Tiles';
+                canvas.style.touchAction = 'manipulation';
+            }
+        }
 
         paintTilesetCanvas.addEventListener('mousedown', (e) => {
             if (mode !== 'tile') return;
@@ -3007,9 +3029,10 @@
             tilesetSelecting = false;
         });
 
-        // Touch support for tileset selection
+        // Touch support for tileset selection (only when select mode is active)
         paintTilesetCanvas.addEventListener('touchstart', (e) => {
             if (mode !== 'tile') return;
+            if (!tileSelectModeActive) return; // Allow scrolling when select mode is off
             e.preventDefault();
             const touch = e.touches[0];
             const rect = paintTilesetCanvas.getBoundingClientRect();
@@ -3023,6 +3046,7 @@
 
         paintTilesetCanvas.addEventListener('touchmove', (e) => {
             if (!tilesetSelecting || mode !== 'tile') return;
+            if (!tileSelectModeActive) return;
             e.preventDefault();
             updateTileSelectionTouch(e.touches[0]);
         }, { passive: false });
@@ -4345,6 +4369,9 @@
                 btn.style.color = '#000';
                 canvas.classList.add('grabbing');
                 hint.textContent = 'Drag to pan | Scroll to zoom';
+                // Clear selected tiles when grab tool is activated
+                selectedTiles = [];
+                document.getElementById('selectedPreview').style.display = 'none';
             } else {
                 btn.style.background = '#555';
                 btn.style.color = 'white';
