@@ -394,6 +394,98 @@
             padding: 1px 4px;
             border-radius: 2px;
         }
+
+        /* NPC System Styles */
+        .npc-item {
+            background: #333;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+            cursor: pointer;
+            border: 2px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .npc-item:hover { background: #444; }
+        .npc-item.selected { border-color: #4af; background: #3a3a5e; }
+        .npc-item .npc-preview {
+            width: 32px;
+            height: 32px;
+            background: #222;
+            border-radius: 4px;
+            image-rendering: pixelated;
+        }
+        .npc-item .npc-info { flex: 1; }
+        .npc-item .npc-name { color: #4af; font-weight: bold; font-size: 12px; }
+        .npc-item .npc-type { color: #888; font-size: 10px; }
+        .npc-item .npc-actions { display: flex; gap: 5px; }
+        .npc-item .npc-actions button { padding: 3px 8px; font-size: 10px; }
+
+        .npc-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 2000;
+        }
+        .npc-modal.visible { display: flex; justify-content: center; align-items: center; }
+
+        .npc-modal-content {
+            background: #2a2a4e;
+            border: 2px solid #4af;
+            border-radius: 10px;
+            padding: 25px;
+            width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .npc-modal h2 { color: #4af; margin-bottom: 20px; }
+        .npc-modal label { display: block; color: #aaa; font-size: 12px; margin: 10px 0 5px; }
+        .npc-modal input[type="text"], .npc-modal textarea, .npc-modal select {
+            width: 100%;
+            padding: 8px;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .npc-modal textarea { min-height: 80px; resize: vertical; }
+
+        .npc-sprite-preview {
+            background: #111;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .npc-sprite-preview canvas {
+            image-rendering: pixelated;
+            border: 1px solid #444;
+        }
+
+        .npc-modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: flex-end;
+        }
+
+        .placed-npc-item {
+            background: #2a2a3e;
+            padding: 6px 10px;
+            border-radius: 4px;
+            margin: 3px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .placed-npc-item button { padding: 2px 8px; font-size: 10px; background: #a55; }
     </style>
 </head>
 <body>
@@ -500,8 +592,10 @@
         <div class="panel left-panel">
             <div class="mode-tabs">
                 <button id="tileMode" class="active" onclick="setMode('tile')">Tiles</button>
-                <button id="propMode" onclick="setMode('prop')">Props</button>
+                <button id="npcMode" onclick="setMode('npc')">NPCs</button>
                 <button id="animPropMode" onclick="setMode('animProp')">Animated</button>
+                <button id="soundMode" onclick="setMode('sound')">Sounds</button>
+                <button id="lightingMode" onclick="setMode('lighting')">Lights</button>
             </div>
 
             <!-- TILE MODE -->
@@ -544,42 +638,68 @@
                 <h3 style="margin-top:15px;">Layers</h3>
                 <div id="layerList"></div>
                 <button onclick="addLayer()" style="margin-top:5px;">+ Add Layer</button>
+
+                <h3 style="margin-top:15px;">Player Sprite</h3>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <canvas id="playerSpritePreview" width="48" height="48" style="border:1px solid #555; border-radius:4px; background:#222; image-rendering:pixelated;"></canvas>
+                    <div style="flex:1;">
+                        <input type="file" id="playerSpriteInput" accept="image/*" onchange="loadPlayerSprite(event)" style="display:none;">
+                        <button onclick="document.getElementById('playerSpriteInput').click()" style="width:100%; margin-bottom:5px;">Upload Sprite</button>
+                        <div id="playerSpriteInfo" style="font-size:10px; color:#888;">Default sprite</div>
+                    </div>
+                </div>
             </div>
 
-            <!-- PROP MODE - Multiple props support -->
-            <div id="propModeContent" style="display:none;">
-                <h3>Props</h3>
+            <!-- NPC MODE -->
+            <div id="npcModeContent" style="display:none;">
+                <h3>NPCs</h3>
 
-                <div style="display:flex; gap:5px; margin-bottom:10px; align-items:center;">
-                    <select id="propSelect" onchange="switchProp()" style="flex:1;"></select>
-                    <input type="file" id="propImageInput" accept="image/*" onchange="loadPropImage(event)" style="display:none;">
-                    <button onclick="document.getElementById('propImageInput').click()" style="padding:5px 10px;" title="Add New Prop">+</button>
+                <div id="npcListContainer">
+                    <div id="npcList" style="margin-bottom:10px;"></div>
+                    <button onclick="openNpcEditor()" style="width:100%;">+ Create NPC</button>
                 </div>
 
-                <div id="propControls" style="display:none;">
-                    <div style="margin:10px 0;">
-                        <button id="propToolSelect" class="active" onclick="setPropTool('select')" style="padding:5px 10px;">Select</button>
-                        <button id="propToolCollision" onclick="setPropTool('collision')" style="padding:5px 10px;">Paint Collision</button>
-                        <button id="propToolErase" onclick="setPropTool('erase')" style="padding:5px 10px;">Erase Collision</button>
-                    </div>
+                <p style="font-size:10px; color:#666; margin-top:10px;">Select NPC from list, then click map to place.</p>
 
-                    <div id="propBrushControls" style="display:none; margin:5px 0;">
-                        <span style="font-size:11px; color:#888;">Brush:</span>
-                        <button id="propBrush2" onclick="setPropBrushSize(2)" style="padding:3px 8px;">2</button>
-                        <button id="propBrush4" class="active" onclick="setPropBrushSize(4)" style="padding:3px 8px;">4</button>
-                        <button id="propBrush8" onclick="setPropBrushSize(8)" style="padding:3px 8px;">8</button>
-                        <button id="propBrush16" onclick="setPropBrushSize(16)" style="padding:3px 8px;">16</button>
-                    </div>
-
-                    <div style="background:#111; padding:5px; border-radius:5px; margin-top:10px; max-height:400px; overflow:auto;">
-                        <canvas id="propTilesetCanvas" style="cursor:crosshair;"></canvas>
-                    </div>
-
-                    <p style="font-size:10px; color:#666; margin-top:10px;">Select: click to pick tiles | Collision: paint red collision areas | Then paint props on map</p>
+                <h3 style="margin-top:15px;">Placed NPCs</h3>
+                <div id="placedNpcList" style="max-height:120px; overflow-y:auto; font-size:11px; color:#888;">
+                    No NPCs placed
                 </div>
 
-                <div id="noPropMessage" style="color:#888; font-size:12px; padding:20px; text-align:center;">
-                    Click + to add a prop image
+                <!-- Path Editor Panel (shown when NPC selected) -->
+                <div id="npcPathPanel" style="display:none; margin-top:15px; padding:10px; background:#1a1a2e; border-radius:5px;">
+                    <h3 style="margin-top:0;">Path for: <span id="npcPathName">NPC</span></h3>
+
+                    <div style="margin-bottom:10px;">
+                        <button id="npcDrawPathBtn" onclick="toggleNpcPathDrawing()" style="width:100%; background:#4a4;">Draw Path</button>
+                        <p id="npcPathInfo" style="font-size:10px; color:#666; margin-top:5px;">Click tiles to add waypoints</p>
+                    </div>
+
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:11px;">Trigger:</label>
+                        <select id="npcTriggerType" onchange="updateNpcTrigger()" style="width:100%; margin-top:3px;">
+                            <option value="loop">Loop (always walking)</option>
+                            <option value="interact">On Interact (attack)</option>
+                            <option value="timeDay">Time: Day only</option>
+                            <option value="timeNight">Time: Night only</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:11px;">Walk Speed:</label>
+                        <input type="range" id="npcWalkSpeed" min="1" max="10" value="3" onchange="updateNpcSpeed()" style="width:100%;">
+                        <span id="npcSpeedValue" style="font-size:10px; color:#888;">3</span>
+                    </div>
+
+                    <div style="display:flex; gap:5px; margin-bottom:8px;">
+                        <button id="npcPreviewPathBtn" onclick="toggleNpcPathPreview()" style="flex:1; background:#47a;">▶ Preview</button>
+                        <button onclick="clearNpcPath()" style="flex:1; background:#a55;">Clear Path</button>
+                    </div>
+                    <button onclick="deleteSelectedPlacedNpc()" style="width:100%; background:#a33;">Delete NPC</button>
+
+                    <div id="npcWaypointList" style="margin-top:10px; font-size:10px; color:#888; max-height:80px; overflow-y:auto;">
+                        No waypoints
+                    </div>
                 </div>
             </div>
 
@@ -598,6 +718,192 @@
                 <h3 style="margin-top:15px;">Layers</h3>
                 <div id="animPropLayerList"></div>
                 <button onclick="addLayer()" style="margin-top:5px;">+ Add Layer</button>
+            </div>
+
+            <!-- SOUND MODE -->
+            <div id="soundModeContent" style="display:none;">
+                <h3>Sounds</h3>
+
+                <!-- Sound Library -->
+                <div style="margin-bottom:15px;">
+                    <div style="display:flex; gap:5px; align-items:center; margin-bottom:8px;">
+                        <select id="soundSelect" onchange="switchSound()" style="flex:1;"></select>
+                        <input type="file" id="soundInput" accept="audio/*" onchange="loadSound(event)" style="display:none;">
+                        <button onclick="document.getElementById('soundInput').click()" style="padding:5px 10px;" title="Add Sound">+</button>
+                    </div>
+                    <div id="soundControls" style="display:none;">
+                        <div style="display:flex; gap:5px; margin-bottom:8px;">
+                            <button onclick="previewSound()" style="flex:1;">▶ Preview</button>
+                            <button onclick="stopPreview()" style="flex:1;">■ Stop</button>
+                        </div>
+                        <div id="currentSoundInfo" style="font-size:10px; color:#888;"></div>
+                    </div>
+                    <div id="noSoundMessage" style="color:#888; font-size:11px; padding:10px; text-align:center;">
+                        Click + to add sounds
+                    </div>
+                </div>
+
+                <!-- Attach Mode -->
+                <h4 style="margin:15px 0 8px 0; color:#4af;">Attach To:</h4>
+                <div style="display:flex; gap:5px; margin-bottom:10px;">
+                    <button id="soundAttachTile" class="active" onclick="setSoundAttachMode('tile')" style="flex:1;">Tile Position</button>
+                    <button id="soundAttachPlayer" onclick="setSoundAttachMode('player')" style="flex:1;">Player Action</button>
+                </div>
+
+                <!-- Tile Mode Options -->
+                <div id="tileSoundOptions">
+                    <!-- Selection indicator -->
+                    <div id="soundEditMode" style="background:#2a4a3a; padding:8px; border-radius:4px; margin-bottom:10px; display:none;">
+                        <span style="color:#4f8;">Editing: <span id="editingSoundKey"></span></span>
+                        <button onclick="deselectTileSound()" style="float:right; padding:2px 8px; font-size:10px;">Cancel</button>
+                    </div>
+
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
+                            Radius: <span id="soundRadiusVal">3</span> tiles
+                        </label>
+                        <input type="range" id="soundRadius" min="1" max="50" value="3" oninput="document.getElementById('soundRadiusVal').textContent=this.value" style="width:100%;">
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:11px; color:#aaa;">
+                            <input type="checkbox" id="soundLoop" checked> Loop continuously
+                        </label>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
+                            Volume: <span id="soundVolumeVal">50</span>%
+                        </label>
+                        <input type="range" id="soundVolume" min="0" max="100" value="50" oninput="document.getElementById('soundVolumeVal').textContent=this.value" style="width:100%;">
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
+                            Fade Distance: <span id="soundFadeVal">50</span>%
+                        </label>
+                        <input type="range" id="soundFade" min="0" max="100" value="50" oninput="document.getElementById('soundFadeVal').textContent=this.value" style="width:100%;">
+                        <p style="font-size:9px; color:#555; margin-top:2px;">How much of radius is fade zone (0=abrupt, 100=full fade)</p>
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div style="display:flex; gap:5px; margin:10px 0;">
+                        <button id="soundSaveBtn" onclick="saveSelectedSound()" style="flex:1; padding:8px; background:#4a7c59;">Save Changes</button>
+                        <button onclick="deselectTileSound()" style="flex:1; padding:8px; background:#555;">New Sound</button>
+                    </div>
+                    <p style="font-size:10px; color:#666;">Click map to place new or select existing. Right-click to remove.</p>
+
+                    <h4 style="margin:15px 0 8px 0; color:#4af;">Placed Sounds:</h4>
+                    <div id="placedSoundsList" style="max-height:150px; overflow-y:auto; font-size:11px;"></div>
+                </div>
+
+                <!-- Player Mode Options -->
+                <div id="playerSoundOptions" style="display:none;">
+                    <div style="margin-bottom:10px;">
+                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">Action:</label>
+                        <select id="playerActionSelect" onchange="updatePlayerSoundUI()" style="width:100%;">
+                            <option value="walk">Walk</option>
+                            <option value="attack">Attack</option>
+                        </select>
+                    </div>
+                    <div id="walkSoundSettings">
+                        <div style="margin-bottom:8px;">
+                            <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
+                                Step Interval: <span id="walkIntervalVal">200</span>ms
+                            </label>
+                            <input type="range" id="walkInterval" min="100" max="400" value="200" oninput="document.getElementById('walkIntervalVal').textContent=this.value" style="width:100%;">
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
+                                Pitch Variation: <span id="walkPitchVal">10</span>%
+                            </label>
+                            <input type="range" id="walkPitch" min="0" max="30" value="10" oninput="document.getElementById('walkPitchVal').textContent=this.value" style="width:100%;">
+                        </div>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
+                            Volume: <span id="playerSoundVolumeVal">50</span>%
+                        </label>
+                        <input type="range" id="playerSoundVolume" min="0" max="100" value="50" oninput="document.getElementById('playerSoundVolumeVal').textContent=this.value" style="width:100%;">
+                    </div>
+                    <button onclick="assignPlayerSound()" style="width:100%; margin-top:5px;">Assign Selected Sound</button>
+
+                    <h4 style="margin:15px 0 8px 0; color:#4af;">Current Assignments:</h4>
+                    <div id="playerSoundAssignments" style="font-size:11px; color:#aaa;">
+                        <div>Walk: <span id="walkSoundName">None</span></div>
+                        <div>Attack: <span id="attackSoundName">None</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LIGHTING MODE -->
+            <div id="lightingModeContent" style="display:none;">
+                <h3>Lighting</h3>
+
+                <!-- Preview Toggle -->
+                <button id="lightingPreviewBtn" onclick="toggleLightingPreview()" style="width:100%; padding:10px; margin-bottom:15px; background:#2a5a8a; font-weight:bold;">
+                    👁️ Preview Lighting: OFF
+                </button>
+
+                <!-- Global Settings -->
+                <div style="margin-bottom:15px; padding:10px; background:#1a2a1a; border-radius:4px;">
+                    <h4 style="margin:0 0 10px 0; color:#4af;">Global Settings</h4>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:11px; color:#aaa;">
+                            <input type="checkbox" id="ambientEnabled" onchange="updateLightingSettings()"> Enable Ambient Lighting
+                        </label>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:11px; color:#aaa;">
+                            <input type="checkbox" id="blobShadows" checked onchange="updateLightingSettings()"> Blob Shadows (under sprites)
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Time of Day -->
+                <div style="margin-bottom:15px; padding:10px; background:#1a1a2a; border-radius:4px;">
+                    <h4 style="margin:0 0 10px 0; color:#4af;">Time of Day</h4>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+                        <button id="todDawn" onclick="setTimeOfDay('dawn')" style="padding:8px; background:#4a3520;">🌅 Dawn</button>
+                        <button id="todDay" onclick="setTimeOfDay('day')" class="active" style="padding:8px; background:#2a4a2a;">☀️ Day</button>
+                        <button id="todDusk" onclick="setTimeOfDay('dusk')" style="padding:8px; background:#4a2520;">🌇 Dusk</button>
+                        <button id="todNight" onclick="setTimeOfDay('night')" style="padding:8px; background:#1a1a3a;">🌙 Night</button>
+                    </div>
+                    <p style="font-size:9px; color:#555; margin-top:8px; text-align:center;">Affects ambient overlay color and darkness</p>
+                </div>
+
+                <!-- Player Light -->
+                <div style="margin-bottom:15px; padding:10px; background:#2a2a1a; border-radius:4px;">
+                    <h4 style="margin:0 0 10px 0; color:#4af;">Player Torch</h4>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:11px; color:#aaa;">
+                            <input type="checkbox" id="playerLight" onchange="updateLightingSettings()"> Player carries light
+                        </label>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
+                            Light Radius: <span id="playerLightRadiusVal">4</span> tiles
+                        </label>
+                        <input type="range" id="playerLightRadius" min="1" max="10" value="4" oninput="document.getElementById('playerLightRadiusVal').textContent=this.value; updateLightingSettings();" style="width:100%;">
+                    </div>
+                </div>
+
+                <!-- Point Lights -->
+                <div style="margin-bottom:15px; padding:10px; background:#2a1a2a; border-radius:4px;">
+                    <h4 style="margin:0 0 10px 0; color:#4af;">Point Lights</h4>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
+                            Light Radius: <span id="pointLightRadiusVal">3</span> tiles
+                        </label>
+                        <input type="range" id="pointLightRadius" min="1" max="10" value="3" oninput="document.getElementById('pointLightRadiusVal').textContent=this.value" style="width:100%;">
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:11px; color:#aaa;">
+                            <input type="checkbox" id="pointLightFlicker"> Flicker effect
+                        </label>
+                    </div>
+                    <p style="font-size:10px; color:#666;">Click map to place lights. Right-click to remove.</p>
+
+                    <h4 style="margin:15px 0 8px 0; color:#4af;">Placed Lights:</h4>
+                    <div id="placedLightsList" style="max-height:150px; overflow-y:auto; font-size:11px;"></div>
+                </div>
             </div>
         </div>
 
@@ -635,6 +941,97 @@
     <div class="state-picker" id="statePicker">
         <h3 style="margin-bottom:10px;">Select State</h3>
         <div id="stateOptions"></div>
+    </div>
+
+    <!-- NPC Editor Modal -->
+    <div class="anim-modal" id="npcModal">
+        <div class="anim-modal-content">
+            <!-- Sidebar -->
+            <div class="anim-sidebar">
+                <h2 style="margin-top:0;">NPC</h2>
+
+                <!-- Step 1: Load Sprite Sheet -->
+                <div style="margin-bottom:15px;">
+                    <h3>1. Sprite Sheet</h3>
+                    <input type="file" id="npcFileInput" accept="image/*" onchange="npcLoadSheet(event)" style="display:none;">
+                    <button onclick="document.getElementById('npcFileInput').click()" style="width:100%;">Load Image</button>
+                    <div id="npcFileName" style="font-size:11px; color:#4af; margin-top:5px;"></div>
+                </div>
+
+                <!-- Step 2: Frame Size -->
+                <div id="npcFrameSection" style="margin-bottom:15px; display:none;">
+                    <h3>2. Frame Size</h3>
+                    <div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px;">
+                        <button onclick="npcSetFrameSize(16,16)" style="padding:4px 8px; font-size:11px;">16x16</button>
+                        <button onclick="npcSetFrameSize(16,32)" style="padding:4px 8px; font-size:11px;">16x32</button>
+                        <button onclick="npcSetFrameSize(32,32)" style="padding:4px 8px; font-size:11px;">32x32</button>
+                        <button onclick="npcSetFrameSize(32,64)" style="padding:4px 8px; font-size:11px;">32x64</button>
+                        <button onclick="npcSetFrameSize(48,48)" style="padding:4px 8px; font-size:11px;">48x48</button>
+                        <button onclick="npcResetGrid()" style="padding:4px 8px; font-size:11px; background:#a55;">Reset</button>
+                    </div>
+                    <div style="font-size:11px; color:#888;" id="npcGridInfo"></div>
+                </div>
+
+                <!-- Step 3: Animation Selection -->
+                <div id="npcAnimSection" style="margin-bottom:15px; display:none;">
+                    <h3>3. Select Animation</h3>
+                    <div style="display:flex; flex-direction:column; gap:5px;">
+                        <button id="npcAnimDown" onclick="npcSelectAnim('walkDown')" class="active" style="padding:6px; font-size:11px;">Walk Down</button>
+                        <button id="npcAnimUp" onclick="npcSelectAnim('walkUp')" style="padding:6px; font-size:11px;">Walk Up</button>
+                        <button id="npcAnimLeft" onclick="npcSelectAnim('walkLeft')" style="padding:6px; font-size:11px;">Walk Left</button>
+                        <button id="npcAnimRight" onclick="npcSelectAnim('walkRight')" style="padding:6px; font-size:11px;">Walk Right</button>
+                        <button id="npcAnimIdle" onclick="npcSelectAnim('idle')" style="padding:6px; font-size:11px;">Idle</button>
+                    </div>
+                    <p style="font-size:10px; color:#666; margin-top:8px;">Select animation type, then click frames on sprite sheet</p>
+                </div>
+
+                <!-- Step 4: Name -->
+                <div id="npcNameSection" style="margin-bottom:15px; display:none;">
+                    <h3>4. Name</h3>
+                    <input type="text" id="npcNameInput" placeholder="e.g. villager, guard" style="width:100%;">
+                </div>
+
+                <!-- Actions -->
+                <div style="margin-top:auto;">
+                    <button onclick="npcSave()" style="width:100%; background:#4af; color:#000; margin-bottom:10px;">Save NPC</button>
+                    <button onclick="npcCancel()" style="width:100%; background:#a55;">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Main Area -->
+            <div class="anim-main">
+                <div class="anim-header">
+                    <h2>Sprite Sheet</h2>
+                    <span style="color:#888; font-size:12px;">Click frames to add to current animation</span>
+                </div>
+
+                <div class="anim-canvas-area">
+                    <canvas id="npcEditorCanvas"></canvas>
+                </div>
+
+                <!-- Bottom Bar: Animation Frames -->
+                <div class="anim-frames-bar">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <span><strong id="npcCurrentAnimName" style="color:#4af;">Walk Down</strong>: <span id="npcFrameCount">0</span> frames</span>
+                        <div style="display:flex; align-items:center; gap:15px;">
+                            <!-- Live Preview (larger) -->
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <canvas id="npcLivePreview" width="96" height="96" style="border:2px solid #4af; border-radius:4px; background:#111; image-rendering:pixelated;"></canvas>
+                                <div style="font-size:11px;">
+                                    <div style="display:flex; align-items:center; gap:5px;">
+                                        <span style="color:#888;">Speed:</span>
+                                        <input type="range" id="npcSpeedSlider" min="1" max="24" value="8" style="width:80px;" oninput="npcUpdateSpeed()">
+                                        <span id="npcSpeedLabel" style="color:#4af; min-width:35px;">8 fps</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="npcClearCurrentAnim()" style="background:#a55; padding:5px 10px; font-size:11px;">Clear</button>
+                        </div>
+                    </div>
+                    <div class="anim-frames-list" id="npcFramesList"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Animated Prop Editor Modal -->
@@ -819,6 +1216,11 @@
         let panStartY = 0;
 
         let mode = 'tile';
+        let currentMap = 'main'; // Current map name (for multi-map support)
+
+        // Player sprite (embedded as base64)
+        let playerSpriteData = null; // Base64 data URL of player sprite
+        let playerSpriteImg = null; // Image object for preview
 
         // Copy from map mode
         let copyMode = false;
@@ -855,6 +1257,55 @@
         let placedAnimPropFrames = {}; // key: "x,y,layer" -> { frame: 0, timer: 0 }
         let editorAnimInterval = null;
 
+        // NPC System
+        let npcs = []; // Array of NPC definitions { name, spriteData, frameWidth, frameHeight, animations: {...}, fps }
+        let currentNpcIndex = -1;
+        let placedNpcs = []; // NPCs placed on map: { npcIndex, x, y, path: [{x,y},...], trigger, speed }
+        let selectedPlacedNpcIndex = -1; // Currently selected placed NPC for editing
+        let npcPathDrawing = false; // Currently drawing a path
+        let npcEditorImage = null;
+
+        // NPC Path Preview
+        let npcPathPreviewActive = false;
+        let npcPreviewAnimId = null;
+        let npcPreviewState = null; // { x, y, waypointIndex, direction, frame, frameTimer }
+        let npcEditorData = null;
+        let npcEditorFrameW = 16;
+        let npcEditorFrameH = 16;
+        let npcEditorEditingIndex = -1;
+        let npcFrames = []; // Frames being edited
+        let npcPreviewPlaying = false;
+        let npcPreviewFrame = 0;
+        let npcPreviewInterval = null;
+
+        // Sound System
+        let sounds = []; // Array of { name, data, duration, type: 'ambient'|'action' }
+        let currentSoundIndex = -1;
+        let soundAttachMode = 'tile'; // 'tile' or 'player'
+        let tileSounds = {}; // "x,y" -> { soundIndex, radius, loop, volume, fadePercent }
+        let playerSounds = {
+            walk: { soundIndex: -1, interval: 200, volume: 0.5, pitchVariation: 0.1 },
+            attack: { soundIndex: -1, volume: 0.7 }
+        };
+        let previewAudio = null; // For sound preview playback
+        let selectedTileSoundKey = null; // Currently selected tile sound for editing
+
+        // Lighting System (Classic 2D - no WebGL)
+        let lightingSettings = {
+            blobShadows: true,
+            ambientEnabled: false,
+            timeOfDay: 'day',  // 'dawn', 'day', 'dusk', 'night'
+            playerLight: false,
+            playerLightRadius: 4
+        };
+        const TIME_PRESETS = {
+            dawn:  { r: 0, g: 0, b: 20, a: 0.45 },   // Light darkness
+            day:   { r: 0, g: 0, b: 0, a: 0 },        // No overlay
+            dusk:  { r: 0, g: 0, b: 20, a: 0.55 },   // Medium darkness
+            night: { r: 0, g: 0, b: 20, a: 0.95 }    // Full darkness (100%)
+        };
+        let pointLights = {};  // "mapName:x,y" -> { radius, flicker }
+
         let map = [];
 
         // Canvas refs
@@ -865,7 +1316,7 @@
         const mapCanvas = document.getElementById('mapCanvas');
         const mapCtx = mapCanvas.getContext('2d');
         const propTilesetCanvas = document.getElementById('propTilesetCanvas');
-        const propTilesetCtx = propTilesetCanvas.getContext('2d');
+        const propTilesetCtx = propTilesetCanvas ? propTilesetCanvas.getContext('2d') : null;
 
         // ===== PROP TOOLS =====
         function setPropTool(tool) {
@@ -880,7 +1331,7 @@
                 (tool === 'collision' || tool === 'erase') ? 'block' : 'none';
 
             // Update cursor
-            propTilesetCanvas.style.cursor = (tool === 'select') ? 'crosshair' : 'cell';
+            if (propTilesetCanvas) propTilesetCanvas.style.cursor = (tool === 'select') ? 'crosshair' : 'cell';
 
             drawPropTileset();
         }
@@ -1088,6 +1539,44 @@
             selectedTiles = [];
             drawPaintTileset();
             renderMap();
+        }
+
+        // ===== PLAYER SPRITE =====
+        function loadPlayerSprite(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                playerSpriteData = e.target.result;
+                playerSpriteImg = new Image();
+                playerSpriteImg.onload = () => {
+                    // Update preview
+                    const preview = document.getElementById('playerSpritePreview');
+                    const ctx = preview.getContext('2d');
+                    ctx.clearRect(0, 0, 48, 48);
+                    ctx.imageSmoothingEnabled = false;
+                    // Draw first frame (assuming 64x64 frames, top-left)
+                    ctx.drawImage(playerSpriteImg, 0, 0, 64, 64, 0, 0, 48, 48);
+                    document.getElementById('playerSpriteInfo').textContent =
+                        file.name + ' (' + playerSpriteImg.naturalWidth + 'x' + playerSpriteImg.naturalHeight + ')';
+                };
+                playerSpriteImg.src = playerSpriteData;
+            };
+            reader.readAsDataURL(file);
+            event.target.value = '';
+        }
+
+        function updatePlayerSpritePreview() {
+            const preview = document.getElementById('playerSpritePreview');
+            if (!preview) return;
+            const ctx = preview.getContext('2d');
+            ctx.clearRect(0, 0, 48, 48);
+
+            if (playerSpriteImg && playerSpriteImg.complete) {
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(playerSpriteImg, 0, 0, 64, 64, 0, 0, 48, 48);
+            }
         }
 
         // ===== COLLISION PHASE =====
@@ -1777,14 +2266,364 @@
         function setMode(m) {
             mode = m;
             document.getElementById('tileMode').classList.toggle('active', m === 'tile');
-            document.getElementById('propMode').classList.toggle('active', m === 'prop');
+            document.getElementById('npcMode').classList.toggle('active', m === 'npc');
             document.getElementById('animPropMode').classList.toggle('active', m === 'animProp');
+            document.getElementById('soundMode').classList.toggle('active', m === 'sound');
+            document.getElementById('lightingMode').classList.toggle('active', m === 'lighting');
             document.getElementById('tileModeContent').style.display = m === 'tile' ? 'block' : 'none';
-            document.getElementById('propModeContent').style.display = m === 'prop' ? 'block' : 'none';
+            document.getElementById('npcModeContent').style.display = m === 'npc' ? 'block' : 'none';
             document.getElementById('animPropModeContent').style.display = m === 'animProp' ? 'block' : 'none';
+            document.getElementById('soundModeContent').style.display = m === 'sound' ? 'block' : 'none';
+            document.getElementById('lightingModeContent').style.display = m === 'lighting' ? 'block' : 'none';
+
+            // Update lists when switching modes
+            if (m === 'npc') updateNpcList();
 
             // Redraw map to show appropriate overlays
             renderMap();
+        }
+
+        // ===== SOUND MANAGEMENT =====
+        function loadSound(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const audio = new Audio(e.target.result);
+                audio.addEventListener('loadedmetadata', function() {
+                    sounds.push({
+                        name: file.name,
+                        data: e.target.result,
+                        duration: audio.duration || 0,
+                        type: 'ambient'
+                    });
+                    updateSoundDropdown();
+                    currentSoundIndex = sounds.length - 1;
+                    const selectEl = document.getElementById('soundSelect');
+                    const controlsEl = document.getElementById('soundControls');
+                    if (selectEl) selectEl.value = currentSoundIndex;
+                    if (controlsEl) controlsEl.style.display = 'block';
+                });
+                audio.addEventListener('error', function() {
+                    console.error('Failed to load audio metadata');
+                    // Still add the sound even if metadata fails
+                    sounds.push({
+                        name: file.name,
+                        data: e.target.result,
+                        duration: 0,
+                        type: 'ambient'
+                    });
+                    updateSoundDropdown();
+                    currentSoundIndex = sounds.length - 1;
+                    const selectEl = document.getElementById('soundSelect');
+                    const controlsEl = document.getElementById('soundControls');
+                    if (selectEl) selectEl.value = currentSoundIndex;
+                    if (controlsEl) controlsEl.style.display = 'block';
+                });
+            };
+            reader.readAsDataURL(file);
+            event.target.value = '';
+        }
+
+        function switchSound() {
+            const selectEl = document.getElementById('soundSelect');
+            const controlsEl = document.getElementById('soundControls');
+            currentSoundIndex = selectEl ? parseInt(selectEl.value) : -1;
+            if (controlsEl) controlsEl.style.display = currentSoundIndex >= 0 ? 'block' : 'none';
+            stopPreview();
+        }
+
+        function updateSoundDropdown() {
+            const select = document.getElementById('soundSelect');
+            if (!select) return;
+            select.innerHTML = '<option value="-1">-- Select Sound --</option>';
+            sounds.forEach((sound, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                opt.textContent = sound.name;
+                select.appendChild(opt);
+            });
+        }
+
+        function previewSound() {
+            if (currentSoundIndex < 0 || !sounds[currentSoundIndex]) return;
+            stopPreview();
+            previewAudio = new Audio(sounds[currentSoundIndex].data);
+            const volumeEl = document.getElementById('soundVolume');
+            previewAudio.volume = volumeEl ? volumeEl.value / 100 : 0.5;
+            previewAudio.play();
+        }
+
+        function stopPreview() {
+            if (previewAudio) {
+                previewAudio.pause();
+                previewAudio.currentTime = 0;
+                previewAudio = null;
+            }
+        }
+
+        function setSoundAttachMode(attachMode) {
+            soundAttachMode = attachMode;
+            const tileBtn = document.getElementById('soundAttachTile');
+            const playerBtn = document.getElementById('soundAttachPlayer');
+            const tileOpts = document.getElementById('tileSoundOptions');
+            const playerOpts = document.getElementById('playerSoundOptions');
+            if (tileBtn) tileBtn.classList.toggle('active', attachMode === 'tile');
+            if (playerBtn) playerBtn.classList.toggle('active', attachMode === 'player');
+            if (tileOpts) tileOpts.style.display = attachMode === 'tile' ? 'block' : 'none';
+            if (playerOpts) playerOpts.style.display = attachMode === 'player' ? 'block' : 'none';
+            renderMap();
+        }
+
+        function assignPlayerSound() {
+            if (currentSoundIndex < 0) {
+                alert('Select a sound first');
+                return;
+            }
+            const actionEl = document.getElementById('playerActionSelect');
+            const volumeEl = document.getElementById('playerSoundVolume');
+            const intervalEl = document.getElementById('walkInterval');
+            const pitchEl = document.getElementById('walkPitch');
+
+            const action = actionEl ? actionEl.value : 'walk';
+            playerSounds[action].soundIndex = currentSoundIndex;
+            playerSounds[action].volume = volumeEl ? volumeEl.value / 100 : 0.5;
+            if (action === 'walk') {
+                playerSounds.walk.interval = intervalEl ? parseInt(intervalEl.value) : 200;
+                playerSounds.walk.pitchVariation = pitchEl ? parseInt(pitchEl.value) / 100 : 0.1;
+            }
+            updatePlayerSoundAssignments();
+        }
+
+        function updatePlayerSoundAssignments() {
+            const container = document.getElementById('playerSoundAssignments');
+            if (!container) return;
+            let html = '';
+            if (playerSounds.walk.soundIndex >= 0) {
+                html += `<div>Walk: ${sounds[playerSounds.walk.soundIndex]?.name || 'Unknown'}</div>`;
+            }
+            if (playerSounds.attack.soundIndex >= 0) {
+                html += `<div>Attack: ${sounds[playerSounds.attack.soundIndex]?.name || 'Unknown'}</div>`;
+            }
+            container.innerHTML = html || '<div style="color:#888;">None assigned</div>';
+        }
+
+        function updatePlayerSoundUI() {
+            const actionSelect = document.getElementById('playerActionSelect');
+            const walkSettings = document.getElementById('walkSoundSettings');
+            if (!actionSelect || !walkSettings) return;
+            const action = actionSelect.value;
+            walkSettings.style.display = action === 'walk' ? 'block' : 'none';
+        }
+
+        function placeTileSound(gridX, gridY) {
+            if (currentSoundIndex < 0) {
+                alert('Select a sound first');
+                return;
+            }
+            const radiusEl = document.getElementById('soundRadius');
+            const loopEl = document.getElementById('soundLoop');
+            const volumeEl = document.getElementById('soundVolume');
+            const fadeEl = document.getElementById('soundFade');
+            const key = `${gridX},${gridY}`;
+            tileSounds[key] = {
+                soundIndex: currentSoundIndex,
+                radius: radiusEl ? parseInt(radiusEl.value) : 3,
+                loop: loopEl ? loopEl.checked : true,
+                volume: volumeEl ? volumeEl.value / 100 : 0.5,
+                fadePercent: fadeEl ? parseInt(fadeEl.value) / 100 : 0.5
+            };
+            console.log('Placed tile sound:', key, tileSounds[key]);
+            console.log('Total tile sounds:', Object.keys(tileSounds).length);
+            updatePlacedSoundsList();
+            renderMap();
+        }
+
+        function removeTileSound(key) {
+            delete tileSounds[key];
+            updatePlacedSoundsList();
+            renderMap();
+        }
+
+        function updatePlacedSoundsList() {
+            const container = document.getElementById('placedSoundsList');
+            if (!container) return;
+            const keys = Object.keys(tileSounds);
+            if (keys.length === 0) {
+                container.innerHTML = '<div style="color:#888;">No sounds placed</div>';
+                return;
+            }
+            container.innerHTML = keys.map(key => {
+                const ts = tileSounds[key];
+                const soundName = sounds[ts.soundIndex]?.name || 'Unknown';
+                const isSelected = key === selectedTileSoundKey;
+                return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:${isSelected ? '#4a7c59' : '#333'}; border-radius:3px; cursor:pointer;" onclick="selectTileSound('${key}')">
+                    <span style="flex:1;">📍 ${key}: ${soundName}</span>
+                    <button onclick="event.stopPropagation(); removeTileSound('${key}')" style="padding:2px 6px;">×</button>
+                </div>`;
+            }).join('');
+        }
+
+        function selectTileSound(key) {
+            if (!tileSounds[key]) return;
+            selectedTileSoundKey = key;
+            const ts = tileSounds[key];
+
+            // Populate UI with current values
+            const radiusEl = document.getElementById('soundRadius');
+            const loopEl = document.getElementById('soundLoop');
+            const volumeEl = document.getElementById('soundVolume');
+            const fadeEl = document.getElementById('soundFade');
+            const selectEl = document.getElementById('soundSelect');
+
+            if (radiusEl) {
+                radiusEl.value = ts.radius || 3;
+                document.getElementById('soundRadiusVal').textContent = ts.radius || 3;
+            }
+            if (loopEl) loopEl.checked = ts.loop !== false;
+            if (volumeEl) {
+                volumeEl.value = (ts.volume || 0.5) * 100;
+                document.getElementById('soundVolumeVal').textContent = Math.round((ts.volume || 0.5) * 100);
+            }
+            if (fadeEl) {
+                fadeEl.value = (ts.fadePercent !== undefined ? ts.fadePercent : 0.5) * 100;
+                document.getElementById('soundFadeVal').textContent = Math.round((ts.fadePercent !== undefined ? ts.fadePercent : 0.5) * 100);
+            }
+            if (selectEl) selectEl.value = ts.soundIndex;
+            currentSoundIndex = ts.soundIndex;
+
+            // Show edit mode indicator
+            document.getElementById('soundEditMode').style.display = 'block';
+            document.getElementById('editingSoundKey').textContent = key;
+
+            updatePlacedSoundsList();
+            renderMap();
+        }
+
+        function deselectTileSound() {
+            selectedTileSoundKey = null;
+            document.getElementById('soundEditMode').style.display = 'none';
+            updatePlacedSoundsList();
+            renderMap();
+        }
+
+        function saveSelectedSound() {
+            if (!selectedTileSoundKey || !tileSounds[selectedTileSoundKey]) {
+                alert('No sound selected to save');
+                return;
+            }
+            if (currentSoundIndex < 0) {
+                alert('Select a sound first');
+                return;
+            }
+
+            const radiusEl = document.getElementById('soundRadius');
+            const loopEl = document.getElementById('soundLoop');
+            const volumeEl = document.getElementById('soundVolume');
+            const fadeEl = document.getElementById('soundFade');
+
+            tileSounds[selectedTileSoundKey] = {
+                soundIndex: currentSoundIndex,
+                radius: radiusEl ? parseInt(radiusEl.value) : 3,
+                loop: loopEl ? loopEl.checked : true,
+                volume: volumeEl ? volumeEl.value / 100 : 0.5,
+                fadePercent: fadeEl ? parseInt(fadeEl.value) / 100 : 0.5
+            };
+
+            console.log('Updated tile sound:', selectedTileSoundKey, tileSounds[selectedTileSoundKey]);
+            updatePlacedSoundsList();
+            renderMap();
+        }
+
+        // ===== LIGHTING MANAGEMENT =====
+        let lightingPreviewEnabled = false;
+
+        function toggleLightingPreview() {
+            lightingPreviewEnabled = !lightingPreviewEnabled;
+            const btn = document.getElementById('lightingPreviewBtn');
+            if (btn) {
+                btn.textContent = lightingPreviewEnabled ? '👁️ Preview Lighting: ON' : '👁️ Preview Lighting: OFF';
+                btn.style.background = lightingPreviewEnabled ? '#5a8a2a' : '#2a5a8a';
+            }
+            renderMap();
+        }
+
+        function updateLightingSettings() {
+            lightingSettings.ambientEnabled = document.getElementById('ambientEnabled').checked;
+            lightingSettings.blobShadows = document.getElementById('blobShadows').checked;
+            lightingSettings.playerLight = document.getElementById('playerLight').checked;
+            lightingSettings.playerLightRadius = parseInt(document.getElementById('playerLightRadius').value);
+            renderMap();
+        }
+
+        function setTimeOfDay(time) {
+            lightingSettings.timeOfDay = time;
+            // Update button states
+            ['dawn', 'day', 'dusk', 'night'].forEach(t => {
+                const btn = document.getElementById('tod' + t.charAt(0).toUpperCase() + t.slice(1));
+                if (btn) btn.classList.toggle('active', t === time);
+            });
+            renderMap();
+        }
+
+        function placeLightAt(x, y) {
+            const key = currentMap + ':' + x + ',' + y;
+            const radius = parseInt(document.getElementById('pointLightRadius').value) || 3;
+            const flicker = document.getElementById('pointLightFlicker').checked;
+            pointLights[key] = { radius, flicker };
+            console.log('Placed light:', key, pointLights[key]);
+            updatePlacedLightsList();
+            renderMap();
+        }
+
+        function removeLightAt(x, y) {
+            const key = currentMap + ':' + x + ',' + y;
+            if (pointLights[key]) {
+                delete pointLights[key];
+                updatePlacedLightsList();
+                renderMap();
+            }
+        }
+
+        function removeNearestLight(x, y) {
+            // Find nearest light within 1.5 tiles
+            let nearestKey = null;
+            let nearestDist = 1.5;
+            Object.keys(pointLights).forEach(key => {
+                if (!key.startsWith(currentMap + ':')) return;
+                const coords = key.split(':')[1].split(',');
+                const lx = parseFloat(coords[0]);
+                const ly = parseFloat(coords[1]);
+                const dist = Math.sqrt((x - lx) ** 2 + (y - ly) ** 2);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestKey = key;
+                }
+            });
+            if (nearestKey) {
+                delete pointLights[nearestKey];
+                updatePlacedLightsList();
+                renderMap();
+            }
+        }
+
+        function updatePlacedLightsList() {
+            const container = document.getElementById('placedLightsList');
+            if (!container) return;
+            const keys = Object.keys(pointLights).filter(k => k.startsWith(currentMap + ':'));
+            if (keys.length === 0) {
+                container.innerHTML = '<div style="color:#888;">No lights placed</div>';
+                return;
+            }
+            container.innerHTML = keys.map(key => {
+                const light = pointLights[key];
+                const coords = key.split(':')[1];
+                return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:#333; border-radius:3px;">
+                    <span style="flex:1;">💡 ${coords} (r=${light.radius}${light.flicker ? ', flicker' : ''})</span>
+                    <button onclick="delete pointLights['${key}']; updatePlacedLightsList(); renderMap();" style="padding:2px 6px;">×</button>
+                </div>`;
+            }).join('');
         }
 
         function setRotation(deg) {
@@ -2158,6 +2997,69 @@
                 return;
             }
 
+            // Sound mode - click to place/select tile sound, right-click to remove
+            if (mode === 'sound' && soundAttachMode === 'tile') {
+                const key = `${x},${y}`;
+                if (e.button === 0) {
+                    // If clicking on existing sound, select it for editing
+                    if (tileSounds[key]) {
+                        selectTileSound(key);
+                    } else if (selectedTileSoundKey) {
+                        // If a sound is selected and clicking empty tile, deselect
+                        deselectTileSound();
+                    } else {
+                        // Place new sound
+                        placeTileSound(x, y);
+                    }
+                } else if (e.button === 2) {
+                    if (selectedTileSoundKey === key) {
+                        deselectTileSound();
+                    }
+                    removeTileSound(key);
+                }
+                return;
+            }
+
+            // Lighting mode - click to place point lights (free placement), right-click to remove
+            if (mode === 'lighting') {
+                // Use float coordinates for free placement (not grid-snapped)
+                const freeX = (e.clientX - rect.left) / tileSize;
+                const freeY = (e.clientY - rect.top) / tileSize;
+                if (e.button === 0) {
+                    placeLightAt(freeX.toFixed(2), freeY.toFixed(2));
+                } else if (e.button === 2) {
+                    // Find and remove nearest light within 1 tile
+                    removeNearestLight(freeX, freeY);
+                }
+                return;
+            }
+
+            // NPC mode - place, select, or draw path
+            if (mode === 'npc') {
+                if (npcPathDrawing && selectedPlacedNpcIndex >= 0) {
+                    // Drawing path - add waypoint
+                    if (e.button === 0) {
+                        addNpcWaypoint(x, y);
+                    } else if (e.button === 2) {
+                        // Right-click removes last waypoint
+                        removeLastNpcWaypoint();
+                    }
+                } else if (e.button === 0) {
+                    // Check if clicking on existing placed NPC
+                    const clickedNpcIdx = findPlacedNpcAt(x, y);
+                    if (clickedNpcIdx >= 0) {
+                        selectPlacedNpc(clickedNpcIdx);
+                    } else if (currentNpcIndex >= 0) {
+                        // Place new NPC
+                        placeNpcAt(x, y);
+                    }
+                } else if (e.button === 2) {
+                    // Right-click to remove placed NPC
+                    removeNpcAt(x, y);
+                }
+                return;
+            }
+
             if (e.button === 0) {
                 painting = true;
                 paintAt(x, y);
@@ -2225,6 +3127,7 @@
 
         // Animated prop placement helpers - stores directly in layer like tiles
         // Supports multi-tile props based on frame size
+        // Properly rotates the entire object shape, not just individual tiles
         function placeAnimPropAt(x, y) {
             if (x < 0 || y < 0 || x >= mapCols || y >= mapRows) return;
             if (!layers[currentLayer]) return;
@@ -2236,27 +3139,53 @@
 
             // Calculate how many tiles this prop spans based on first frame size
             const frame = frames[0];
-            const tilesW = Math.ceil(frame.w / gridSize);
-            const tilesH = Math.ceil(frame.h / gridSize);
+            const origW = Math.ceil(frame.w / gridSize);
+            const origH = Math.ceil(frame.h / gridSize);
 
-            // Place the origin tile (stores the propIndex)
-            for (let ty = 0; ty < tilesH; ty++) {
-                for (let tx = 0; tx < tilesW; tx++) {
-                    const px = x + tx;
-                    const py = y + ty;
-                    if (px >= mapCols || py >= mapRows) continue;
+            // Determine placed dimensions based on rotation (90/270 swap W and H)
+            const rot = tileRotation;
+            const placedW = (rot === 90 || rot === 270) ? origH : origW;
+            const placedH = (rot === 90 || rot === 270) ? origW : origH;
+
+            // Place tiles with proper rotation mapping
+            for (let ty = 0; ty < origH; ty++) {
+                for (let tx = 0; tx < origW; tx++) {
+                    // Calculate rotated position on map
+                    let placedTx, placedTy;
+                    if (rot === 0) {
+                        placedTx = tx;
+                        placedTy = ty;
+                    } else if (rot === 90) {
+                        // 90° CW: (tx, ty) -> (origH - 1 - ty, tx)
+                        placedTx = origH - 1 - ty;
+                        placedTy = tx;
+                    } else if (rot === 180) {
+                        // 180°: (tx, ty) -> (origW - 1 - tx, origH - 1 - ty)
+                        placedTx = origW - 1 - tx;
+                        placedTy = origH - 1 - ty;
+                    } else { // 270
+                        // 270° CW: (tx, ty) -> (ty, origW - 1 - tx)
+                        placedTx = ty;
+                        placedTy = origW - 1 - tx;
+                    }
+
+                    const px = x + placedTx;
+                    const py = y + placedTy;
+                    if (px < 0 || py < 0 || px >= mapCols || py >= mapRows) continue;
 
                     if (!layers[currentLayer][py]) layers[currentLayer][py] = [];
 
-                    // Origin tile (0,0) stores the prop reference
-                    // Other tiles store offset to know which part to draw
+                    // Store original source offset (for sprite lookup) and rotation
                     layers[currentLayer][py][px] = {
                         type: 'animTile',
                         propIndex: currentAnimPropIndex,
-                        offsetX: tx,  // Which tile within the prop (0-based)
-                        offsetY: ty,
-                        tilesW: tilesW,  // Total size of prop in tiles
-                        tilesH: tilesH
+                        offsetX: tx,  // Original source tile X (for sprite lookup)
+                        offsetY: ty,  // Original source tile Y (for sprite lookup)
+                        tilesW: origW,  // Original prop size
+                        tilesH: origH,
+                        placedW: placedW,  // Placed size (after rotation)
+                        placedH: placedH,
+                        rotation: rot
                     };
                 }
             }
@@ -2270,18 +3199,44 @@
             const cell = layers[currentLayer][y][x];
             if (cell && cell.type === 'animTile') {
                 // Remove all tiles of this multi-tile prop
-                const originX = x - (cell.offsetX || 0);
-                const originY = y - (cell.offsetY || 0);
-                const tilesW = cell.tilesW || 1;
-                const tilesH = cell.tilesH || 1;
+                const rot = cell.rotation || 0;
+                const origW = cell.tilesW || 1;
+                const origH = cell.tilesH || 1;
+                const offsetX = cell.offsetX || 0;
+                const offsetY = cell.offsetY || 0;
 
-                for (let ty = 0; ty < tilesH; ty++) {
-                    for (let tx = 0; tx < tilesW; tx++) {
-                        const px = originX + tx;
-                        const py = originY + ty;
-                        if (px < 0 || py < 0 || px >= mapCols || py >= mapRows) continue;
-                        if (layers[currentLayer][py]) {
-                            layers[currentLayer][py][px] = null;
+                // Calculate placed offset based on rotation (reverse of placement)
+                let placedOffX, placedOffY;
+                if (rot === 0) {
+                    placedOffX = offsetX;
+                    placedOffY = offsetY;
+                } else if (rot === 90) {
+                    placedOffX = origH - 1 - offsetY;
+                    placedOffY = offsetX;
+                } else if (rot === 180) {
+                    placedOffX = origW - 1 - offsetX;
+                    placedOffY = origH - 1 - offsetY;
+                } else { // 270
+                    placedOffX = offsetY;
+                    placedOffY = origW - 1 - offsetX;
+                }
+
+                // Find origin (top-left of placed object)
+                const originX = x - placedOffX;
+                const originY = y - placedOffY;
+
+                // Get placed dimensions
+                const placedW = (rot === 90 || rot === 270) ? origH : origW;
+                const placedH = (rot === 90 || rot === 270) ? origW : origH;
+
+                // Remove all tiles in the placed rectangle
+                for (let py = 0; py < placedH; py++) {
+                    for (let px = 0; px < placedW; px++) {
+                        const mapX = originX + px;
+                        const mapY = originY + py;
+                        if (mapX < 0 || mapY < 0 || mapX >= mapCols || mapY >= mapRows) continue;
+                        if (layers[currentLayer][mapY]) {
+                            layers[currentLayer][mapY][mapX] = null;
                         }
                     }
                 }
@@ -2589,7 +3544,17 @@
                                     const srcY = frame.y + offsetY * gridSize;
 
                                     mapCtx.imageSmoothingEnabled = false;
-                                    mapCtx.drawImage(prop._spriteImg, srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
+                                    // Draw with rotation support
+                                    const rot = cell.rotation || 0;
+                                    if (rot === 0) {
+                                        mapCtx.drawImage(prop._spriteImg, srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
+                                    } else {
+                                        mapCtx.save();
+                                        mapCtx.translate(px + tileSize / 2, py + tileSize / 2);
+                                        mapCtx.rotate(rot * Math.PI / 180);
+                                        mapCtx.drawImage(prop._spriteImg, srcX, srcY, gridSize, gridSize, -tileSize / 2, -tileSize / 2, tileSize, tileSize);
+                                        mapCtx.restore();
+                                    }
 
                                     // Show label in animProp mode (only on origin tile)
                                     if (mode === 'animProp' && offsetX === 0 && offsetY === 0) {
@@ -2633,7 +3598,8 @@
             }
 
             // Draw transparent preview of selected tiles at hover position
-            if (hoverMapPos && selectedTileData && !copyMode) {
+            // Skip when in animProp mode (animProp has its own preview)
+            if (hoverMapPos && selectedTileData && !copyMode && mode !== 'animProp') {
                 mapCtx.globalAlpha = 0.5;
                 const selW = selectedTileData.width || 1;
                 const selH = selectedTileData.height || 1;
@@ -2716,13 +3682,27 @@
                     if (spriteImg && frames.length > 0) {
                         const frame = frames[0];
                         // Calculate how many tiles this prop spans
-                        const tilesW = Math.ceil(frame.w / gridSize);
-                        const tilesH = Math.ceil(frame.h / gridSize);
-                        const drawW = tilesW * tileSize;
-                        const drawH = tilesH * tileSize;
+                        const origW = Math.ceil(frame.w / gridSize);
+                        const origH = Math.ceil(frame.h / gridSize);
+                        // Apply rotation to dimensions
+                        const rot = tileRotation;
+                        const placedW = (rot === 90 || rot === 270) ? origH : origW;
+                        const placedH = (rot === 90 || rot === 270) ? origW : origH;
+                        const drawW = placedW * tileSize;
+                        const drawH = placedH * tileSize;
 
                         mapCtx.imageSmoothingEnabled = false;
-                        mapCtx.drawImage(spriteImg, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
+                        // Draw with rotation
+                        if (rot === 0) {
+                            mapCtx.drawImage(spriteImg, frame.x, frame.y, frame.w, frame.h, drawX, drawY, origW * tileSize, origH * tileSize);
+                        } else {
+                            mapCtx.save();
+                            mapCtx.translate(drawX + drawW / 2, drawY + drawH / 2);
+                            mapCtx.rotate(rot * Math.PI / 180);
+                            // After rotation, draw centered
+                            mapCtx.drawImage(spriteImg, frame.x, frame.y, frame.w, frame.h, -origW * tileSize / 2, -origH * tileSize / 2, origW * tileSize, origH * tileSize);
+                            mapCtx.restore();
+                        }
 
                         mapCtx.globalAlpha = 1;
                         // Draw outline around full prop area
@@ -2738,6 +3718,283 @@
                         mapCtx.lineWidth = 2;
                         mapCtx.strokeRect(drawX, drawY, tileSize, tileSize);
                     }
+                }
+            }
+
+            // Draw sound markers when in sound mode
+            if (mode === 'sound' && tileSounds) {
+                Object.keys(tileSounds).forEach(key => {
+                    try {
+                        const parts = key.split(',');
+                        const sx = parseInt(parts[0]) || 0;
+                        const sy = parseInt(parts[1]) || 0;
+                        const ts = tileSounds[key];
+                        if (!ts) return;
+
+                        const px = sx * tileSize + tileSize / 2;
+                        const py = sy * tileSize + tileSize / 2;
+                        const radius = ts.radius || 3;
+                        const isSelected = key === selectedTileSoundKey;
+
+                        // Draw radius circle (highlighted if selected)
+                        mapCtx.strokeStyle = isSelected ? 'rgba(0, 255, 100, 0.8)' : 'rgba(255, 165, 0, 0.5)';
+                        mapCtx.lineWidth = isSelected ? 3 : 2;
+                        mapCtx.setLineDash(isSelected ? [] : [5, 5]);
+                        mapCtx.beginPath();
+                        mapCtx.arc(px, py, radius * tileSize, 0, Math.PI * 2);
+                        mapCtx.stroke();
+                        mapCtx.setLineDash([]);
+
+                        // Draw fade zone indicator if selected
+                        if (isSelected && ts.fadePercent > 0) {
+                            const fadeStartRadius = radius * (1 - ts.fadePercent);
+                            mapCtx.strokeStyle = 'rgba(0, 255, 100, 0.4)';
+                            mapCtx.lineWidth = 1;
+                            mapCtx.setLineDash([3, 3]);
+                            mapCtx.beginPath();
+                            mapCtx.arc(px, py, fadeStartRadius * tileSize, 0, Math.PI * 2);
+                            mapCtx.stroke();
+                            mapCtx.setLineDash([]);
+                        }
+
+                        // Draw speaker icon (highlighted if selected)
+                        mapCtx.fillStyle = isSelected ? '#0f8' : (ts.loop ? '#ffa500' : '#ff6600');
+                        mapCtx.beginPath();
+                        mapCtx.arc(px, py, tileSize / 4, 0, Math.PI * 2);
+                        mapCtx.fill();
+
+                        // Sound wave icon
+                        mapCtx.font = `${tileSize / 3}px sans-serif`;
+                        mapCtx.textAlign = 'center';
+                        mapCtx.textBaseline = 'middle';
+                        mapCtx.fillStyle = '#fff';
+                        mapCtx.fillText('🔊', px, py);
+                    } catch (e) {
+                        console.error('Error drawing sound marker:', key, e);
+                    }
+                });
+            }
+
+            // Draw light markers when in lighting mode
+            if (mode === 'lighting' && pointLights) {
+                Object.keys(pointLights).forEach(key => {
+                    try {
+                        if (!key.startsWith(currentMap + ':')) return;
+                        const coords = key.split(':')[1];
+                        const parts = coords.split(',');
+                        const lx = parseInt(parts[0]) || 0;
+                        const ly = parseInt(parts[1]) || 0;
+                        const light = pointLights[key];
+                        if (!light) return;
+
+                        const px = lx * tileSize + tileSize / 2;
+                        const py = ly * tileSize + tileSize / 2;
+                        const radius = light.radius || 3;
+
+                        // Draw light radius circle
+                        mapCtx.strokeStyle = 'rgba(255, 220, 100, 0.6)';
+                        mapCtx.lineWidth = 2;
+                        mapCtx.setLineDash([5, 5]);
+                        mapCtx.beginPath();
+                        mapCtx.arc(px, py, radius * tileSize, 0, Math.PI * 2);
+                        mapCtx.stroke();
+                        mapCtx.setLineDash([]);
+
+                        // Draw light glow gradient preview
+                        const gradient = mapCtx.createRadialGradient(px, py, 0, px, py, radius * tileSize);
+                        gradient.addColorStop(0, 'rgba(255, 220, 100, 0.3)');
+                        gradient.addColorStop(0.6, 'rgba(255, 200, 50, 0.1)');
+                        gradient.addColorStop(1, 'rgba(255, 200, 50, 0)');
+                        mapCtx.fillStyle = gradient;
+                        mapCtx.beginPath();
+                        mapCtx.arc(px, py, radius * tileSize, 0, Math.PI * 2);
+                        mapCtx.fill();
+
+                        // Draw light bulb icon
+                        mapCtx.fillStyle = light.flicker ? '#ffd700' : '#ffaa00';
+                        mapCtx.beginPath();
+                        mapCtx.arc(px, py, tileSize / 4, 0, Math.PI * 2);
+                        mapCtx.fill();
+
+                        mapCtx.font = `${tileSize / 3}px sans-serif`;
+                        mapCtx.textAlign = 'center';
+                        mapCtx.textBaseline = 'middle';
+                        mapCtx.fillStyle = '#fff';
+                        mapCtx.fillText('💡', px, py);
+                    } catch (e) {
+                        console.error('Error drawing light marker:', key, e);
+                    }
+                });
+            }
+
+            // === DRAW PLACED NPCs AND PATHS ===
+            if (mode === 'npc' || placedNpcs.length > 0) {
+                const currentMapNpcs = placedNpcs.filter(p => p.mapName === currentMap);
+
+                currentMapNpcs.forEach((placed, idx) => {
+                    const globalIdx = placedNpcs.indexOf(placed);
+                    const npc = npcs[placed.npcIndex];
+                    if (!npc) return;
+
+                    const isSelected = globalIdx === selectedPlacedNpcIndex;
+
+                    // Use preview position if preview is active for this NPC
+                    const usePreview = npcPathPreviewActive && isSelected && npcPreviewState;
+                    const drawX = usePreview ? npcPreviewState.x : placed.x;
+                    const drawY = usePreview ? npcPreviewState.y : placed.y;
+                    const px = drawX * tileSize;
+                    const py = drawY * tileSize;
+
+                    // Draw path if has waypoints
+                    if (placed.path && placed.path.length > 0) {
+                        mapCtx.strokeStyle = isSelected ? '#4f4' : 'rgba(100, 255, 100, 0.5)';
+                        mapCtx.lineWidth = isSelected ? 3 : 2;
+                        mapCtx.setLineDash(isSelected ? [] : [5, 5]);
+
+                        // Draw line from NPC to first waypoint
+                        mapCtx.beginPath();
+                        mapCtx.moveTo(px + tileSize / 2, py + tileSize / 2);
+
+                        // Draw lines through all waypoints
+                        placed.path.forEach((wp, i) => {
+                            const wpx = wp.x * tileSize + tileSize / 2;
+                            const wpy = wp.y * tileSize + tileSize / 2;
+                            mapCtx.lineTo(wpx, wpy);
+                        });
+
+                        // If loop trigger, connect back to start
+                        if (placed.trigger === 'loop') {
+                            mapCtx.lineTo(px + tileSize / 2, py + tileSize / 2);
+                        }
+
+                        mapCtx.stroke();
+                        mapCtx.setLineDash([]);
+
+                        // Draw waypoint markers
+                        placed.path.forEach((wp, i) => {
+                            const wpx = wp.x * tileSize + tileSize / 2;
+                            const wpy = wp.y * tileSize + tileSize / 2;
+
+                            mapCtx.fillStyle = isSelected ? '#4f4' : 'rgba(100, 255, 100, 0.7)';
+                            mapCtx.beginPath();
+                            mapCtx.arc(wpx, wpy, 6, 0, Math.PI * 2);
+                            mapCtx.fill();
+
+                            // Number
+                            mapCtx.fillStyle = '#000';
+                            mapCtx.font = 'bold 10px sans-serif';
+                            mapCtx.textAlign = 'center';
+                            mapCtx.textBaseline = 'middle';
+                            mapCtx.fillText((i + 1).toString(), wpx, wpy);
+                        });
+                    }
+
+                    // Draw NPC sprite - use correct animation if previewing
+                    const anims = npc.animations || {};
+                    let anim;
+                    let frameIdx = 0;
+
+                    if (usePreview && npcPreviewState) {
+                        // Use directional animation during preview
+                        const dirMap = { 'down': 'walkDown', 'up': 'walkUp', 'left': 'walkLeft', 'right': 'walkRight' };
+                        anim = anims[dirMap[npcPreviewState.direction]] || anims.walkDown || anims.idle;
+                        frameIdx = npcPreviewState.frame % (anim ? anim.length : 1);
+                    } else {
+                        anim = anims.walkDown || anims.idle || Object.values(anims).find(a => a && a.length > 0);
+                    }
+
+                    if (npc.spriteData && anim && anim.length > 0) {
+                        const frame = anim[frameIdx] || anim[0];
+                        const img = npc._editorImg;
+
+                        if (img && img.complete) {
+                            mapCtx.imageSmoothingEnabled = false;
+                            // Flip for left direction if no dedicated left animation
+                            const flipX = usePreview && npcPreviewState && npcPreviewState.direction === 'left' && !anims.walkLeft?.length;
+                            if (flipX) {
+                                mapCtx.save();
+                                mapCtx.translate(px + tileSize, py);
+                                mapCtx.scale(-1, 1);
+                                mapCtx.drawImage(img, frame.x, frame.y, frame.w, frame.h, 0, 0, tileSize, tileSize);
+                                mapCtx.restore();
+                            } else {
+                                mapCtx.drawImage(img, frame.x, frame.y, frame.w, frame.h, px, py, tileSize, tileSize);
+                            }
+                        } else {
+                            // Load image if not cached
+                            if (!npc._editorImg) {
+                                npc._editorImg = new Image();
+                                npc._editorImg.onload = () => renderMap();
+                                npc._editorImg.src = npc.spriteData;
+                            }
+                            // Draw placeholder
+                            mapCtx.fillStyle = '#a4f';
+                            mapCtx.fillRect(px + 4, py + 4, tileSize - 8, tileSize - 8);
+                        }
+                    } else {
+                        // No sprite - draw placeholder
+                        mapCtx.fillStyle = '#a4f';
+                        mapCtx.fillRect(px + 4, py + 4, tileSize - 8, tileSize - 8);
+                    }
+
+                    // Draw selection highlight
+                    if (isSelected) {
+                        mapCtx.strokeStyle = '#4f4';
+                        mapCtx.lineWidth = 3;
+                        mapCtx.strokeRect(px, py, tileSize, tileSize);
+                    }
+
+                    // Draw NPC name label
+                    if (mode === 'npc') {
+                        mapCtx.fillStyle = 'rgba(0,0,0,0.7)';
+                        mapCtx.font = '10px sans-serif';
+                        mapCtx.textAlign = 'center';
+                        const nameWidth = mapCtx.measureText(npc.name).width + 4;
+                        mapCtx.fillRect(px + tileSize / 2 - nameWidth / 2, py - 14, nameWidth, 14);
+                        mapCtx.fillStyle = isSelected ? '#4f4' : '#fff';
+                        mapCtx.fillText(npc.name, px + tileSize / 2, py - 3);
+                    }
+                });
+            }
+
+            // === LIGHTING PREVIEW OVERLAY ===
+            if (lightingPreviewEnabled && lightingSettings.ambientEnabled && lightingSettings.timeOfDay !== 'day') {
+                const preset = TIME_PRESETS[lightingSettings.timeOfDay];
+                if (preset && preset.a > 0) {
+                    // Create offscreen canvas for lighting
+                    const lightCanvas = document.createElement('canvas');
+                    lightCanvas.width = mapCanvas.width;
+                    lightCanvas.height = mapCanvas.height;
+                    const lightCtx = lightCanvas.getContext('2d');
+
+                    // Fill with ambient darkness
+                    lightCtx.fillStyle = 'rgba(' + preset.r + ',' + preset.g + ',' + preset.b + ',' + preset.a + ')';
+                    lightCtx.fillRect(0, 0, lightCanvas.width, lightCanvas.height);
+
+                    // Cut out point lights
+                    lightCtx.globalCompositeOperation = 'destination-out';
+                    Object.keys(pointLights).forEach(key => {
+                        if (!key.startsWith(currentMap + ':')) return;
+                        const light = pointLights[key];
+                        const coords = key.split(':')[1].split(',');
+                        const lx = parseFloat(coords[0]);
+                        const ly = parseFloat(coords[1]);
+                        const px = lx * tileSize + tileSize / 2;
+                        const py = ly * tileSize + tileSize / 2;
+                        const radius = light.radius * tileSize;
+
+                        const gradient = lightCtx.createRadialGradient(px, py, 0, px, py, radius);
+                        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+                        gradient.addColorStop(0.6, 'rgba(255,255,255,0.5)');
+                        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+                        lightCtx.fillStyle = gradient;
+                        lightCtx.beginPath();
+                        lightCtx.arc(px, py, radius, 0, Math.PI * 2);
+                        lightCtx.fill();
+                    });
+
+                    // Draw lighting overlay on map
+                    mapCtx.drawImage(lightCanvas, 0, 0);
                 }
             }
 
@@ -2998,6 +4255,7 @@
         }
 
         function drawPropTileset() {
+            if (!propTilesetCanvas || !propTilesetCtx) return;
             if (!propImage) {
                 propTilesetCanvas.width = 200;
                 propTilesetCanvas.height = 50;
@@ -3141,7 +4399,7 @@
             drawPropTileset();
         }
 
-        propTilesetCanvas.addEventListener('mousedown', (e) => {
+        if (propTilesetCanvas) propTilesetCanvas.addEventListener('mousedown', (e) => {
             if (!propImage) return;
             const rect = propTilesetCanvas.getBoundingClientRect();
             const displayZoom = 3;
@@ -3160,7 +4418,7 @@
             }
         });
 
-        propTilesetCanvas.addEventListener('mousemove', (e) => {
+        if (propTilesetCanvas) propTilesetCanvas.addEventListener('mousemove', (e) => {
             if (!propImage || !propPainting) return;
             if (propTool === 'collision' || propTool === 'erase') {
                 const rect = propTilesetCanvas.getBoundingClientRect();
@@ -3170,7 +4428,7 @@
             }
         });
 
-        propTilesetCanvas.addEventListener('mouseup', (e) => {
+        if (propTilesetCanvas) propTilesetCanvas.addEventListener('mouseup', (e) => {
             if (!propImage) return;
 
             if (propTool === 'select' && propSelectionStart) {
@@ -3209,11 +4467,11 @@
             propPainting = false;
         });
 
-        propTilesetCanvas.addEventListener('mouseleave', () => {
+        if (propTilesetCanvas) propTilesetCanvas.addEventListener('mouseleave', () => {
             propPainting = false;
         });
 
-        propTilesetCanvas.style.cursor = 'crosshair';
+        if (propTilesetCanvas) propTilesetCanvas.style.cursor = 'crosshair';
 
         // Expand map size
         function expandMapRows() {
@@ -3234,6 +4492,839 @@
                     }
                 });
             });
+        }
+
+        // ===== NPC FUNCTIONS =====
+        let npcCurrentAnim = 'walkDown'; // Currently selected animation type
+        let npcAnimations = {}; // { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [] }
+
+        function openNpcEditor(editIndex = -1) {
+            npcStopPreview();
+            npcEditorEditingIndex = editIndex;
+            npcCurrentAnim = 'walkDown';
+            npcAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [] };
+
+            if (editIndex >= 0 && npcs[editIndex]) {
+                // Editing existing NPC
+                const npc = npcs[editIndex];
+                npcEditorFrameW = npc.frameWidth || 32;
+                npcEditorFrameH = npc.frameHeight || 32;
+                npcEditorData = npc.spriteData;
+                document.getElementById('npcNameInput').value = npc.name;
+                const fps = npc.fps || 8;
+                document.getElementById('npcSpeedSlider').value = fps;
+                document.getElementById('npcSpeedLabel').textContent = fps + ' fps';
+
+                // Load animations
+                if (npc.animations) {
+                    npcAnimations = JSON.parse(JSON.stringify(npc.animations));
+                }
+
+                if (npc.spriteData) {
+                    npcEditorImage = new Image();
+                    npcEditorImage.onload = () => {
+                        document.getElementById('npcFrameSection').style.display = 'block';
+                        document.getElementById('npcAnimSection').style.display = 'block';
+                        document.getElementById('npcNameSection').style.display = 'block';
+                        npcUpdateGrid();
+                        npcDrawCanvas();
+                        npcUpdateFramesList();
+                        npcStartPreview();
+                    };
+                    npcEditorImage.src = npc.spriteData;
+                    document.getElementById('npcFileName').textContent = 'Sprite loaded';
+                }
+            } else {
+                // New NPC
+                npcEditorImage = null;
+                npcEditorData = null;
+                npcEditorFrameW = 32;
+                npcEditorFrameH = 32;
+                document.getElementById('npcNameInput').value = '';
+                document.getElementById('npcSpeedSlider').value = 8;
+                document.getElementById('npcSpeedLabel').textContent = '8 fps';
+                document.getElementById('npcFileName').textContent = '';
+                document.getElementById('npcFrameSection').style.display = 'none';
+                document.getElementById('npcAnimSection').style.display = 'none';
+                document.getElementById('npcNameSection').style.display = 'none';
+                // Clear canvases
+                const previewCtx = document.getElementById('npcLivePreview').getContext('2d');
+                previewCtx.clearRect(0, 0, 96, 96);
+                const editorCanvas = document.getElementById('npcEditorCanvas');
+                const editorCtx = editorCanvas.getContext('2d');
+                editorCtx.clearRect(0, 0, editorCanvas.width, editorCanvas.height);
+                const framesList = document.getElementById('npcFramesList');
+                if (framesList) framesList.innerHTML = '';
+                const fileInput = document.getElementById('npcFileInput');
+                if (fileInput) fileInput.value = '';
+            }
+
+            npcSelectAnim('walkDown');
+            document.getElementById('npcModal').classList.add('visible');
+        }
+
+        function npcLoadSheet(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                npcEditorData = e.target.result;
+                npcEditorImage = new Image();
+                npcEditorImage.onload = () => {
+                    document.getElementById('npcFileName').textContent = file.name + ' (' + npcEditorImage.naturalWidth + 'x' + npcEditorImage.naturalHeight + ')';
+                    document.getElementById('npcFrameSection').style.display = 'block';
+                    document.getElementById('npcAnimSection').style.display = 'block';
+                    document.getElementById('npcNameSection').style.display = 'block';
+                    npcUpdateGrid();
+                    npcDrawCanvas();
+                };
+                npcEditorImage.src = npcEditorData;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function npcSetFrameSize(w, h) {
+            npcEditorFrameW = w;
+            npcEditorFrameH = h;
+            npcUpdateGrid();
+            npcDrawCanvas();
+        }
+
+        function npcResetGrid() {
+            npcEditorFrameW = 32;
+            npcEditorFrameH = 32;
+            npcUpdateGrid();
+            npcDrawCanvas();
+        }
+
+        function npcUpdateGrid() {
+            if (npcEditorImage) {
+                const cols = Math.floor(npcEditorImage.naturalWidth / npcEditorFrameW);
+                const rows = Math.floor(npcEditorImage.naturalHeight / npcEditorFrameH);
+                document.getElementById('npcGridInfo').textContent = cols + ' cols x ' + rows + ' rows (' + npcEditorFrameW + 'x' + npcEditorFrameH + ')';
+            }
+            npcDrawCanvas();
+        }
+
+        function npcSelectAnim(animName) {
+            npcCurrentAnim = animName;
+            // Update all button states and show frame counts
+            npcUpdateAnimButtons();
+            // Update display
+            const names = { walkDown: 'Walk Down', walkUp: 'Walk Up', walkLeft: 'Walk Left', walkRight: 'Walk Right', idle: 'Idle' };
+            document.getElementById('npcCurrentAnimName').textContent = names[animName] || animName;
+            npcDrawCanvas();
+            npcUpdateFramesList();
+            npcStartPreview();
+        }
+
+        function npcUpdateAnimButtons() {
+            const animMap = {
+                'Down': 'walkDown',
+                'Up': 'walkUp',
+                'Left': 'walkLeft',
+                'Right': 'walkRight',
+                'Idle': 'idle'
+            };
+            const labels = {
+                'Down': 'Walk Down',
+                'Up': 'Walk Up',
+                'Left': 'Walk Left',
+                'Right': 'Walk Right',
+                'Idle': 'Idle'
+            };
+
+            for (const [dir, animKey] of Object.entries(animMap)) {
+                const btn = document.getElementById('npcAnim' + dir);
+                if (btn) {
+                    const frames = npcAnimations[animKey] || [];
+                    const isActive = npcCurrentAnim === animKey;
+                    btn.classList.toggle('active', isActive);
+
+                    // Show frame count and checkmark if has frames
+                    if (frames.length > 0) {
+                        btn.innerHTML = `✓ ${labels[dir]} <span style="color:#4f4;">(${frames.length})</span>`;
+                        btn.style.background = isActive ? '#2a5a2a' : '#1a3a1a';
+                    } else {
+                        btn.innerHTML = labels[dir];
+                        btn.style.background = isActive ? '#555' : '#333';
+                    }
+                }
+            }
+        }
+
+        function npcDrawCanvas() {
+            const canvas = document.getElementById('npcEditorCanvas');
+            const ctx = canvas.getContext('2d');
+
+            if (!npcEditorImage) {
+                canvas.width = 400;
+                canvas.height = 300;
+                ctx.fillStyle = '#222';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#666';
+                ctx.textAlign = 'center';
+                ctx.font = '14px monospace';
+                ctx.fillText('Load a sprite sheet to begin', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            const scale = 3;
+            canvas.width = npcEditorImage.naturalWidth * scale;
+            canvas.height = npcEditorImage.naturalHeight * scale;
+
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(npcEditorImage, 0, 0, canvas.width, canvas.height);
+
+            // Draw grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 1;
+
+            const fw = npcEditorFrameW * scale;
+            const fh = npcEditorFrameH * scale;
+
+            for (let x = 0; x <= canvas.width; x += fw) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= canvas.height; y += fh) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Highlight frames for current animation
+            const currentFrames = npcAnimations[npcCurrentAnim] || [];
+            currentFrames.forEach((frame, i) => {
+                const sx = frame.x * scale;
+                const sy = frame.y * scale;
+                const sw = frame.w * scale;
+                const sh = frame.h * scale;
+
+                ctx.fillStyle = 'rgba(74, 170, 255, 0.3)';
+                ctx.fillRect(sx, sy, sw, sh);
+                ctx.strokeStyle = '#4af';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(sx, sy, sw, sh);
+
+                // Frame number
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 14px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText((i + 1).toString(), sx + sw / 2, sy + sh / 2 + 5);
+            });
+        }
+
+        function npcCanvasClick(e) {
+            if (!npcEditorImage) return;
+
+            const canvas = document.getElementById('npcEditorCanvas');
+            const rect = canvas.getBoundingClientRect();
+            const scale = 3;
+
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            const gridX = Math.floor(clickX / scale / npcEditorFrameW);
+            const gridY = Math.floor(clickY / scale / npcEditorFrameH);
+
+            const frameX = gridX * npcEditorFrameW;
+            const frameY = gridY * npcEditorFrameH;
+
+            // Initialize animation array if needed
+            if (!npcAnimations[npcCurrentAnim]) {
+                npcAnimations[npcCurrentAnim] = [];
+            }
+
+            const frames = npcAnimations[npcCurrentAnim];
+
+            // Check if already selected - if so, remove it
+            const existingIdx = frames.findIndex(f => f.x === frameX && f.y === frameY);
+            if (existingIdx >= 0) {
+                frames.splice(existingIdx, 1);
+            } else {
+                // Add new frame
+                frames.push({
+                    x: frameX,
+                    y: frameY,
+                    w: npcEditorFrameW,
+                    h: npcEditorFrameH
+                });
+            }
+
+            npcDrawCanvas();
+            npcUpdateFramesList();
+            npcUpdateAnimButtons();
+            npcStartPreview();
+        }
+
+        function npcUpdateFramesList() {
+            const container = document.getElementById('npcFramesList');
+            const countEl = document.getElementById('npcFrameCount');
+            const frames = npcAnimations[npcCurrentAnim] || [];
+
+            countEl.textContent = frames.length;
+
+            if (!npcEditorImage || frames.length === 0) {
+                container.innerHTML = '<span style="color:#666;">Click frames on sprite sheet to add</span>';
+                return;
+            }
+
+            container.innerHTML = '';
+            frames.forEach((frame, i) => {
+                const div = document.createElement('div');
+                div.style.cssText = 'display:inline-block; margin:2px; cursor:pointer;';
+
+                const thumbCanvas = document.createElement('canvas');
+                thumbCanvas.width = 40;
+                thumbCanvas.height = 40;
+                const thumbCtx = thumbCanvas.getContext('2d');
+                thumbCtx.imageSmoothingEnabled = false;
+
+                const scale = Math.min(40 / frame.w, 40 / frame.h);
+                const dw = frame.w * scale;
+                const dh = frame.h * scale;
+                const dx = (40 - dw) / 2;
+                const dy = (40 - dh) / 2;
+
+                thumbCtx.drawImage(npcEditorImage, frame.x, frame.y, frame.w, frame.h, dx, dy, dw, dh);
+
+                thumbCanvas.style.border = '2px solid #4af';
+                thumbCanvas.style.borderRadius = '3px';
+                thumbCanvas.title = 'Frame ' + (i + 1) + ' - Click to remove';
+                thumbCanvas.onclick = () => {
+                    npcAnimations[npcCurrentAnim].splice(i, 1);
+                    npcDrawCanvas();
+                    npcUpdateFramesList();
+                    npcUpdateAnimButtons();
+                };
+
+                div.appendChild(thumbCanvas);
+                container.appendChild(div);
+            });
+        }
+
+        function npcUpdateSpeed() {
+            const fps = parseInt(document.getElementById('npcSpeedSlider').value);
+            document.getElementById('npcSpeedLabel').textContent = fps + ' fps';
+            npcStartPreview();
+        }
+
+        function npcStartPreview() {
+            npcStopPreview();
+            const frames = npcAnimations[npcCurrentAnim] || [];
+            if (frames.length === 0 || !npcEditorImage) return;
+
+            const fps = parseInt(document.getElementById('npcSpeedSlider').value) || 8;
+            npcPreviewFrame = 0;
+            npcPreviewPlaying = true;
+
+            npcPreviewInterval = setInterval(() => {
+                const canvas = document.getElementById('npcLivePreview');
+                const ctx = canvas.getContext('2d');
+                ctx.imageSmoothingEnabled = false;
+                ctx.clearRect(0, 0, 96, 96);
+
+                if (frames.length > 0) {
+                    const frame = frames[npcPreviewFrame % frames.length];
+                    const scale = Math.min(96 / frame.w, 96 / frame.h);
+                    const dw = frame.w * scale;
+                    const dh = frame.h * scale;
+                    const dx = (96 - dw) / 2;
+                    const dy = (96 - dh) / 2;
+                    ctx.drawImage(npcEditorImage, frame.x, frame.y, frame.w, frame.h, dx, dy, dw, dh);
+                    npcPreviewFrame = (npcPreviewFrame + 1) % frames.length;
+                }
+            }, 1000 / fps);
+        }
+
+        function npcStopPreview() {
+            if (npcPreviewInterval) {
+                clearInterval(npcPreviewInterval);
+                npcPreviewInterval = null;
+            }
+            npcPreviewPlaying = false;
+        }
+
+        function npcClearCurrentAnim() {
+            npcAnimations[npcCurrentAnim] = [];
+            npcDrawCanvas();
+            npcUpdateFramesList();
+            npcStopPreview();
+            const ctx = document.getElementById('npcLivePreview').getContext('2d');
+            ctx.clearRect(0, 0, 96, 96);
+        }
+
+        function npcSave() {
+            const name = document.getElementById('npcNameInput').value.trim() || 'NPC ' + (npcs.length + 1);
+
+            // Check if at least one animation has frames
+            const hasFrames = Object.values(npcAnimations).some(arr => arr.length > 0);
+            if (!hasFrames) {
+                alert('Please select at least one frame for any animation');
+                return;
+            }
+
+            const fps = parseInt(document.getElementById('npcSpeedSlider').value) || 8;
+
+            const npcData = {
+                name: name,
+                spriteData: npcEditorData,
+                frameWidth: npcEditorFrameW,
+                frameHeight: npcEditorFrameH,
+                animations: JSON.parse(JSON.stringify(npcAnimations)),
+                fps: fps
+            };
+
+            if (npcEditorEditingIndex >= 0) {
+                npcs[npcEditorEditingIndex] = npcData;
+            } else {
+                npcs.push(npcData);
+                currentNpcIndex = npcs.length - 1;
+            }
+
+            document.getElementById('npcModal').classList.remove('visible');
+            npcStopPreview();
+            updateNpcList();
+        }
+
+        function npcCancel() {
+            document.getElementById('npcModal').classList.remove('visible');
+            npcStopPreview();
+        }
+
+        function updateNpcList() {
+            const container = document.getElementById('npcList');
+
+            if (npcs.length === 0) {
+                container.innerHTML = '<div style="color:#888; font-size:12px; padding:10px; text-align:center;">No NPCs created yet</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            npcs.forEach((npc, i) => {
+                const div = document.createElement('div');
+                div.style.cssText = 'display:flex; align-items:center; gap:8px; padding:5px; margin-bottom:5px; background:' + (i === currentNpcIndex ? '#2a5a8a' : '#333') + '; border-radius:4px; cursor:pointer;';
+
+                // Thumbnail
+                const thumb = document.createElement('canvas');
+                thumb.width = 32;
+                thumb.height = 32;
+                thumb.style.cssText = 'border:1px solid #555; border-radius:3px; image-rendering:pixelated;';
+
+                // Use first frame from walkDown or first available animation
+                const anims = npc.animations || {};
+                const firstAnim = anims.walkDown || anims.idle || Object.values(anims).find(a => a && a.length > 0);
+                if (npc.spriteData && firstAnim && firstAnim.length > 0) {
+                    const img = new Image();
+                    img.onload = () => {
+                        const ctx = thumb.getContext('2d');
+                        ctx.imageSmoothingEnabled = false;
+                        const frame = firstAnim[0];
+                        const scale = Math.min(32 / frame.w, 32 / frame.h);
+                        const dw = frame.w * scale;
+                        const dh = frame.h * scale;
+                        ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, (32-dw)/2, (32-dh)/2, dw, dh);
+                    };
+                    img.src = npc.spriteData;
+                }
+
+                // Name
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = npc.name;
+                nameSpan.style.cssText = 'flex:1; font-size:12px;';
+
+                // Edit button
+                const editBtn = document.createElement('button');
+                editBtn.textContent = '✎';
+                editBtn.style.cssText = 'padding:2px 6px; font-size:11px; background:#666;';
+                editBtn.onclick = (e) => { e.stopPropagation(); openNpcEditor(i); };
+
+                // Delete button
+                const delBtn = document.createElement('button');
+                delBtn.textContent = '×';
+                delBtn.style.cssText = 'padding:2px 6px; font-size:11px; background:#a55;';
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (confirm('Delete NPC "' + npc.name + '"?')) {
+                        npcs.splice(i, 1);
+                        if (currentNpcIndex >= npcs.length) currentNpcIndex = npcs.length - 1;
+                        updateNpcList();
+                    }
+                };
+
+                div.onclick = () => {
+                    currentNpcIndex = i;
+                    updateNpcList();
+                };
+
+                div.appendChild(thumb);
+                div.appendChild(nameSpan);
+                div.appendChild(editBtn);
+                div.appendChild(delBtn);
+                container.appendChild(div);
+            });
+        }
+
+        // Set up NPC canvas click handler
+        document.addEventListener('DOMContentLoaded', () => {
+            const npcCanvas = document.getElementById('npcEditorCanvas');
+            if (npcCanvas) {
+                npcCanvas.addEventListener('click', npcCanvasClick);
+            }
+        });
+
+        // ===== NPC PLACEMENT & PATH FUNCTIONS =====
+
+        function placeNpcAt(x, y) {
+            console.log('placeNpcAt called:', x, y, 'currentNpcIndex:', currentNpcIndex);
+            if (currentNpcIndex < 0 || !npcs[currentNpcIndex]) {
+                console.log('No NPC selected, cannot place');
+                return;
+            }
+
+            // Check if there's already an NPC at this position
+            const existing = placedNpcs.findIndex(p => p.x === x && p.y === y && p.mapName === currentMap);
+            if (existing >= 0) {
+                // Select existing instead of placing new
+                selectPlacedNpc(existing);
+                return;
+            }
+
+            const placed = {
+                npcIndex: currentNpcIndex,
+                mapName: currentMap,
+                x: x,
+                y: y,
+                path: [],
+                trigger: 'loop',
+                speed: 3
+            };
+
+            placedNpcs.push(placed);
+            selectedPlacedNpcIndex = placedNpcs.length - 1;
+
+            updatePlacedNpcList();
+            showNpcPathPanel();
+            renderMap();
+        }
+
+        function findPlacedNpcAt(x, y) {
+            return placedNpcs.findIndex(p => p.x === x && p.y === y && p.mapName === currentMap);
+        }
+
+        function selectPlacedNpc(index) {
+            // Stop any running preview when selecting different NPC
+            if (npcPathPreviewActive && index !== selectedPlacedNpcIndex) {
+                stopNpcPathPreview();
+            }
+
+            selectedPlacedNpcIndex = index;
+            npcPathDrawing = false;
+
+            const placed = placedNpcs[index];
+            if (placed) {
+                document.getElementById('npcTriggerType').value = placed.trigger || 'loop';
+                document.getElementById('npcWalkSpeed').value = placed.speed || 3;
+                document.getElementById('npcSpeedValue').textContent = placed.speed || 3;
+            }
+
+            updatePlacedNpcList();
+            showNpcPathPanel();
+            renderMap();
+        }
+
+        function removeNpcAt(x, y) {
+            const idx = findPlacedNpcAt(x, y);
+            if (idx >= 0) {
+                placedNpcs.splice(idx, 1);
+                if (selectedPlacedNpcIndex === idx) {
+                    selectedPlacedNpcIndex = -1;
+                    hideNpcPathPanel();
+                } else if (selectedPlacedNpcIndex > idx) {
+                    selectedPlacedNpcIndex--;
+                }
+                updatePlacedNpcList();
+                renderMap();
+            }
+        }
+
+        function deleteSelectedPlacedNpc() {
+            if (selectedPlacedNpcIndex >= 0) {
+                placedNpcs.splice(selectedPlacedNpcIndex, 1);
+                selectedPlacedNpcIndex = -1;
+                npcPathDrawing = false;
+                hideNpcPathPanel();
+                updatePlacedNpcList();
+                renderMap();
+            }
+        }
+
+        function showNpcPathPanel() {
+            const panel = document.getElementById('npcPathPanel');
+            if (!panel) {
+                console.error('npcPathPanel not found!');
+                return;
+            }
+            panel.style.display = 'block';
+            console.log('Path panel shown, selectedPlacedNpcIndex:', selectedPlacedNpcIndex);
+
+            if (selectedPlacedNpcIndex >= 0) {
+                const placed = placedNpcs[selectedPlacedNpcIndex];
+                const npc = npcs[placed.npcIndex];
+                document.getElementById('npcPathName').textContent = npc ? npc.name : 'NPC';
+                updateNpcWaypointList();
+                updatePathDrawButton();
+            }
+        }
+
+        function hideNpcPathPanel() {
+            document.getElementById('npcPathPanel').style.display = 'none';
+            npcPathDrawing = false;
+            updatePathDrawButton();
+        }
+
+        function toggleNpcPathDrawing() {
+            npcPathDrawing = !npcPathDrawing;
+            updatePathDrawButton();
+        }
+
+        function updatePathDrawButton() {
+            const btn = document.getElementById('npcDrawPathBtn');
+            const info = document.getElementById('npcPathInfo');
+            if (npcPathDrawing) {
+                btn.textContent = 'Stop Drawing';
+                btn.style.background = '#a55';
+                info.textContent = 'Click tiles to add waypoints. Right-click to undo.';
+                info.style.color = '#4f4';
+            } else {
+                btn.textContent = 'Draw Path';
+                btn.style.background = '#4a4';
+                info.textContent = 'Click tiles to add waypoints';
+                info.style.color = '#666';
+            }
+        }
+
+        function addNpcWaypoint(x, y) {
+            if (selectedPlacedNpcIndex < 0) return;
+
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            if (!placed.path) placed.path = [];
+
+            // Don't add duplicate consecutive waypoints
+            const last = placed.path[placed.path.length - 1];
+            if (last && last.x === x && last.y === y) return;
+
+            placed.path.push({ x, y });
+            updateNpcWaypointList();
+            renderMap();
+        }
+
+        function removeLastNpcWaypoint() {
+            if (selectedPlacedNpcIndex < 0) return;
+
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            if (placed.path && placed.path.length > 0) {
+                placed.path.pop();
+                updateNpcWaypointList();
+                renderMap();
+            }
+        }
+
+        function clearNpcPath() {
+            if (selectedPlacedNpcIndex < 0) return;
+
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            placed.path = [];
+            updateNpcWaypointList();
+            renderMap();
+        }
+
+        function updateNpcTrigger() {
+            if (selectedPlacedNpcIndex < 0) return;
+            placedNpcs[selectedPlacedNpcIndex].trigger = document.getElementById('npcTriggerType').value;
+        }
+
+        function updateNpcSpeed() {
+            if (selectedPlacedNpcIndex < 0) return;
+            const speed = parseInt(document.getElementById('npcWalkSpeed').value);
+            placedNpcs[selectedPlacedNpcIndex].speed = speed;
+            document.getElementById('npcSpeedValue').textContent = speed;
+        }
+
+        function updateNpcWaypointList() {
+            const container = document.getElementById('npcWaypointList');
+            if (selectedPlacedNpcIndex < 0) {
+                container.innerHTML = 'No NPC selected';
+                return;
+            }
+
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            const path = placed.path || [];
+
+            if (path.length === 0) {
+                container.innerHTML = 'No waypoints - click Draw Path then click map';
+                return;
+            }
+
+            container.innerHTML = '<strong>Waypoints:</strong> ' + path.map((p, i) => `${i + 1}:(${p.x},${p.y})`).join(' → ');
+        }
+
+        function updatePlacedNpcList() {
+            const container = document.getElementById('placedNpcList');
+            const currentMapNpcs = placedNpcs.filter(p => p.mapName === currentMap);
+
+            if (currentMapNpcs.length === 0) {
+                container.innerHTML = 'No NPCs placed on this map';
+                return;
+            }
+
+            container.innerHTML = '';
+            currentMapNpcs.forEach((placed, localIdx) => {
+                const globalIdx = placedNpcs.indexOf(placed);
+                const npc = npcs[placed.npcIndex];
+                const div = document.createElement('div');
+                div.style.cssText = 'padding:4px; margin-bottom:3px; background:' +
+                    (globalIdx === selectedPlacedNpcIndex ? '#2a5a8a' : '#333') +
+                    '; border-radius:3px; cursor:pointer;';
+                div.innerHTML = `<strong>${npc ? npc.name : 'Unknown'}</strong> at (${placed.x},${placed.y})` +
+                    `<br><span style="font-size:9px; color:#888;">${placed.trigger} | ${placed.path?.length || 0} waypoints</span>`;
+                div.onclick = () => selectPlacedNpc(globalIdx);
+                container.appendChild(div);
+            });
+        }
+
+        // ===== NPC PATH PREVIEW =====
+        function toggleNpcPathPreview() {
+            if (npcPathPreviewActive) {
+                stopNpcPathPreview();
+            } else {
+                startNpcPathPreview();
+            }
+        }
+
+        function startNpcPathPreview() {
+            if (selectedPlacedNpcIndex < 0) return;
+
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            if (!placed.path || placed.path.length === 0) {
+                alert('No path to preview. Draw a path first.');
+                return;
+            }
+
+            npcPathPreviewActive = true;
+            npcPreviewState = {
+                x: placed.x,
+                y: placed.y,
+                waypointIndex: 0,
+                direction: 'down',
+                frame: 0,
+                frameTimer: 0
+            };
+
+            // Update button
+            const btn = document.getElementById('npcPreviewPathBtn');
+            btn.textContent = '⏹ Stop';
+            btn.style.background = '#a55';
+
+            // Start animation loop
+            npcPreviewAnimId = requestAnimationFrame(npcPathPreviewLoop);
+        }
+
+        function stopNpcPathPreview() {
+            npcPathPreviewActive = false;
+            if (npcPreviewAnimId) {
+                cancelAnimationFrame(npcPreviewAnimId);
+                npcPreviewAnimId = null;
+            }
+            npcPreviewState = null;
+
+            // Update button
+            const btn = document.getElementById('npcPreviewPathBtn');
+            if (btn) {
+                btn.textContent = '▶ Preview';
+                btn.style.background = '#47a';
+            }
+
+            renderMap();
+        }
+
+        let lastPreviewTime = 0;
+        function npcPathPreviewLoop(timestamp) {
+            if (!npcPathPreviewActive || selectedPlacedNpcIndex < 0) {
+                stopNpcPathPreview();
+                return;
+            }
+
+            const deltaTime = timestamp - lastPreviewTime;
+            lastPreviewTime = timestamp;
+
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            const path = placed.path || [];
+            const speed = (placed.speed || 3) * 0.05; // Slower for editor preview
+
+            if (path.length === 0) {
+                stopNpcPathPreview();
+                return;
+            }
+
+            // Get target waypoint
+            const waypoint = path[npcPreviewState.waypointIndex];
+            if (!waypoint) {
+                // Loop back to start
+                npcPreviewState.waypointIndex = 0;
+                npcPreviewState.x = placed.x;
+                npcPreviewState.y = placed.y;
+                npcPreviewAnimId = requestAnimationFrame(npcPathPreviewLoop);
+                return;
+            }
+
+            // Move towards waypoint
+            const dx = waypoint.x - npcPreviewState.x;
+            const dy = waypoint.y - npcPreviewState.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist < speed) {
+                // Reached waypoint
+                npcPreviewState.x = waypoint.x;
+                npcPreviewState.y = waypoint.y;
+                npcPreviewState.waypointIndex++;
+
+                // Check if done
+                if (npcPreviewState.waypointIndex >= path.length) {
+                    npcPreviewState.waypointIndex = 0;
+                    npcPreviewState.x = placed.x;
+                    npcPreviewState.y = placed.y;
+                }
+            } else {
+                // Move
+                npcPreviewState.x += (dx / dist) * speed;
+                npcPreviewState.y += (dy / dist) * speed;
+
+                // Set direction
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    npcPreviewState.direction = dx > 0 ? 'right' : 'left';
+                } else {
+                    npcPreviewState.direction = dy > 0 ? 'down' : 'up';
+                }
+            }
+
+            // Update animation frame
+            npcPreviewState.frameTimer++;
+            if (npcPreviewState.frameTimer >= 8) {
+                npcPreviewState.frameTimer = 0;
+                npcPreviewState.frame = (npcPreviewState.frame + 1) % 4;
+            }
+
+            // Render
+            renderMap();
+
+            // Continue loop
+            npcPreviewAnimId = requestAnimationFrame(npcPathPreviewLoop);
         }
 
         // ===== ANIMATED PROPS FUNCTIONS =====
@@ -4060,6 +6151,18 @@
                 splitLine: prop.splitLine || null
             }));
 
+            // Save sounds
+            const soundsData = sounds.map(s => ({
+                name: s.name,
+                data: s.data,
+                duration: s.duration,
+                type: s.type
+            }));
+            console.log('=== SAVING SOUNDS ===');
+            console.log('Sounds to save:', sounds.length);
+            console.log('Tile sounds to save:', Object.keys(tileSounds).length, tileSounds);
+            console.log('Player sounds to save:', playerSounds);
+
             const data = {
                 gridSize, mapCols, mapRows,
                 layers, layerVisibility, layerNames, currentLayer,
@@ -4079,15 +6182,48 @@
                 animatedProps: animPropsData,
                 currentAnimPropIndex,
                 placedAnimProps,
+                // Save NPCs
+                npcs: npcs.map(npc => ({
+                    name: npc.name,
+                    spriteData: npc.spriteData,
+                    frameWidth: npc.frameWidth,
+                    frameHeight: npc.frameHeight,
+                    animations: npc.animations,
+                    fps: npc.fps
+                })),
+                currentNpcIndex,
+                placedNpcs,
                 // Save player layer settings
                 playerLayerIndex,
                 playerPreviewPos,
-                playerPreviewVisible
+                playerPreviewVisible,
+                // Save sound data
+                sounds: soundsData,
+                tileSounds,
+                playerSounds,
+                // Save lighting data
+                lightingSettings,
+                pointLights
             };
             console.log('Saving playerPreviewPos:', playerPreviewPos);
-            localStorage.setItem('worldBuilderProject', JSON.stringify(data));
-            console.log('Project saved to localStorage');
-            alert('Saved! Player spawn: (' + playerPreviewPos.x + ', ' + playerPreviewPos.y + ')');
+            try {
+                localStorage.setItem('worldBuilderProject', JSON.stringify(data));
+                console.log('Project saved to localStorage');
+                alert('Saved! Player spawn: (' + playerPreviewPos.x + ', ' + playerPreviewPos.y + ')');
+            } catch (e) {
+                if (e.name === 'QuotaExceededError') {
+                    console.warn('localStorage quota exceeded, project too large');
+                    // Store in sessionStorage for test game (temporary)
+                    try {
+                        sessionStorage.setItem('worldBuilderProject', JSON.stringify(data));
+                        alert('Project too large for permanent save! Using temporary storage.\nUse "Download" to save to file.');
+                    } catch (e2) {
+                        alert('Project too large to save! Use "Download" to save to a file.');
+                    }
+                } else {
+                    throw e;
+                }
+            }
             return data; // Return for file download
         }
 
@@ -4137,6 +6273,15 @@
                 splitLine: prop.splitLine || null
             }));
 
+            // Save sounds
+            const soundsData = sounds.map(s => ({
+                name: s.name,
+                data: s.data,
+                duration: s.duration,
+                type: s.type
+            }));
+            console.log('getProjectData - sounds:', sounds.length, 'tileSounds:', Object.keys(tileSounds).length);
+
             return {
                 gridSize, mapCols, mapRows,
                 layers, layerVisibility, layerNames, currentLayer,
@@ -4156,10 +6301,30 @@
                 animatedProps: animPropsData,
                 currentAnimPropIndex,
                 placedAnimProps,
+                // Save NPCs
+                npcs: npcs.map(npc => ({
+                    name: npc.name,
+                    spriteData: npc.spriteData,
+                    frameWidth: npc.frameWidth,
+                    frameHeight: npc.frameHeight,
+                    animations: npc.animations,
+                    fps: npc.fps
+                })),
+                currentNpcIndex,
+                placedNpcs,
                 // Save player layer settings
                 playerLayerIndex,
                 playerPreviewPos,
-                playerPreviewVisible
+                playerPreviewVisible,
+                // Save sound data
+                sounds: soundsData,
+                tileSounds,
+                playerSounds,
+                // Save lighting data
+                lightingSettings,
+                pointLights,
+                // Save player sprite
+                playerSpriteData
             };
         }
 
@@ -4171,8 +6336,18 @@
             reader.onload = (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
-                    // Save to localStorage so Test Map works
-                    localStorage.setItem('worldBuilderProject', JSON.stringify(data));
+                    // Save to storage so Test Map works
+                    try {
+                        localStorage.setItem('worldBuilderProject', JSON.stringify(data));
+                    } catch (storageErr) {
+                        // localStorage full, use sessionStorage
+                        console.warn('localStorage full, using sessionStorage');
+                        try {
+                            sessionStorage.setItem('worldBuilderProject', JSON.stringify(data));
+                        } catch (e2) {
+                            console.warn('sessionStorage also full');
+                        }
+                    }
                     // Load into editor
                     loadProject(data);
                 } catch (err) {
@@ -4338,6 +6513,34 @@
                 updateAnimPropListDisplay();
             }
 
+            // Load NPCs
+            npcs = [];
+            currentNpcIndex = -1;
+            placedNpcs = p.placedNpcs || [];
+            selectedPlacedNpcIndex = -1;
+            npcPathDrawing = false;
+
+            if (p.npcs && p.npcs.length > 0) {
+                console.log('Loading', p.npcs.length, 'NPCs');
+                p.npcs.forEach((npcData, i) => {
+                    npcs[i] = {
+                        name: npcData.name,
+                        spriteData: npcData.spriteData,
+                        frameWidth: npcData.frameWidth || 32,
+                        frameHeight: npcData.frameHeight || 32,
+                        animations: npcData.animations || { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [] },
+                        fps: npcData.fps || 8
+                    };
+                });
+                currentNpcIndex = p.currentNpcIndex >= 0 ? p.currentNpcIndex : 0;
+                updateNpcList();
+                updatePlacedNpcList();
+            } else {
+                console.log('No NPCs in saved project');
+                updateNpcList();
+                updatePlacedNpcList();
+            }
+
             // Load layers (backwards compatible with old saves)
             if (p.layers) {
                 layers = p.layers;
@@ -4362,6 +6565,79 @@
             playerLayerIndex = p.playerLayerIndex !== undefined ? p.playerLayerIndex : 1;
             playerPreviewPos = p.playerPreviewPos || { x: 5, y: 5 };
             playerPreviewVisible = p.playerPreviewVisible !== undefined ? p.playerPreviewVisible : true;
+
+            // Load sounds
+            sounds = [];
+            tileSounds = p.tileSounds || {};
+            playerSounds = p.playerSounds || {
+                walk: { soundIndex: -1, interval: 200, volume: 0.5, pitchVariation: 0.1 },
+                attack: { soundIndex: -1, volume: 0.7 }
+            };
+
+            if (p.sounds && p.sounds.length > 0) {
+                console.log('Loading', p.sounds.length, 'sounds');
+                p.sounds.forEach((soundData, i) => {
+                    sounds[i] = {
+                        name: soundData.name,
+                        data: soundData.data,
+                        duration: soundData.duration || 0,
+                        type: soundData.type || 'ambient'
+                    };
+                });
+                updateSoundDropdown();
+                updatePlacedSoundsList();
+                updatePlayerSoundAssignments();
+            } else {
+                console.log('No sounds in saved project');
+                updateSoundDropdown();
+                updatePlacedSoundsList();
+                updatePlayerSoundAssignments();
+            }
+
+            // Load lighting settings
+            if (p.lightingSettings) {
+                lightingSettings = {
+                    blobShadows: p.lightingSettings.blobShadows !== false,
+                    ambientEnabled: p.lightingSettings.ambientEnabled || false,
+                    timeOfDay: p.lightingSettings.timeOfDay || 'day',
+                    playerLight: p.lightingSettings.playerLight || false,
+                    playerLightRadius: p.lightingSettings.playerLightRadius || 4
+                };
+                // Update UI to match loaded settings
+                const ambientEl = document.getElementById('ambientEnabled');
+                const blobEl = document.getElementById('blobShadows');
+                const playerLightEl = document.getElementById('playerLight');
+                const radiusEl = document.getElementById('playerLightRadius');
+                if (ambientEl) ambientEl.checked = lightingSettings.ambientEnabled;
+                if (blobEl) blobEl.checked = lightingSettings.blobShadows;
+                if (playerLightEl) playerLightEl.checked = lightingSettings.playerLight;
+                if (radiusEl) {
+                    radiusEl.value = lightingSettings.playerLightRadius;
+                    document.getElementById('playerLightRadiusVal').textContent = lightingSettings.playerLightRadius;
+                }
+                setTimeOfDay(lightingSettings.timeOfDay);
+            }
+            pointLights = p.pointLights || {};
+            updatePlacedLightsList();
+
+            // Load player sprite
+            playerSpriteData = p.playerSpriteData || null;
+            playerSpriteImg = null;
+            if (playerSpriteData) {
+                playerSpriteImg = new Image();
+                playerSpriteImg.onload = () => {
+                    updatePlayerSpritePreview();
+                    document.getElementById('playerSpriteInfo').textContent = 'Custom sprite loaded';
+                };
+                playerSpriteImg.src = playerSpriteData;
+            } else {
+                const preview = document.getElementById('playerSpritePreview');
+                if (preview) {
+                    const ctx = preview.getContext('2d');
+                    ctx.clearRect(0, 0, 48, 48);
+                }
+                document.getElementById('playerSpriteInfo').textContent = 'Default sprite';
+            }
 
             // Load tilesets (new format with multiple tilesets)
             if (p.tilesets && p.tilesets.length > 0) {
@@ -4417,8 +6693,9 @@
 
         // ===== TEST MAP =====
         function testMap() {
-            // Save current state
-            saveProject();
+            // Get current project data directly (don't rely on storage)
+            const projectDataForTest = getProjectData();
+            const projectDataJSON = JSON.stringify(projectDataForTest);
 
             // Close existing test window if any, then open fresh (fullscreen)
             const testWindow = window.open('about:blank', 'MapTest', 'width=' + screen.width + ',height=' + screen.height);
@@ -4476,7 +6753,7 @@
 </head>
 <body>
     <canvas id="game"></canvas>
-    <div id="info">WASD/Arrows to move | SPACE to attack | C to toggle collision | P to toggle debug panel | ESC to close</div>
+    <div id="info">Arrows to move | SPACE attack | C collision | S sounds | P debug | ESC close</div>
     <div id="debugPanel">
         <h3>Player Settings</h3>
         <label>Scale: <span class="value" id="scaleVal">1.7</span></label>
@@ -4492,6 +6769,13 @@
         <h3 style="margin-top:15px;">Camera</h3>
         <label>Zoom: <span class="value" id="zoomVal">0.9</span></label>
         <input type="range" id="zoomSlider" min="0.5" max="3" step="0.1" value="0.9">
+        <h3 style="margin-top:15px;">Lighting</h3>
+        <label>Darkness: <span class="value" id="darknessVal">0</span>%</label>
+        <input type="range" id="darknessSlider" min="0" max="100" step="5" value="0">
+        <label style="margin-top:10px;"><input type="checkbox" id="cycleEnabled"> Enable Day/Night Cycle</label>
+        <label>Cycle Time: <span class="value" id="dayLengthVal">1</span> min</label>
+        <input type="range" id="dayLengthSlider" min="1" max="10" step="0.5" value="1">
+        <div id="timeDisplay" style="color:#4f8;margin-top:5px;"></div>
         <button onclick="copySettings()">Copy Settings</button>
     </div>
     <script>
@@ -4517,8 +6801,8 @@
         }
         showLoading(0, 1);
 
-        // Load project data fresh
-        const projectData = JSON.parse(localStorage.getItem('worldBuilderProject'));
+        // Load project data directly from editor (embedded)
+        const projectData = ${projectDataJSON};
         console.log('Loaded project data:', projectData);
 
         const gridSize = projectData.gridSize || 16;
@@ -4538,8 +6822,9 @@
         }
 
         const layerVisibility = projectData.layerVisibility || layers.map(() => true);
+        const playerLayerIndex = projectData.playerLayerIndex !== undefined ? projectData.playerLayerIndex : 1;
 
-        console.log('Layers:', layers.length, 'MapRows:', mapRows, 'MapCols:', mapCols);
+        console.log('Layers:', layers.length, 'MapRows:', mapRows, 'MapCols:', mapCols, 'PlayerLayer:', playerLayerIndex);
 
         // Debug: Check layer content
         if (layers.length > 0) {
@@ -4709,7 +6994,7 @@
 
         console.log('Animated props:', animatedPropsData.length);
 
-        // Load player sprite - use opener's location for correct path
+        // Load player sprite - use embedded sprite if available, otherwise fall back to file
         const playerImg = new Image();
         const basePath = window.opener ? window.opener.location.href.replace(/[^/]*$/, '') : '';
         playerImg.onload = () => {
@@ -4718,11 +7003,18 @@
             checkAllImagesLoaded();
         };
         playerImg.onerror = () => {
-            console.error('Failed to load player sprite from:', basePath + 'assets/player_sprite.png');
+            console.error('Failed to load player sprite');
             imagesLoaded++;
             checkAllImagesLoaded();
         };
-        playerImg.src = basePath + 'assets/player_sprite.png';
+        // Use embedded sprite data if available, otherwise load from file
+        if (projectData.playerSpriteData) {
+            console.log('Using embedded player sprite');
+            playerImg.src = projectData.playerSpriteData;
+        } else {
+            console.log('Loading player sprite from file:', basePath + 'assets/player_sprite.png');
+            playerImg.src = basePath + 'assets/player_sprite.png';
+        }
 
         // Player state (matching game.js)
         const player = {
@@ -4739,6 +7031,549 @@
             attackTimer: 0
         };
 
+        // === SOUND SYSTEM ===
+        const soundsData = projectData.sounds || [];
+        const tileSoundsData = projectData.tileSounds || {};
+        const playerSoundsData = projectData.playerSounds || {
+            walk: { soundIndex: -1, interval: 200, volume: 0.5, pitchVariation: 0.1 },
+            attack: { soundIndex: -1, volume: 0.7 }
+        };
+        console.log('=== SOUND DATA LOADED ===');
+        console.log('Sounds array:', soundsData.length, soundsData);
+        console.log('Tile sounds:', Object.keys(tileSoundsData).length, tileSoundsData);
+        console.log('Player sounds:', playerSoundsData);
+
+        // === LIGHTING SYSTEM ===
+        const currentMapName = 'main'; // Default map name for lighting keys
+        const lightingSettingsData = projectData.lightingSettings || {
+            blobShadows: true,
+            ambientEnabled: false,
+            timeOfDay: 'day',
+            playerLight: false,
+            playerLightRadius: 4
+        };
+        const pointLightsData = projectData.pointLights || {};
+        const TIME_PRESETS = {
+            dawn:  { r: 0, g: 0, b: 20, a: 0.45 },
+            day:   { r: 0, g: 0, b: 0, a: 0 },
+            dusk:  { r: 0, g: 0, b: 20, a: 0.55 },
+            night: { r: 0, g: 0, b: 20, a: 0.95 }
+        };
+
+        // Day/Night cycle system
+        let dayCycleEnabled = false;
+        let dayLength = 60; // seconds for full cycle (1 min default)
+        let cycleTime = 0;  // current position in cycle (0-1)
+        let lastCycleUpdate = Date.now();
+        let currentLighting = { r: 0, g: 0, b: 0, a: 0 }; // interpolated values
+        let manualDarkness = 0; // 0-100, used when cycle is off
+
+        // Shadow settings (fixed values)
+        const shadowWidth = 21;
+        const shadowHeight = 8;
+        const shadowYOffset = 17;
+
+        // === NPC SYSTEM ===
+        const npcsData = projectData.npcs || [];
+        const placedNpcsData = projectData.placedNpcs || [];
+        const npcImages = [];
+
+        // Load NPC sprites
+        npcsData.forEach((npc, i) => {
+            if (npc && npc.spriteData) {
+                const img = new Image();
+                img.onload = () => {
+                    console.log('NPC sprite loaded:', npc.name);
+                };
+                img.src = npc.spriteData;
+                npcImages[i] = img;
+            }
+        });
+
+        // NPC runtime state for each placed NPC
+        const npcRuntimeState = placedNpcsData.map((placed, i) => ({
+            // Position (in pixels)
+            x: placed.x * gridSize,
+            y: placed.y * gridSize,
+            // Path following
+            currentWaypoint: 0,
+            pathDirection: 1, // 1 = forward, -1 = backward (for non-loop paths)
+            // Animation
+            direction: 'down',
+            frame: 0,
+            frameTimer: 0,
+            // Movement
+            moving: false,
+            targetX: placed.x * gridSize,
+            targetY: placed.y * gridSize,
+            // Trigger state
+            triggered: placed.trigger === 'loop', // Loop starts immediately
+            waitTimer: 0
+        }));
+
+        console.log('NPCs loaded:', npcsData.length, 'Placed:', placedNpcsData.length);
+
+        // Cycle phases: long night with peak darkness held for 50% of each night period
+        // Night1: 0-30% (peak 0-15%), EarlyMorn: 30-38%, Dawn: 38-45%, Day: 45-55%,
+        // Afternoon: 55-62%, Dusk: 62-70%, Night2: 70-100% (peak 85-100%)
+        function updateDayCycle() {
+            if (!dayCycleEnabled) return;
+
+            const now = Date.now();
+            const delta = (now - lastCycleUpdate) / 1000; // seconds
+            lastCycleUpdate = now;
+
+            // Advance cycle
+            cycleTime += delta / dayLength;
+            if (cycleTime >= 1) cycleTime -= 1;
+
+            // Determine current phase and interpolation
+            let fromPreset, toPreset, t, phaseName;
+
+            if (cycleTime < 0.15) {
+                // Peak Night 1 (0-15%) - full darkness
+                fromPreset = TIME_PRESETS.night;
+                toPreset = TIME_PRESETS.night;
+                t = 0;
+                phaseName = 'Night';
+            } else if (cycleTime < 0.30) {
+                // Late Night (15-30%) - very slowly lightening
+                fromPreset = TIME_PRESETS.night;
+                toPreset = TIME_PRESETS.night;
+                t = (cycleTime - 0.15) / 0.15 * 0.1; // barely lighten
+                phaseName = 'Late Night';
+            } else if (cycleTime < 0.38) {
+                // Early Morning (30-38%) - still very dark
+                fromPreset = TIME_PRESETS.night;
+                toPreset = TIME_PRESETS.dawn;
+                t = (cycleTime - 0.30) / 0.08 * 0.4;
+                phaseName = 'Early Morn';
+            } else if (cycleTime < 0.45) {
+                // Dawn (38-45%)
+                fromPreset = TIME_PRESETS.dawn;
+                toPreset = TIME_PRESETS.day;
+                t = (cycleTime - 0.38) / 0.07;
+                phaseName = 'Dawn';
+            } else if (cycleTime < 0.55) {
+                // Day (45-55%)
+                fromPreset = TIME_PRESETS.day;
+                toPreset = TIME_PRESETS.day;
+                t = 0;
+                phaseName = 'Day';
+            } else if (cycleTime < 0.62) {
+                // Afternoon (55-62%)
+                fromPreset = TIME_PRESETS.day;
+                toPreset = TIME_PRESETS.dusk;
+                t = (cycleTime - 0.55) / 0.07;
+                phaseName = 'Afternoon';
+            } else if (cycleTime < 0.70) {
+                // Dusk (62-70%)
+                fromPreset = TIME_PRESETS.dusk;
+                toPreset = TIME_PRESETS.night;
+                t = (cycleTime - 0.62) / 0.08;
+                phaseName = 'Dusk';
+            } else if (cycleTime < 0.85) {
+                // Early Night (70-85%) - getting darker
+                fromPreset = TIME_PRESETS.night;
+                toPreset = TIME_PRESETS.night;
+                t = 0;
+                phaseName = 'Early Night';
+            } else {
+                // Peak Night 2 (85-100%) - full darkness
+                fromPreset = TIME_PRESETS.night;
+                toPreset = TIME_PRESETS.night;
+                t = 0;
+                phaseName = 'Night';
+            }
+
+            // Smooth interpolation
+            currentLighting.r = Math.round(fromPreset.r + (toPreset.r - fromPreset.r) * t);
+            currentLighting.g = Math.round(fromPreset.g + (toPreset.g - fromPreset.g) * t);
+            currentLighting.b = Math.round(fromPreset.b + (toPreset.b - fromPreset.b) * t);
+            currentLighting.a = fromPreset.a + (toPreset.a - fromPreset.a) * t;
+
+            // Update display
+            const timeDisplay = document.getElementById('timeDisplay');
+            if (timeDisplay) {
+                timeDisplay.textContent = 'Time: ' + phaseName + ' (' + Math.round(cycleTime * 100) + '%)';
+            }
+        }
+
+        console.log('=== LIGHTING DATA LOADED ===');
+        console.log('Lighting settings:', lightingSettingsData);
+        console.log('Point lights:', Object.keys(pointLightsData).length);
+
+        // === NPC UPDATE FUNCTION ===
+        function updateNPCs() {
+            placedNpcsData.forEach((placed, i) => {
+                const state = npcRuntimeState[i];
+                if (!state) return;
+
+                const npc = npcsData[placed.npcIndex];
+                if (!npc) return;
+
+                const path = placed.path || [];
+                const speed = (placed.speed || 3) * 0.5; // Convert to pixel speed
+
+                // Check trigger conditions
+                if (!state.triggered) {
+                    if (placed.trigger === 'interact') {
+                        // Triggered by player attack - check if player is attacking nearby
+                        if (player.attacking) {
+                            const dist = Math.hypot(player.x - state.x, player.y - state.y);
+                            if (dist < gridSize * 2) {
+                                state.triggered = true;
+                            }
+                        }
+                    } else if (placed.trigger === 'timeDay') {
+                        // Only active during day
+                        state.triggered = dayCycleEnabled && cycleTime > 0.38 && cycleTime < 0.70;
+                    } else if (placed.trigger === 'timeNight') {
+                        // Only active during night
+                        state.triggered = dayCycleEnabled && (cycleTime < 0.38 || cycleTime > 0.70);
+                    }
+                }
+
+                // Reset trigger for time-based when condition no longer met
+                if (placed.trigger === 'timeDay' && state.triggered) {
+                    if (!dayCycleEnabled || cycleTime < 0.38 || cycleTime > 0.70) {
+                        state.triggered = false;
+                        state.currentWaypoint = 0;
+                    }
+                }
+                if (placed.trigger === 'timeNight' && state.triggered) {
+                    if (!dayCycleEnabled || (cycleTime > 0.38 && cycleTime < 0.70)) {
+                        state.triggered = false;
+                        state.currentWaypoint = 0;
+                    }
+                }
+
+                // Skip movement if not triggered or no path
+                if (!state.triggered || path.length === 0) {
+                    state.moving = false;
+                    return;
+                }
+
+                // Get current waypoint target
+                const waypoint = path[state.currentWaypoint];
+                if (!waypoint) {
+                    // Reset to start
+                    state.currentWaypoint = 0;
+                    return;
+                }
+
+                state.targetX = waypoint.x * gridSize;
+                state.targetY = waypoint.y * gridSize;
+
+                // Calculate direction to target
+                const dx = state.targetX - state.x;
+                const dy = state.targetY - state.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist < speed) {
+                    // Reached waypoint
+                    state.x = state.targetX;
+                    state.y = state.targetY;
+                    state.currentWaypoint++;
+
+                    // Check if path complete
+                    if (state.currentWaypoint >= path.length) {
+                        if (placed.trigger === 'loop') {
+                            // Return to start position, then repeat path
+                            state.currentWaypoint = 0;
+                            state.x = placed.x * gridSize;
+                            state.y = placed.y * gridSize;
+                        } else {
+                            // One-shot trigger - stop and reset
+                            state.triggered = false;
+                            state.currentWaypoint = 0;
+                            state.x = placed.x * gridSize;
+                            state.y = placed.y * gridSize;
+                        }
+                    }
+                    state.moving = false;
+                } else {
+                    // Move towards waypoint
+                    state.moving = true;
+                    const moveX = (dx / dist) * speed;
+                    const moveY = (dy / dist) * speed;
+                    state.x += moveX;
+                    state.y += moveY;
+
+                    // Set direction based on movement
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        state.direction = dx > 0 ? 'right' : 'left';
+                    } else {
+                        state.direction = dy > 0 ? 'down' : 'up';
+                    }
+                }
+
+                // Update animation
+                state.frameTimer++;
+                const animSpeed = 10;
+                if (state.frameTimer >= animSpeed) {
+                    state.frameTimer = 0;
+                    state.frame = (state.frame + 1) % 4;
+                }
+            });
+        }
+
+        // Offscreen canvas for lighting effects
+        let lightCanvas = null;
+        let lightCtx = null;
+
+        // Audio context for playback
+        let audioContext = null;
+        let soundBuffers = {}; // soundIndex -> AudioBuffer
+
+        // Walk sound timing
+        let lastWalkSoundTime = 0;
+
+        // Ambient sounds currently playing
+        let ambientSounds = {}; // "x,y" -> { source, gainNode, playing }
+
+        // Debug flags
+        let showSounds = false;
+        let showLayers = false; // L key to toggle layer debug
+
+        // Initialize audio context on first user interaction
+        function initAudio() {
+            if (audioContext) return;
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            console.log('Audio context initialized');
+            console.log('Sounds to load:', soundsData.length);
+            console.log('Tile sounds:', Object.keys(tileSoundsData).length);
+            console.log('Player sounds:', playerSoundsData);
+
+            // Load all sounds into buffers
+            soundsData.forEach((sound, idx) => {
+                if (sound && sound.data) {
+                    // Decode base64 audio data
+                    const base64 = sound.data.split(',')[1];
+                    const binary = atob(base64);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) {
+                        bytes[i] = binary.charCodeAt(i);
+                    }
+                    // Create a copy of the buffer (decodeAudioData detaches the original)
+                    const audioBuffer = bytes.buffer.slice(0);
+                    audioContext.decodeAudioData(audioBuffer, (buffer) => {
+                        soundBuffers[idx] = buffer;
+                        console.log('Sound', idx, sound.name, 'loaded successfully');
+                    }, (err) => {
+                        console.error('Failed to decode sound', idx, err);
+                    });
+                }
+            });
+        }
+
+        // Play a sound with optional pitch variation
+        function playSound(soundIndex, volume = 1, pitchVariation = 0) {
+            if (!audioContext) {
+                console.log('playSound: No audio context');
+                return;
+            }
+            if (!soundBuffers[soundIndex]) {
+                console.log('playSound: No buffer for sound', soundIndex);
+                return;
+            }
+
+            const source = audioContext.createBufferSource();
+            source.buffer = soundBuffers[soundIndex];
+
+            // Apply pitch variation
+            if (pitchVariation > 0) {
+                source.playbackRate.value = 1 + (Math.random() - 0.5) * pitchVariation * 2;
+            }
+
+            const gainNode = audioContext.createGain();
+            gainNode.gain.value = volume;
+
+            source.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            source.start();
+
+            return { source, gainNode };
+        }
+
+        // Update ambient sounds based on player position with smooth fading
+        function updateAmbientSounds() {
+            if (!audioContext) return;
+
+            const tileSize = gridSize * TILE_SCALE;
+            const playerTileX = Math.floor(player.x / tileSize);
+            const playerTileY = Math.floor(player.y / tileSize);
+            const fadeTime = 0.1; // Smooth transition time in seconds
+
+            Object.keys(tileSoundsData).forEach(key => {
+                const [sx, sy] = key.split(',').map(Number);
+                const ts = tileSoundsData[key];
+                const soundBuffer = soundBuffers[ts.soundIndex];
+
+                if (!soundBuffer) return;
+
+                // Calculate distance from player (in tiles)
+                const dx = playerTileX - sx;
+                const dy = playerTileY - sy;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                // Get fade percent (default 50% = half the radius is fade zone)
+                const fadePercent = ts.fadePercent !== undefined ? ts.fadePercent : 0.5;
+
+                // Calculate volume based on distance with fade zone
+                let targetVolume = 0;
+                if (dist <= ts.radius) {
+                    // Inside radius - calculate fade
+                    const fadeStartDist = ts.radius * (1 - fadePercent); // Where fade begins
+                    if (dist <= fadeStartDist) {
+                        // Inside inner zone - full volume
+                        targetVolume = ts.volume;
+                    } else {
+                        // In fade zone - linear fade from full to zero
+                        const fadeZoneSize = ts.radius - fadeStartDist;
+                        const distInFadeZone = dist - fadeStartDist;
+                        targetVolume = ts.volume * (1 - distInFadeZone / fadeZoneSize);
+                    }
+                }
+
+                // Start sound if not playing yet (for looping sounds, keep them running)
+                if (!ambientSounds[key]?.playing && ts.loop) {
+                    const source = audioContext.createBufferSource();
+                    source.buffer = soundBuffer;
+                    source.loop = true;
+
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.value = 0; // Start silent
+
+                    source.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    source.start();
+
+                    ambientSounds[key] = { source, gainNode, playing: true };
+                }
+
+                // For non-looping sounds, only start when in range
+                if (!ambientSounds[key]?.playing && !ts.loop && targetVolume > 0) {
+                    const source = audioContext.createBufferSource();
+                    source.buffer = soundBuffer;
+                    source.loop = false;
+
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.value = targetVolume;
+
+                    source.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    source.start();
+
+                    ambientSounds[key] = { source, gainNode, playing: true };
+
+                    source.onended = () => {
+                        if (ambientSounds[key]) {
+                            ambientSounds[key].playing = false;
+                        }
+                    };
+                }
+
+                // Smoothly adjust volume for playing sounds
+                if (ambientSounds[key]?.playing && ambientSounds[key].gainNode) {
+                    const gain = ambientSounds[key].gainNode.gain;
+                    // Use linearRampToValueAtTime for smooth transitions
+                    gain.cancelScheduledValues(audioContext.currentTime);
+                    gain.setValueAtTime(gain.value, audioContext.currentTime);
+                    gain.linearRampToValueAtTime(Math.max(0, targetVolume), audioContext.currentTime + fadeTime);
+                }
+            });
+        }
+
+        // === LIGHTING RENDERING (Classic 2D - no WebGL) ===
+        function renderLighting() {
+            const lighting = lightingSettingsData;
+
+            // Get lighting values - use cycle if enabled, otherwise use darkness slider
+            let preset;
+            if (dayCycleEnabled) {
+                preset = currentLighting;
+            } else {
+                // Use manual darkness slider (0-100 maps to 0-0.95 alpha)
+                const alpha = manualDarkness / 100 * 0.95;
+                preset = { r: 0, g: 0, b: 20, a: alpha };
+            }
+
+            // Skip if no darkness and no player light
+            if (preset.a === 0 && !lighting.playerLight) return;
+
+            // Create/resize offscreen canvas for lighting
+            if (!lightCanvas || lightCanvas.width !== canvas.width || lightCanvas.height !== canvas.height) {
+                lightCanvas = document.createElement('canvas');
+                lightCanvas.width = canvas.width;
+                lightCanvas.height = canvas.height;
+                lightCtx = lightCanvas.getContext('2d');
+            }
+
+            // Clear and fill with ambient darkness
+            lightCtx.clearRect(0, 0, lightCanvas.width, lightCanvas.height);
+            lightCtx.fillStyle = 'rgba(' + preset.r + ',' + preset.g + ',' + preset.b + ',' + preset.a + ')';
+            lightCtx.fillRect(0, 0, lightCanvas.width, lightCanvas.height);
+
+            // Cut out light circles using destination-out compositing
+            lightCtx.globalCompositeOperation = 'destination-out';
+
+            const tileSize = gridSize * TILE_SCALE;
+            const camX = Math.floor(player.x - canvas.width / (2 * cameraZoom) + player.width / 2);
+            const camY = Math.floor(player.y - canvas.height / (2 * cameraZoom) + player.height / 2);
+
+            // Player torch light (always follows player)
+            if (lighting.playerLight) {
+                const px = (player.x - camX + player.width / 2) * cameraZoom;
+                const py = (player.y - camY + player.height / 2) * cameraZoom;
+                const radius = lighting.playerLightRadius * tileSize * cameraZoom;
+
+                const gradient = lightCtx.createRadialGradient(px, py, 0, px, py, radius);
+                gradient.addColorStop(0, 'rgba(255,255,255,1)');
+                gradient.addColorStop(0.5, 'rgba(255,255,255,0.6)');
+                gradient.addColorStop(1, 'rgba(255,255,255,0)');
+                lightCtx.fillStyle = gradient;
+                lightCtx.beginPath();
+                lightCtx.arc(px, py, radius, 0, Math.PI * 2);
+                lightCtx.fill();
+            }
+
+            // Cut out placed point lights
+            const mapPrefix = currentMapName + ':';
+            Object.keys(pointLightsData).forEach(key => {
+                if (!key.startsWith(mapPrefix)) return;
+
+                const coords = key.split(':')[1];
+                const [lx, ly] = coords.split(',').map(Number);
+                const light = pointLightsData[key];
+
+                const screenX = ((lx * tileSize + tileSize / 2) - camX) * cameraZoom;
+                const screenY = ((ly * tileSize + tileSize / 2) - camY) * cameraZoom;
+                let radius = light.radius * tileSize * cameraZoom;
+
+                // Optional flicker effect
+                if (light.flicker) {
+                    radius *= 0.95 + Math.random() * 0.1;
+                }
+
+                const gradient = lightCtx.createRadialGradient(screenX, screenY, 0, screenX, screenY, radius);
+                gradient.addColorStop(0, 'rgba(255,255,255,1)');
+                gradient.addColorStop(0.6, 'rgba(255,255,255,0.5)');
+                gradient.addColorStop(1, 'rgba(255,255,255,0)');
+                lightCtx.fillStyle = gradient;
+                lightCtx.beginPath();
+                lightCtx.arc(screenX, screenY, radius, 0, Math.PI * 2);
+                lightCtx.fill();
+            });
+
+            // Reset composite operation and draw darkness over game
+            lightCtx.globalCompositeOperation = 'source-over';
+            ctx.drawImage(lightCanvas, 0, 0);
+        }
+
+        // Initialize audio on first key press
+        document.addEventListener('keydown', () => initAudio(), { once: true });
+
         // Adjustable settings
         let playerScale = 1.7;
         let animSpeed = 10; // Lower = faster animation
@@ -4753,6 +7588,14 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'p' || e.key === 'P') {
                 document.getElementById('debugPanel').classList.toggle('visible');
+            }
+            if (e.key === 's' || e.key === 'S') {
+                showSounds = !showSounds;
+                console.log('Sound debug:', showSounds ? 'ON' : 'OFF');
+            }
+            if (e.key === 'l' || e.key === 'L') {
+                showLayers = !showLayers;
+                console.log('Layer debug:', showLayers ? 'ON' : 'OFF');
             }
         });
 
@@ -4784,6 +7627,26 @@
         document.getElementById('zoomSlider').addEventListener('input', (e) => {
             cameraZoom = parseFloat(e.target.value);
             document.getElementById('zoomVal').textContent = cameraZoom.toFixed(1);
+        });
+
+        // Lighting controls
+        document.getElementById('darknessSlider').addEventListener('input', (e) => {
+            manualDarkness = parseInt(e.target.value);
+            document.getElementById('darknessVal').textContent = manualDarkness;
+        });
+
+        document.getElementById('cycleEnabled').addEventListener('change', (e) => {
+            dayCycleEnabled = e.target.checked;
+            lastCycleUpdate = Date.now(); // Reset timer
+            if (!dayCycleEnabled) {
+                document.getElementById('timeDisplay').textContent = '';
+            }
+        });
+
+        document.getElementById('dayLengthSlider').addEventListener('input', (e) => {
+            const minutes = parseFloat(e.target.value);
+            dayLength = minutes * 60; // convert to seconds
+            document.getElementById('dayLengthVal').textContent = minutes;
         });
 
         function copySettings() {
@@ -4853,7 +7716,7 @@
         const camera = { x: 0, y: 0 };
 
         // Debug
-        let showCollision = true;
+        let showCollision = false;
 
         // Input
         const keys = {};
@@ -4866,6 +7729,10 @@
             if (e.key === ' ' && !player.attacking) {
                 player.attacking = true;
                 player.attackTimer = 18;
+                // Play attack sound
+                if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
+                    playSound(playerSoundsData.attack.soundIndex, playerSoundsData.attack.volume || 0.7, 0);
+                }
             }
         });
         document.addEventListener('keyup', e => keys[e.key] = false);
@@ -4959,10 +7826,10 @@
             player.moving = false;
 
             if (!player.attacking) {
-                if (keys['w'] || keys['W'] || keys['ArrowUp']) { dy = -1; player.direction = 'up'; player.moving = true; }
-                if (keys['s'] || keys['S'] || keys['ArrowDown']) { dy = 1; player.direction = 'down'; player.moving = true; }
-                if (keys['a'] || keys['A'] || keys['ArrowLeft']) { dx = -1; player.direction = 'left'; player.moving = true; }
-                if (keys['d'] || keys['D'] || keys['ArrowRight']) { dx = 1; player.direction = 'right'; player.moving = true; }
+                if (keys['ArrowUp']) { dy = -1; player.direction = 'up'; player.moving = true; }
+                if (keys['ArrowDown']) { dy = 1; player.direction = 'down'; player.moving = true; }
+                if (keys['ArrowLeft']) { dx = -1; player.direction = 'left'; player.moving = true; }
+                if (keys['ArrowRight']) { dx = 1; player.direction = 'right'; player.moving = true; }
 
                 // Normalize diagonal movement so it's not faster
                 if (dx !== 0 && dy !== 0) {
@@ -5054,6 +7921,27 @@
             // Camera follow - adjust for zoom so player stays centered
             camera.x = player.x - (canvas.width / 2) / cameraZoom;
             camera.y = player.y - (canvas.height / 2) / cameraZoom;
+
+            // === UPDATE NPCs ===
+            updateNPCs();
+
+            // === SOUND UPDATES ===
+            // Play walk sounds when moving
+            if (player.moving && playerSoundsData.walk && playerSoundsData.walk.soundIndex >= 0) {
+                const now = performance.now();
+                const interval = playerSoundsData.walk.interval || 200;
+                if (now - lastWalkSoundTime >= interval) {
+                    playSound(
+                        playerSoundsData.walk.soundIndex,
+                        playerSoundsData.walk.volume || 0.5,
+                        playerSoundsData.walk.pitchVariation || 0.1
+                    );
+                    lastWalkSoundTime = now;
+                }
+            }
+
+            // Update ambient sounds based on proximity
+            updateAmbientSounds();
         }
 
         function draw() {
@@ -5103,15 +7991,120 @@
             // PASS 2: Y-sort player with tiles from layers 1+
             tilesDrawn += drawYSortedEntities(camX, camY, tileSize);
 
-            // PASS 3: Draw canopy overlay (split tile tops) - always on top
+            // PASS 3: Draw canopy overlay (split tile tops)
             drawCanopyOverlay(camX, camY, tileSize);
 
+            // PASS 4: Redraw higher layer content that canopy covered
+            redrawHigherLayerContent(camX, camY, tileSize);
+
+            // Draw sound debug visualization
+            if (showSounds) {
+                Object.keys(tileSoundsData).forEach(key => {
+                    const parts = key.split(',');
+                    const sx = parseInt(parts[0]) || 0;
+                    const sy = parseInt(parts[1]) || 0;
+                    const ts = tileSoundsData[key];
+                    if (!ts) return;
+
+                    const px = sx * tileSize - camX + tileSize / 2;
+                    const py = sy * tileSize - camY + tileSize / 2;
+                    const radius = (ts.radius || 3) * tileSize;
+
+                    // Draw radius circle
+                    const isPlaying = ambientSounds[key]?.playing;
+                    ctx.strokeStyle = isPlaying ? 'rgba(0, 255, 0, 0.6)' : 'rgba(255, 165, 0, 0.5)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.arc(px, py, radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // Draw center marker
+                    ctx.fillStyle = isPlaying ? '#0f0' : '#ffa500';
+                    ctx.beginPath();
+                    ctx.arc(px, py, tileSize / 4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Label
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '10px monospace';
+                    ctx.textAlign = 'center';
+                    const soundName = soundsData[ts.soundIndex]?.name || 'Sound ' + ts.soundIndex;
+                    ctx.fillText(soundName, px, py - tileSize / 2);
+                    ctx.fillText(isPlaying ? 'PLAYING' : 'idle', px, py + tileSize / 2 + 12);
+                });
+            }
+
+            // Layer debug visualization
+            if (showLayers) {
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                for (let li = 0; li < layers.length; li++) {
+                    const layer = layers[li];
+                    if (!layer) continue;
+                    for (let y = 0; y < mapRows; y++) {
+                        if (!layer[y]) continue;
+                        for (let x = 0; x < mapCols; x++) {
+                            const cell = layer[y][x];
+                            if (!cell) continue;
+                            const px = x * tileSize - camX + tileSize / 2;
+                            const py = y * tileSize - camY + tileSize / 2;
+                            // Skip off-screen tiles
+                            if (px < -tileSize || px > canvas.width / cameraZoom + tileSize || py < -tileSize || py > canvas.height / cameraZoom + tileSize) continue;
+                            // Different color for animTiles
+                            if (cell.type === 'animTile') {
+                                ctx.fillStyle = 'rgba(255, 0, 255, 0.8)'; // Magenta for animTiles
+                                ctx.fillRect(px - 8, py - 6, 16, 12);
+                                ctx.fillStyle = '#fff';
+                                ctx.fillText('A' + li, px, py);
+                            } else if (li > 0) {
+                                // Only show layer number for non-ground tiles
+                                ctx.fillStyle = 'rgba(0, 100, 255, 0.7)';
+                                ctx.fillRect(px - 6, py - 6, 12, 12);
+                                ctx.fillStyle = '#fff';
+                                ctx.fillText(li, px, py);
+                            }
+                        }
+                    }
+                }
+            }
+
             ctx.restore();
+
+            // === LIGHTING OVERLAY (drawn after all game content) ===
+            renderLighting();
 
             // Debug info (drawn after restore so it's not zoomed)
             ctx.fillStyle = '#fff';
             ctx.font = '12px monospace';
             ctx.fillText('Layers: ' + layers.length + ' | Tiles: ' + tilesDrawn + ' | Zoom: ' + cameraZoom.toFixed(1) + 'x', 10, canvas.height - 10);
+
+            // Sound debug info
+            if (showSounds) {
+                ctx.fillText('Sounds: ' + soundsData.length + ' loaded | Tile sounds: ' + Object.keys(tileSoundsData).length + ' | Audio: ' + (audioContext ? 'ON' : 'OFF'), 10, canvas.height - 25);
+            }
+
+            // Layer debug info
+            if (showLayers) {
+                // Count animTiles per layer
+                let animCounts = [];
+                for (let li = 0; li < layers.length; li++) {
+                    let count = 0;
+                    const layer = layers[li];
+                    if (layer) {
+                        for (let y = 0; y < mapRows; y++) {
+                            if (!layer[y]) continue;
+                            for (let x = 0; x < mapCols; x++) {
+                                if (layer[y][x]?.type === 'animTile') count++;
+                            }
+                        }
+                    }
+                    if (count > 0) animCounts.push('L' + li + ':' + count);
+                }
+                ctx.fillText('Layer Debug ON (L) | AnimTiles: ' + (animCounts.length > 0 ? animCounts.join(', ') : 'none') + ' | Press L to toggle', 10, canvas.height - 25);
+            }
         }
 
         function drawLayer(li, camX, camY, tileSize) {
@@ -5230,7 +8223,17 @@
                             const srcY = frame.y + offsetY * gridSize;
 
                             count++;
-                            ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, px, py, tileSize + overlap, tileSize + overlap);
+                            // Draw with rotation support
+                            const rot = cell.rotation || 0;
+                            if (rot === 0) {
+                                ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, px, py, tileSize + overlap, tileSize + overlap);
+                            } else {
+                                ctx.save();
+                                ctx.translate(px + tileSize / 2, py + tileSize / 2);
+                                ctx.rotate(rot * Math.PI / 180);
+                                ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, -tileSize / 2, -tileSize / 2, tileSize + overlap, tileSize + overlap);
+                                ctx.restore();
+                            }
                         }
                     }
                 }
@@ -5241,16 +8244,34 @@
 
         // === Y-SORTING FUNCTIONS ===
 
+        // Original Y-sorting: Y position is primary, layer is tiebreaker
         function drawYSortedEntities(camX, camY, tileSize) {
             const entities = [];
 
-            // Add player to sortable list
+            // Add player
+            const playerGridY = Math.floor((player.y + player.height) / (gridSize * TILE_SCALE));
+            const playerLayer = playerLayerIndex || 1;
             entities.push({
                 type: 'player',
-                sortY: player.y + player.height  // Bottom of collision box
+                sortY: (playerGridY + 1) * 1000 + playerLayer + 0.5
             });
 
-            // Add tiles from layers 1+ (layer 0 is ground, already drawn)
+            // Add NPCs
+            placedNpcsData.forEach((placed, i) => {
+                const state = npcRuntimeState[i];
+                if (!state) return;
+                const npc = npcsData[placed.npcIndex];
+                if (!npc) return;
+
+                const npcGridY = Math.floor((state.y + gridSize) / (gridSize * TILE_SCALE));
+                entities.push({
+                    type: 'npc',
+                    npcIndex: i,
+                    sortY: (npcGridY + 1) * 1000 + playerLayer + 0.4 // Slightly before player at same Y
+                });
+            });
+
+            // Add tiles from all layers 1+
             for (let li = 1; li < layers.length; li++) {
                 if (!layerVisibility[li]) continue;
                 const layer = layers[li];
@@ -5268,53 +8289,36 @@
                         // Skip off-screen tiles
                         if (px < -tileSize || px > canvas.width / cameraZoom || py < -tileSize || py > canvas.height / cameraZoom) continue;
 
+                        // Y is primary, layer is tiebreaker
+                        const baseSortY = (y + 1) * 1000 + li;
+
                         if (cell.type === 'tile') {
                             const key = (cell.tilesetIndex || 0) + ':' + cell.x + ',' + cell.y;
                             const splitData = tileSplitLines[key];
                             const hasSplit = splitData !== undefined && splitData !== null;
 
-                            if (hasSplit) {
-                                entities.push({
-                                    type: 'trunk',
-                                    cell, x, y, layer: li,
-                                    sortY: (y + 1) * gridSize
-                                });
-                            } else {
-                                entities.push({
-                                    type: 'tile',
-                                    cell, x, y, layer: li,
-                                    sortY: (y + 1) * gridSize
-                                });
-                            }
+                            entities.push({
+                                type: hasSplit ? 'trunk' : 'tile',
+                                cell, x, y, layer: li,
+                                sortY: baseSortY
+                            });
                         } else if (cell.type === 'animTile') {
-                            // Check if this animated prop has a split line
                             const propData = animatedPropsData[cell.propIndex];
-                            // splitLine can be: number (old), object with "tileX,tileY" keys (new per-tile), or null/undefined
                             const hasSplit = propData && propData.splitLine !== null && propData.splitLine !== undefined &&
                                 (typeof propData.splitLine === 'number' ||
                                  (typeof propData.splitLine === 'object' && Object.keys(propData.splitLine).length > 0));
 
-                            if (hasSplit) {
-                                // Has split - draw trunk portion Y-sorted, canopy later
-                                entities.push({
-                                    type: 'animTrunk',
-                                    cell, x, y, layer: li,
-                                    sortY: (y + 1) * gridSize
-                                });
-                            } else {
-                                // No split - draw full animated tile Y-sorted
-                                entities.push({
-                                    type: 'animTile',
-                                    cell, x, y, layer: li,
-                                    sortY: (y + 1) * gridSize
-                                });
-                            }
+                            entities.push({
+                                type: hasSplit ? 'animTrunk' : 'animTile',
+                                cell, x, y, layer: li,
+                                sortY: baseSortY
+                            });
                         }
                     }
                 }
             }
 
-            // Sort by Y (items lower on screen draw later = in front)
+            // Sort by Y, then layer
             entities.sort((a, b) => a.sortY - b.sortY);
 
             // Draw in sorted order
@@ -5322,6 +8326,8 @@
             for (const e of entities) {
                 if (e.type === 'player') {
                     drawPlayer();
+                } else if (e.type === 'npc') {
+                    drawNPC(e.npcIndex, camX, camY, tileSize);
                 } else if (e.type === 'trunk') {
                     drawTileTrunk(e.cell, e.x, e.y, camX, camY, tileSize);
                     count++;
@@ -5340,11 +8346,57 @@
             return count;
         }
 
+        // Redraw content from higher layers that overlaps with canopy from lower layers
+        function redrawHigherLayerContent(camX, camY, tileSize) {
+            // For each position that has canopy (split line), redraw any higher layer content
+            for (let li = 1; li < layers.length; li++) {
+                if (!layerVisibility[li]) continue;
+                const layer = layers[li];
+                if (!layer) continue;
+
+                for (let y = 0; y < mapRows; y++) {
+                    if (!layer[y]) continue;
+                    for (let x = 0; x < mapCols; x++) {
+                        const cell = layer[y][x];
+                        if (!cell) continue;
+
+                        // Check if this cell has canopy (split line)
+                        let hasCanopy = false;
+                        if (cell.type === 'tile') {
+                            const key = (cell.tilesetIndex || 0) + ':' + cell.x + ',' + cell.y;
+                            hasCanopy = tileSplitLines[key] !== undefined && tileSplitLines[key] !== null;
+                        } else if (cell.type === 'animTile') {
+                            const propData = animatedPropsData[cell.propIndex];
+                            hasCanopy = propData && propData.splitLine !== null && propData.splitLine !== undefined;
+                        }
+
+                        if (!hasCanopy) continue;
+
+                        // This cell has canopy - redraw any higher layer content at this position
+                        for (let hi = li + 1; hi < layers.length; hi++) {
+                            if (!layerVisibility[hi]) continue;
+                            const higherLayer = layers[hi];
+                            if (!higherLayer || !higherLayer[y] || !higherLayer[y][x]) continue;
+
+                            const higherCell = higherLayer[y][x];
+                            if (higherCell.type === 'animTile') {
+                                drawAnimTile(higherCell, x, y, hi, camX, camY, tileSize);
+                            } else if (higherCell.type === 'tile') {
+                                drawTileFull(higherCell, x, y, camX, camY, tileSize);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         function drawAnimTile(cell, tx, ty, li, camX, camY, tileSize) {
             const propData = animatedPropsData[cell.propIndex];
             const propImg = animPropImages[cell.propIndex];
-            if (!propData || !propImg || !propImg.complete) return;
-            if (!propData.frames || propData.frames.length === 0) return;
+
+            if (!propData || !propImg || !propImg.complete || !propData.frames || propData.frames.length === 0) {
+                return;
+            }
 
             const px = Math.floor(tx * tileSize - camX);
             const py = Math.floor(ty * tileSize - camY);
@@ -5365,7 +8417,18 @@
             const srcY = frame.y + offsetY * gridSize;
 
             ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, px - overlap, py - overlap, tileSize + overlap * 2, tileSize + overlap * 2);
+
+            // Draw with rotation support
+            const rot = cell.rotation || 0;
+            if (rot === 0) {
+                ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, px - overlap, py - overlap, tileSize + overlap * 2, tileSize + overlap * 2);
+            } else {
+                ctx.save();
+                ctx.translate(px + tileSize / 2, py + tileSize / 2);
+                ctx.rotate(rot * Math.PI / 180);
+                ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, -tileSize / 2 - overlap, -tileSize / 2 - overlap, tileSize + overlap * 2, tileSize + overlap * 2);
+                ctx.restore();
+            }
         }
 
         // Draw only the trunk (bottom) portion of an animated tile with split line
@@ -5558,7 +8621,7 @@
         }
 
         function drawCanopyOverlay(camX, camY, tileSize) {
-            // Draw canopy portions (above split line) for all split tiles - always on top
+            // Draw canopy portions (above split line) for all split tiles
             for (let li = 1; li < layers.length; li++) {
                 if (!layerVisibility[li]) continue;
                 const layer = layers[li];
@@ -5737,6 +8800,18 @@
             const spriteX = sx + player.width / 2 - drawW / 2;
             const spriteY = sy - 15; // shift sprite up so collision box covers body properly
 
+            // Simple ellipse shadow under hero
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(
+                spriteX + drawW / 2,
+                spriteY + drawH - shadowYOffset,
+                drawW * (shadowWidth / 100),
+                drawW * (shadowHeight / 100),
+                0, 0, Math.PI * 2
+            );
+            ctx.fill();
+
             if (playerImg.complete) {
                 if (flipX) {
                     ctx.save();
@@ -5789,7 +8864,71 @@
             }
         }
 
+        // Draw NPC with correct animation based on direction
+        function drawNPC(npcIdx, camX, camY, tileSize) {
+            const placed = placedNpcsData[npcIdx];
+            const state = npcRuntimeState[npcIdx];
+            const npc = npcsData[placed.npcIndex];
+            const img = npcImages[placed.npcIndex];
+
+            if (!placed || !state || !npc || !img || !img.complete) return;
+
+            const sx = Math.round(state.x * TILE_SCALE - camX);
+            const sy = Math.round(state.y * TILE_SCALE - camY);
+
+            // Get correct animation based on direction
+            const anims = npc.animations || {};
+            const dirMap = {
+                'down': 'walkDown',
+                'up': 'walkUp',
+                'left': 'walkLeft',
+                'right': 'walkRight'
+            };
+            const animKey = state.moving ? dirMap[state.direction] : 'idle';
+            let anim = anims[animKey];
+
+            // Fallback to any available animation
+            if (!anim || anim.length === 0) {
+                anim = anims.walkDown || anims.idle || Object.values(anims).find(a => a && a.length > 0);
+            }
+            if (!anim || anim.length === 0) return;
+
+            // Get current frame
+            const frameIdx = state.frame % anim.length;
+            const frame = anim[frameIdx];
+            if (!frame) return;
+
+            const drawW = tileSize;
+            const drawH = tileSize;
+
+            // Draw shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(
+                sx + drawW / 2,
+                sy + drawH - 4,
+                drawW * 0.35,
+                drawW * 0.12,
+                0, 0, Math.PI * 2
+            );
+            ctx.fill();
+
+            // Handle horizontal flip for left direction
+            const flipX = state.direction === 'left' && !anims.walkLeft?.length;
+
+            if (flipX) {
+                ctx.save();
+                ctx.translate(sx + drawW, sy);
+                ctx.scale(-1, 1);
+                ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, 0, 0, drawW, drawH);
+                ctx.restore();
+            } else {
+                ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, sx, sy, drawW, drawH);
+            }
+        }
+
         function gameLoop() {
+            updateDayCycle();
             update();
             draw();
             requestAnimationFrame(gameLoop);
