@@ -1078,6 +1078,7 @@
                 <button onclick="document.getElementById('projectFileInput').click()" style="background:#555;">Load</button>
                 <input type="file" id="projectFileInput" accept=".json" style="display:none;" onchange="uploadProject(event)">
                 <button onclick="exportConfig()">Export</button>
+                <button onclick="showStorageInfo()" style="background:#666;" title="Show storage usage">💾 Info</button>
                 <button onclick="testMap()" style="background:#e74c3c;">Test Map</button>
                 <button id="grabToolBtn" onclick="toggleGrabTool()" style="background:#555;">✋ Grab</button>
                 <div class="zoom-controls">
@@ -6723,8 +6724,112 @@
             });
         }
 
+        // ===== INDEXEDDB STORAGE =====
+        let projectDB = null;
+
+        function initProjectDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('WorldBuilderDB', 1);
+                request.onerror = () => {
+                    console.error('IndexedDB error:', request.error);
+                    reject(request.error);
+                };
+                request.onsuccess = () => {
+                    projectDB = request.result;
+                    console.log('IndexedDB opened successfully');
+                    resolve(projectDB);
+                };
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('projects')) {
+                        db.createObjectStore('projects');
+                        console.log('Created projects object store');
+                    }
+                };
+            });
+        }
+
+        async function saveProjectToDB(data) {
+            try {
+                if (!projectDB) await initProjectDB();
+                return new Promise((resolve, reject) => {
+                    const tx = projectDB.transaction('projects', 'readwrite');
+                    const store = tx.objectStore('projects');
+                    const request = store.put(data, 'current');
+                    request.onsuccess = () => {
+                        console.log('Project saved to IndexedDB');
+                        resolve();
+                    };
+                    request.onerror = () => {
+                        console.error('IndexedDB save error:', request.error);
+                        reject(request.error);
+                    };
+                });
+            } catch (err) {
+                console.error('saveProjectToDB error:', err);
+                throw err;
+            }
+        }
+
+        async function loadProjectFromDB() {
+            try {
+                if (!projectDB) await initProjectDB();
+                return new Promise((resolve, reject) => {
+                    const tx = projectDB.transaction('projects', 'readonly');
+                    const store = tx.objectStore('projects');
+                    const request = store.get('current');
+                    request.onsuccess = () => {
+                        resolve(request.result);
+                    };
+                    request.onerror = () => {
+                        console.error('IndexedDB load error:', request.error);
+                        reject(request.error);
+                    };
+                });
+            } catch (err) {
+                console.error('loadProjectFromDB error:', err);
+                throw err;
+            }
+        }
+
+        async function showStorageInfo() {
+            const data = getProjectData();
+            const json = JSON.stringify(data);
+            const totalMB = (json.length / 1000000).toFixed(2);
+
+            // Get storage quota (if available)
+            let quotaInfo = 'Unknown';
+            if (navigator.storage && navigator.storage.estimate) {
+                const estimate = await navigator.storage.estimate();
+                const usedMB = (estimate.usage / 1000000).toFixed(2);
+                const quotaMB = (estimate.quota / 1000000).toFixed(0);
+                quotaInfo = usedMB + 'MB / ' + quotaMB + 'MB';
+            }
+
+            // Breakdown by component
+            const soundsSize = JSON.stringify(data.sounds || []).length;
+            const tilesetsSize = JSON.stringify(data.tilesets || []).length;
+            const propsSize = JSON.stringify(data.props || []).length;
+            const animPropsSize = JSON.stringify(data.animatedProps || []).length;
+            const npcsSize = JSON.stringify(data.npcs || []).length;
+            const mapSize = JSON.stringify(data.layers || []).length;
+
+            alert('Project Size: ' + totalMB + 'MB\n' +
+                'Browser Storage: ' + quotaInfo + '\n\n' +
+                'Breakdown:\n' +
+                '- Sounds: ' + (soundsSize/1000000).toFixed(2) + 'MB\n' +
+                '- Tilesets: ' + (tilesetsSize/1000000).toFixed(2) + 'MB\n' +
+                '- Props: ' + (propsSize/1000000).toFixed(2) + 'MB\n' +
+                '- Animated Props: ' + (animPropsSize/1000000).toFixed(2) + 'MB\n' +
+                '- NPCs: ' + (npcsSize/1000000).toFixed(2) + 'MB\n' +
+                '- Map Data: ' + (mapSize/1000000).toFixed(2) + 'MB');
+        }
+
+        // Initialize IndexedDB on page load
+        initProjectDB().catch(err => console.warn('IndexedDB init failed, will use localStorage:', err));
+
         // ===== SAVE/LOAD =====
-        function saveProject() {
+        async function saveProject() {
             // Count tiles in first layer for debugging
             let tileCount = 0;
             if (layers[0]) {
@@ -6822,21 +6927,22 @@
             };
             console.log('Saving playerPreviewPos:', playerPreviewPos);
             try {
-                localStorage.setItem('worldBuilderProject', JSON.stringify(data));
-                console.log('Project saved to localStorage');
+                // Try IndexedDB first (much larger storage)
+                await saveProjectToDB(data);
                 alert('Saved! Player spawn: (' + playerPreviewPos.x + ', ' + playerPreviewPos.y + ')');
             } catch (e) {
-                if (e.name === 'QuotaExceededError') {
-                    console.warn('localStorage quota exceeded, project too large');
-                    // Store in sessionStorage for test game (temporary)
-                    try {
-                        sessionStorage.setItem('worldBuilderProject', JSON.stringify(data));
-                        alert('Project too large for permanent save! Using temporary storage.\nUse "Download" to save to file.');
-                    } catch (e2) {
+                console.warn('IndexedDB save failed, trying localStorage:', e);
+                // Fallback to localStorage for older browsers
+                try {
+                    localStorage.setItem('worldBuilderProject', JSON.stringify(data));
+                    console.log('Project saved to localStorage (fallback)');
+                    alert('Saved! Player spawn: (' + playerPreviewPos.x + ', ' + playerPreviewPos.y + ')');
+                } catch (e2) {
+                    if (e2.name === 'QuotaExceededError') {
                         alert('Project too large to save! Use "Download" to save to a file.');
+                    } else {
+                        throw e2;
                     }
-                } else {
-                    throw e;
                 }
             }
             return data; // Return for file download
@@ -6948,23 +7054,23 @@
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
-                    // Save to storage so Test Map works
+                    // Save to IndexedDB so Test Map works
                     try {
-                        localStorage.setItem('worldBuilderProject', JSON.stringify(data));
-                    } catch (storageErr) {
-                        // localStorage full, use sessionStorage
-                        console.warn('localStorage full, using sessionStorage');
+                        await saveProjectToDB(data);
+                        console.log('Uploaded project saved to IndexedDB');
+                    } catch (dbErr) {
+                        console.warn('IndexedDB save failed, trying localStorage:', dbErr);
                         try {
-                            sessionStorage.setItem('worldBuilderProject', JSON.stringify(data));
-                        } catch (e2) {
-                            console.warn('sessionStorage also full');
+                            localStorage.setItem('worldBuilderProject', JSON.stringify(data));
+                        } catch (storageErr) {
+                            console.warn('localStorage also full, project loaded but not persisted');
                         }
                     }
                     // Load into editor
-                    loadProject(data);
+                    await loadProject(data);
                 } catch (err) {
                     alert('Error loading file: ' + err.message);
                 }
@@ -6975,21 +7081,47 @@
             event.target.value = '';
         }
 
-        function loadProject(projectData) {
-            // If no data passed, load from localStorage
+        async function loadProject(projectData) {
+            // If no data passed, load from IndexedDB (or migrate from localStorage)
             let p;
             if (projectData) {
                 p = projectData;
             } else {
-                const data = localStorage.getItem('worldBuilderProject');
-                if (!data) {
-                    alert('No saved project found in browser storage. Use "Load File" to load from a downloaded file.');
-                    return;
-                }
+                // Try IndexedDB first
                 try {
-                    p = JSON.parse(data);
+                    const dbData = await loadProjectFromDB();
+                    if (dbData) {
+                        p = dbData;
+                        console.log('Loaded project from IndexedDB');
+                    }
                 } catch (err) {
-                    alert('Error parsing saved data: ' + err.message);
+                    console.warn('IndexedDB load failed:', err);
+                }
+
+                // If no IndexedDB data, check localStorage for migration
+                if (!p) {
+                    const legacyData = localStorage.getItem('worldBuilderProject');
+                    if (legacyData) {
+                        try {
+                            p = JSON.parse(legacyData);
+                            console.log('Loaded project from localStorage, migrating to IndexedDB...');
+                            // Migrate to IndexedDB
+                            try {
+                                await saveProjectToDB(p);
+                                localStorage.removeItem('worldBuilderProject');
+                                console.log('Migration complete, localStorage cleared');
+                            } catch (migErr) {
+                                console.warn('Migration to IndexedDB failed:', migErr);
+                            }
+                        } catch (parseErr) {
+                            alert('Error parsing saved data: ' + parseErr.message);
+                            return;
+                        }
+                    }
+                }
+
+                if (!p) {
+                    alert('No saved project found in browser storage. Use "Load File" to load from a downloaded file.');
                     return;
                 }
             }
@@ -7307,7 +7439,6 @@
         }
 
         // ===== TEST MAP =====
-        let testChannel = null; // BroadcastChannel for isolated tab communication
         let testLogs = []; // Logs saved to localStorage for crash recovery
 
         function logTestEvent(msg, type = 'info') {
@@ -7347,7 +7478,7 @@
 
             logTestEvent('Mobile: ' + isMobile + ', Sounds: ' + (projectDataForTest.sounds?.length || 0));
 
-            // On mobile, strip sound data - will stream via BroadcastChannel
+            // On mobile, strip sound data - will stream via postMessage
             let soundsToStream = [];
             if (isMobile && projectDataForTest.sounds && projectDataForTest.sounds.length > 0) {
                 soundsToStream = projectDataForTest.sounds.map(s => ({ ...s }));
@@ -7363,24 +7494,22 @@
             const sizeMB = (dataSize / 1000000).toFixed(1);
             logTestEvent('Project size: ' + sizeMB + 'MB');
 
-            // Setup BroadcastChannel for isolated communication
-            if (testChannel) testChannel.close();
-            testChannel = new BroadcastChannel('test-game-channel');
-            testChannel.onmessage = (e) => {
+            // Setup message listener for test game communication
+            window.testGameData = { projectDataJSON, soundsToStream };
+            window.onmessage = (e) => {
                 if (e.data.type === 'log') {
                     logTestEvent('[Game] ' + e.data.msg, e.data.level || 'info');
                 } else if (e.data.type === 'ready') {
                     logTestEvent('Test game ready, sending data...');
-                    // Send project data
-                    testChannel.postMessage({ type: 'project-data', data: projectDataJSON });
+                    e.source.postMessage({ type: 'project-data', data: projectDataJSON }, '*');
                     // Stream sounds with delay
                     if (soundsToStream.length > 0) {
-                        streamSounds(soundsToStream);
+                        streamSoundsToWindow(e.source, soundsToStream);
                     }
                 }
             };
 
-            logTestEvent('Opening test window with noopener...');
+            logTestEvent('Opening test window...');
 
             // Create minimal loader HTML
             const loaderHTML = `
@@ -7719,29 +7848,36 @@
 
         showLoading(0, 1);
 
-        // Load project data - either embedded (desktop) or via BroadcastChannel (mobile)
+        // Load project data via postMessage from opener window
         let projectData = null;
-        const USE_BROADCAST = true; // Set by builder based on platform
 
-        // Mobile: wait for data via BroadcastChannel (process isolated)
-        console.log('Waiting for project data via BroadcastChannel...');
-        const channel = new BroadcastChannel('test-game-channel');
-        channel.postMessage({ type: 'ready' });
-        channel.onmessage = function(e) {
+        // Wait for data from builder via postMessage
+        console.log('Waiting for project data from builder...');
+        window.onmessage = function(e) {
             if (e.data.type === 'project-data') {
-                console.log('Received project data via BroadcastChannel');
+                console.log('Received project data');
                 projectData = JSON.parse(e.data.data);
-                channel.postMessage({ type: 'log', msg: 'Project data received, size: ' + e.data.data.length });
+                if (window.opener) {
+                    window.opener.postMessage({ type: 'log', msg: 'Project data received, size: ' + e.data.data.length }, '*');
+                }
                 initGame();
             } else if (e.data.type === 'sound-data') {
                 const { index, data, name } = e.data;
                 if (projectData && projectData.sounds && projectData.sounds[index]) {
                     projectData.sounds[index].data = data;
                     console.log('Received sound', index, name);
-                    channel.postMessage({ type: 'log', msg: 'Sound received: ' + name });
+                    if (window.opener) {
+                        window.opener.postMessage({ type: 'log', msg: 'Sound received: ' + name }, '*');
+                    }
                 }
             }
         };
+        // Signal ready to builder
+        if (window.opener) {
+            window.opener.postMessage({ type: 'ready' }, '*');
+        } else {
+            console.error('No opener window found!');
+        }
 
         function initGame() {
         console.log('Initializing game with project data:', projectData);
@@ -10130,36 +10266,39 @@
 </html>
             `;
 
-            // Open with blob URL + noopener for process isolation (prevents builder crash if test crashes)
-            const blob = new Blob([loaderHTML], { type: 'text/html' });
-            const blobURL = URL.createObjectURL(blob);
-            logTestEvent('Opening blob URL with noopener...');
-            window.open(blobURL, '_blank', 'noopener,noreferrer');
-
-            // Store sounds for streaming function
-            window._soundsToStream = soundsToStream;
+            // Open test game window and write HTML directly
+            // Data is streamed via postMessage after the page loads (prevents iPad memory crash)
+            const testWindow = window.open('', '_blank');
+            if (testWindow) {
+                testWindow.document.write(loaderHTML);
+                testWindow.document.close();
+                logTestEvent('Test window opened');
+            } else {
+                logTestEvent('Failed to open test window - popup blocked?', 'error');
+                alert('Could not open test window. Please allow popups for this site.');
+            }
         }
 
-        // Stream sounds via BroadcastChannel (called when test game signals ready)
-        function streamSounds(sounds) {
+        // Stream sounds via postMessage (called when test game signals ready)
+        function streamSoundsToWindow(targetWindow, sounds) {
             logTestEvent('Starting to stream ' + sounds.length + ' sounds...');
             let index = 0;
 
             function sendNext() {
                 if (index >= sounds.length) {
                     logTestEvent('All sounds streamed');
-                    testChannel.postMessage({ type: 'sounds-complete' });
+                    targetWindow.postMessage({ type: 'sounds-complete' }, '*');
                     return;
                 }
 
                 const sound = sounds[index];
                 logTestEvent('Streaming sound ' + (index + 1) + '/' + sounds.length + ': ' + sound.name);
-                testChannel.postMessage({
+                targetWindow.postMessage({
                     type: 'sound-data',
                     index: index,
                     data: sound.data,
                     name: sound.name
-                });
+                }, '*');
 
                 index++;
                 // Delay between sounds to let iPad breathe
