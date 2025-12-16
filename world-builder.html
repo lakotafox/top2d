@@ -96,7 +96,8 @@
         .panel {
             background: #2a2a4e;
             padding: 15px;
-            overflow-y: auto;
+            overflow-y: scroll;
+            -webkit-overflow-scrolling: touch;
         }
 
         .left-panel { width: 320px; }
@@ -119,7 +120,8 @@
 
         .map-viewport {
             flex: 1;
-            overflow: auto;
+            overflow: scroll;
+            -webkit-overflow-scrolling: touch;
             background: #111;
             padding: 40px;
             position: relative;
@@ -221,7 +223,9 @@
             background: #111;
             padding: 5px;
             border-radius: 5px;
-            overflow: auto;
+            overflow-y: scroll;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
             max-height: 300px;
         }
 
@@ -544,7 +548,10 @@
             .sidebar { width: 280px; }
             .mode-buttons button { padding: 10px 15px; font-size: 13px; }
             #mapCanvas { touch-action: none; }
-            #paintTilesetCanvas { touch-action: none; }
+            #paintTilesetCanvas { touch-action: manipulation; }
+            .tileset-container { touch-action: pan-y; }
+            .map-viewport { touch-action: pan-x pan-y; }
+            .panel { touch-action: pan-y; }
             .mode-tabs-header { display: flex; }
             .mode-tabs { display: none; }
             .mode-tabs.expanded { display: flex; }
@@ -4373,6 +4380,36 @@
             grabbing = false;
         });
 
+        // Touch support for grab tool (iPad/mobile)
+        mapCanvas.addEventListener('touchstart', (e) => {
+            if (grabToolActive && e.touches.length === 1) {
+                grabbing = true;
+                grabStartX = e.touches[0].clientX;
+                grabStartY = e.touches[0].clientY;
+                grabScrollX = mapViewport.scrollLeft;
+                grabScrollY = mapViewport.scrollTop;
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        mapCanvas.addEventListener('touchmove', (e) => {
+            if (grabbing && e.touches.length === 1) {
+                const dx = e.touches[0].clientX - grabStartX;
+                const dy = e.touches[0].clientY - grabStartY;
+                mapViewport.scrollLeft = grabScrollX - dx;
+                mapViewport.scrollTop = grabScrollY - dy;
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        mapCanvas.addEventListener('touchend', () => {
+            grabbing = false;
+        });
+
+        mapCanvas.addEventListener('touchcancel', () => {
+            grabbing = false;
+        });
+
         // ===== EXPAND MAP =====
         function expandMap(direction) {
             const expandAmount = 5; // Add 5 rows/cols at a time
@@ -7183,14 +7220,27 @@
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        // Show loading message
+        // Show loading message with percentage
         function showLoading(current, total) {
             ctx.fillStyle = '#111';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#4af';
             ctx.font = '24px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('Loading... ' + current + '/' + total, canvas.width / 2, canvas.height / 2);
+            const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+            ctx.fillText('Loading... ' + current + '/' + total + ' (' + percent + '%)', canvas.width / 2, canvas.height / 2);
+
+            // Draw progress bar
+            const barWidth = 300;
+            const barHeight = 20;
+            const barX = (canvas.width - barWidth) / 2;
+            const barY = canvas.height / 2 + 30;
+            ctx.fillStyle = '#333';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+            ctx.fillStyle = '#4af';
+            ctx.fillRect(barX, barY, barWidth * (percent / 100), barHeight);
+            ctx.strokeStyle = '#555';
+            ctx.strokeRect(barX, barY, barWidth, barHeight);
         }
         showLoading(0, 1);
 
@@ -7290,7 +7340,7 @@
             gameLoop();
         }
 
-        // Fallback timeout - start game after 5 seconds even if some images failed
+        // Fallback timeout - start game after 2 minutes even if some images failed (large projects need more time on iPad)
         setTimeout(() => {
             if (!gameStarted) {
                 console.warn('Timeout reached, starting game with', imagesLoaded, '/', imagesToLoad, 'images loaded');
@@ -7298,7 +7348,7 @@
                 findStartPos();
                 gameLoop();
             }
-        }, 5000);
+        }, 120000);
 
         // Load all prop images
         if (propsData.length > 0) {
