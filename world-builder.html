@@ -7247,6 +7247,21 @@
             const projectDataForTest = getProjectData();
             const projectDataJSON = JSON.stringify(projectDataForTest);
 
+            // Check project size - warn user on mobile if large
+            const dataSize = projectDataJSON.length;
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            if (dataSize > 30000000 && isMobile) { // 30MB threshold for mobile
+                const sizeMB = (dataSize / 1000000).toFixed(1);
+                if (!confirm('Project size is ' + sizeMB + 'MB. Large projects may crash on mobile devices. Continue anyway?')) {
+                    return;
+                }
+            } else if (dataSize > 80000000) { // 80MB for desktop
+                const sizeMB = (dataSize / 1000000).toFixed(1);
+                if (!confirm('Project size is ' + sizeMB + 'MB. Very large projects may be slow. Continue?')) {
+                    return;
+                }
+            }
+
             // Close existing test window if any, then open fresh (fullscreen)
             const testWindow = window.open('about:blank', 'MapTest', 'width=' + screen.width + ',height=' + screen.height);
             testWindow.document.open();
@@ -8050,6 +8065,7 @@
         // Audio context for playback
         let audioContext = null;
         let soundBuffers = {}; // soundIndex -> AudioBuffer
+        let soundsDecoding = {}; // Track sounds currently being decoded
 
         // Walk sound timing
         let lastWalkSoundTime = 0;
@@ -8061,50 +8077,79 @@
         let showSounds = false;
         let showLayers = false; // L key to toggle layer debug
 
-        // Initialize audio context on first user interaction
+        // Initialize audio context on first user interaction (LAZY - don't decode all sounds)
         function initAudio() {
             if (audioContext) return;
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            console.log('Audio context initialized');
-            console.log('Sounds to load:', soundsData.length);
+            console.log('Audio context initialized (lazy mode - sounds decode on first play)');
+            console.log('Sounds available:', soundsData.length);
             console.log('Tile sounds:', Object.keys(tileSoundsData).length);
             console.log('Player sounds:', playerSoundsData);
-
-            // Load all sounds into buffers
-            soundsData.forEach((sound, idx) => {
-                if (sound && sound.data) {
-                    // Decode base64 audio data
-                    const base64 = sound.data.split(',')[1];
-                    const binary = atob(base64);
-                    const bytes = new Uint8Array(binary.length);
-                    for (let i = 0; i < binary.length; i++) {
-                        bytes[i] = binary.charCodeAt(i);
-                    }
-                    // Create a copy of the buffer (decodeAudioData detaches the original)
-                    const audioBuffer = bytes.buffer.slice(0);
-                    audioContext.decodeAudioData(audioBuffer, (buffer) => {
-                        soundBuffers[idx] = buffer;
-                        console.log('Sound', idx, sound.name, 'loaded successfully');
-                    }, (err) => {
-                        console.error('Failed to decode sound', idx, err);
-                    });
-                }
-            });
         }
 
-        // Play a sound with optional pitch variation
+        // Decode a single sound on demand (lazy loading)
+        function decodeSound(idx, callback) {
+            const sound = soundsData[idx];
+            if (!sound || !sound.data) {
+                console.warn('No sound data for index', idx);
+                return;
+            }
+            if (soundsDecoding[idx]) {
+                // Already decoding, wait for it
+                return;
+            }
+            soundsDecoding[idx] = true;
+
+            try {
+                const base64 = sound.data.split(',')[1];
+                const binary = atob(base64);
+                // Optimized: Use Uint8Array.from instead of manual loop (less memory)
+                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                const audioBuffer = bytes.buffer.slice(0);
+
+                audioContext.decodeAudioData(audioBuffer, (buffer) => {
+                    soundBuffers[idx] = buffer;
+                    soundsDecoding[idx] = false;
+                    console.log('Sound', idx, sound.name, 'decoded on demand');
+                    if (callback) callback(buffer);
+                }, (err) => {
+                    console.error('Failed to decode sound', idx, err);
+                    soundsDecoding[idx] = false;
+                });
+            } catch (e) {
+                console.error('Error decoding sound', idx, ':', e.message);
+                soundsDecoding[idx] = false;
+            }
+        }
+
+        // Play a sound with optional pitch variation (lazy decode on first play)
         function playSound(soundIndex, volume = 1, pitchVariation = 0) {
             if (!audioContext) {
                 console.log('playSound: No audio context');
                 return;
             }
-            if (!soundBuffers[soundIndex]) {
-                console.log('playSound: No buffer for sound', soundIndex);
+            if (soundIndex < 0 || soundIndex >= soundsData.length) {
                 return;
             }
 
+            // Lazy decode: if buffer not ready, decode it first then play
+            if (!soundBuffers[soundIndex]) {
+                decodeSound(soundIndex, (buffer) => {
+                    // Play after decode completes
+                    playSoundBuffer(buffer, volume, pitchVariation);
+                });
+                return;
+            }
+
+            return playSoundBuffer(soundBuffers[soundIndex], volume, pitchVariation);
+        }
+
+        // Internal: play an already-decoded buffer
+        function playSoundBuffer(buffer, volume, pitchVariation) {
+            if (!buffer) return;
+
             const source = audioContext.createBufferSource();
-            source.buffer = soundBuffers[soundIndex];
+            source.buffer = buffer;
 
             // Apply pitch variation
             if (pitchVariation > 0) {
@@ -8133,8 +8178,13 @@
             Object.keys(tileSoundsData).forEach(key => {
                 const [sx, sy] = key.split(',').map(Number);
                 const ts = tileSoundsData[key];
-                const soundBuffer = soundBuffers[ts.soundIndex];
+                let soundBuffer = soundBuffers[ts.soundIndex];
 
+                // Lazy decode: if not loaded yet, trigger decode (will be available next frame)
+                if (!soundBuffer && ts.soundIndex >= 0 && ts.soundIndex < soundsData.length) {
+                    decodeSound(ts.soundIndex);
+                    return;
+                }
                 if (!soundBuffer) return;
 
                 // Calculate distance from player (in tiles)
