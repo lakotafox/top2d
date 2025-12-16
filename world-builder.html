@@ -7721,34 +7721,27 @@
 
         // Load project data - either embedded (desktop) or via BroadcastChannel (mobile)
         let projectData = null;
-        const USE_BROADCAST = ${isMobile ? 'true' : 'false'};
+        const USE_BROADCAST = true; // Set by builder based on platform
 
-        if (USE_BROADCAST) {
-            // Mobile: wait for data via BroadcastChannel (process isolated)
-            console.log('Waiting for project data via BroadcastChannel...');
-            const channel = new BroadcastChannel('test-game-channel');
-            channel.postMessage({ type: 'ready' });
-            channel.onmessage = function(e) {
-                if (e.data.type === 'project-data') {
-                    console.log('Received project data via BroadcastChannel');
-                    projectData = JSON.parse(e.data.data);
-                    channel.postMessage({ type: 'log', msg: 'Project data received' });
-                    initGame();
-                } else if (e.data.type === 'sound-data') {
-                    const { index, data, name } = e.data;
-                    if (projectData && projectData.sounds && projectData.sounds[index]) {
-                        projectData.sounds[index].data = data;
-                        console.log('Received sound', index, name);
-                        channel.postMessage({ type: 'log', msg: 'Sound received: ' + name });
-                    }
+        // Mobile: wait for data via BroadcastChannel (process isolated)
+        console.log('Waiting for project data via BroadcastChannel...');
+        const channel = new BroadcastChannel('test-game-channel');
+        channel.postMessage({ type: 'ready' });
+        channel.onmessage = function(e) {
+            if (e.data.type === 'project-data') {
+                console.log('Received project data via BroadcastChannel');
+                projectData = JSON.parse(e.data.data);
+                channel.postMessage({ type: 'log', msg: 'Project data received, size: ' + e.data.data.length });
+                initGame();
+            } else if (e.data.type === 'sound-data') {
+                const { index, data, name } = e.data;
+                if (projectData && projectData.sounds && projectData.sounds[index]) {
+                    projectData.sounds[index].data = data;
+                    console.log('Received sound', index, name);
+                    channel.postMessage({ type: 'log', msg: 'Sound received: ' + name });
                 }
-            };
-        } else {
-            // Desktop: use embedded data
-            projectData = ${projectDataJSON};
-            console.log('Loaded embedded project data');
-            initGame();
-        }
+            }
+        };
 
         function initGame() {
         console.log('Initializing game with project data:', projectData);
