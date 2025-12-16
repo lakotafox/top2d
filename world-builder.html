@@ -661,7 +661,7 @@
         <div class="panel left-panel" id="leftPanel">
             <div class="mode-tabs-header">
                 <button id="menuToggle" class="hamburger-btn" onclick="toggleModeMenu()">☰</button>
-                <span id="currentModeLabel">Tiles</span>
+                <span id="currentModeLabel">Tools</span>
             </div>
             <div class="mode-tabs" id="modeTabs">
                 <button id="tileMode" class="active" onclick="setMode('tile')">Tiles</button>
@@ -3535,6 +3535,43 @@
             const x = Math.floor((touch.clientX - rect.left) / tileSize);
             const y = Math.floor((touch.clientY - rect.top) / tileSize);
 
+            // Set spawn mode - touch to place player spawn
+            if (setSpawnMode) {
+                playerPreviewPos.x = x;
+                playerPreviewPos.y = y;
+                playerPreviewVisible = true;
+                toggleSetSpawnMode();
+                renderMap();
+                return;
+            }
+
+            // Copy mode - touch to start selection
+            if (copyMode) {
+                copyStart = { x, y };
+                copyEnd = { x, y };
+                renderMap();
+                return;
+            }
+
+            // Animated prop mode
+            if (mode === 'animProp' && currentAnimPropIndex >= 0) {
+                placeAnimPropAt(x, y);
+                return;
+            }
+
+            // Sound mode
+            if (mode === 'sound' && soundAttachMode === 'tile') {
+                const key = `${x},${y}`;
+                if (tileSounds[key]) {
+                    selectTileSound(key);
+                } else if (!selectedTileSoundKey) {
+                    placeTileSound(x, y);
+                }
+                renderMap();
+                return;
+            }
+
+            // Default: paint tiles
             if (eraseMode) {
                 erasing = true;
             } else {
@@ -3553,6 +3590,13 @@
             const x = Math.floor((touch.clientX - rect.left) / tileSize);
             const y = Math.floor((touch.clientY - rect.top) / tileSize);
 
+            // Copy mode - update selection
+            if (copyMode && copyStart) {
+                copyEnd = { x, y };
+                renderMap();
+                return;
+            }
+
             if (hoverMapPos?.x !== x || hoverMapPos?.y !== y) {
                 hoverMapPos = { x, y };
                 renderMap();
@@ -3564,6 +3608,12 @@
         }, { passive: false });
 
         mapCanvas.addEventListener('touchend', (e) => {
+            // Copy mode - finish selection
+            if (copyMode && copyStart && copyEnd) {
+                finishCopyFromMap();
+                return;
+            }
+
             if (painting || erasing) {
                 commitStroke();
             }
@@ -7432,7 +7482,7 @@
         };
 
         logToScreen('Debug log initialized');
-    </script>
+    <\/script>
     <script>
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
