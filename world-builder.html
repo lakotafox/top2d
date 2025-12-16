@@ -7052,11 +7052,101 @@
             width: 100%;
         }
         #debugPanel button:hover { background: #5a9c69; }
+
+        /* Touch controls */
+        #touchControls {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            display: none;
+        }
+        @media (pointer: coarse), (max-width: 800px) {
+            #touchControls { display: block; }
+        }
+        .touch-dpad {
+            position: relative;
+            width: 140px;
+            height: 140px;
+        }
+        .dpad-btn {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: rgba(255,255,255,0.3);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 10px;
+            font-size: 20px;
+            color: white;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        .dpad-btn:active { background: rgba(255,255,255,0.6); }
+        .dpad-up { top: 0; left: 45px; }
+        .dpad-down { bottom: 0; left: 45px; }
+        .dpad-left { top: 45px; left: 0; }
+        .dpad-right { top: 45px; right: 0; }
+        .touch-actions {
+            position: fixed;
+            bottom: 40px;
+            right: 20px;
+        }
+        .action-btn {
+            width: 70px;
+            height: 70px;
+            background: rgba(255,100,100,0.4);
+            border: 2px solid rgba(255,100,100,0.6);
+            border-radius: 50%;
+            font-size: 30px;
+            color: white;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        .action-btn:active { background: rgba(255,100,100,0.7); }
+
+        /* Debug buttons */
+        #debugButtons {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: flex;
+            gap: 5px;
+        }
+        #debugButtons button {
+            width: 40px;
+            height: 40px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #666;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #debugButtons button:hover { background: rgba(100,100,100,0.7); }
+        #debugButtons button.active { background: rgba(74,175,89,0.7); border-color: #4af; }
     </style>
 </head>
 <body>
     <canvas id="game"></canvas>
-    <div id="info">Arrows to move | SPACE attack | C collision | S sounds | P debug | ESC close</div>
+    <div id="touchControls">
+        <div class="touch-dpad">
+            <button class="dpad-btn dpad-up" data-key="ArrowUp">▲</button>
+            <button class="dpad-btn dpad-left" data-key="ArrowLeft">◀</button>
+            <button class="dpad-btn dpad-right" data-key="ArrowRight">▶</button>
+            <button class="dpad-btn dpad-down" data-key="ArrowDown">▼</button>
+        </div>
+        <div class="touch-actions">
+            <button class="action-btn" id="attackBtn">⚔</button>
+        </div>
+    </div>
+    <div id="debugButtons">
+        <button onclick="toggleCollision()">C</button>
+        <button onclick="toggleSoundDebug()">S</button>
+        <button onclick="toggleDebugPanel()">P</button>
+        <button onclick="closeGame()">✕</button>
+    </div>
+    <div id="info">Arrows/Dpad to move | Tap ⚔ or SPACE to attack</div>
     <div id="debugPanel">
         <h3>Player Settings</h3>
         <label>Scale: <span class="value" id="scaleVal">1.7</span></label>
@@ -8040,6 +8130,61 @@
         });
         document.addEventListener('keyup', e => keys[e.key] = false);
 
+        // Touch controls for D-pad
+        document.querySelectorAll('.dpad-btn').forEach(btn => {
+            const key = btn.dataset.key;
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys[key] = true;
+            }, { passive: false });
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                keys[key] = false;
+            });
+            btn.addEventListener('mousedown', () => keys[key] = true);
+            btn.addEventListener('mouseup', () => keys[key] = false);
+            btn.addEventListener('mouseleave', () => keys[key] = false);
+        });
+
+        // Attack button
+        document.getElementById('attackBtn').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!player.attacking) {
+                player.attacking = true;
+                player.attackTimer = 18;
+                if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
+                    playSound(playerSoundsData.attack.soundIndex, playerSoundsData.attack.volume || 0.7, 0);
+                }
+            }
+        }, { passive: false });
+        document.getElementById('attackBtn').addEventListener('click', () => {
+            if (!player.attacking) {
+                player.attacking = true;
+                player.attackTimer = 18;
+                if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
+                    playSound(playerSoundsData.attack.soundIndex, playerSoundsData.attack.volume || 0.7, 0);
+                }
+            }
+        });
+
+        // Debug button functions
+        function toggleCollision() {
+            showCollision = !showCollision;
+            document.querySelectorAll('#debugButtons button')[0].classList.toggle('active', showCollision);
+        }
+        function toggleSoundDebug() {
+            showSounds = !showSounds;
+            document.querySelectorAll('#debugButtons button')[1].classList.toggle('active', showSounds);
+        }
+        function toggleDebugPanel() {
+            const panel = document.getElementById('debugPanel');
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+            document.querySelectorAll('#debugButtons button')[2].classList.toggle('active', panel.style.display === 'block');
+        }
+        function closeGame() {
+            window.close();
+        }
+
         // Pixel-level collision check on ALL layers
         function checkCollision(x, y, w, h) {
             const tileSize = gridSize * TILE_SCALE;
@@ -8313,21 +8458,38 @@
                     const py = sy * tileSize - camY + tileSize / 2;
                     const radius = (ts.radius || 3) * tileSize;
 
-                    // Draw radius circle
+                    // Draw radius circle - filled purple gradient for visibility
                     const isPlaying = ambientSounds[key]?.playing;
-                    ctx.strokeStyle = isPlaying ? 'rgba(0, 255, 0, 0.6)' : 'rgba(255, 165, 0, 0.5)';
-                    ctx.lineWidth = 2;
-                    ctx.setLineDash([5, 5]);
+
+                    // Filled gradient circle
+                    const gradient = ctx.createRadialGradient(px, py, 0, px, py, radius);
+                    if (isPlaying) {
+                        gradient.addColorStop(0, 'rgba(100, 255, 100, 0.3)');
+                        gradient.addColorStop(0.7, 'rgba(100, 255, 100, 0.15)');
+                        gradient.addColorStop(1, 'rgba(100, 255, 100, 0)');
+                    } else {
+                        gradient.addColorStop(0, 'rgba(180, 100, 255, 0.3)');
+                        gradient.addColorStop(0.7, 'rgba(180, 100, 255, 0.15)');
+                        gradient.addColorStop(1, 'rgba(180, 100, 255, 0)');
+                    }
+                    ctx.fillStyle = gradient;
                     ctx.beginPath();
                     ctx.arc(px, py, radius, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Outer ring
+                    ctx.strokeStyle = isPlaying ? 'rgba(100, 255, 100, 0.8)' : 'rgba(180, 100, 255, 0.8)';
+                    ctx.lineWidth = 3;
                     ctx.stroke();
-                    ctx.setLineDash([]);
 
                     // Draw center marker
-                    ctx.fillStyle = isPlaying ? '#0f0' : '#ffa500';
+                    ctx.fillStyle = isPlaying ? '#0f0' : '#b464ff';
                     ctx.beginPath();
-                    ctx.arc(px, py, tileSize / 4, 0, Math.PI * 2);
+                    ctx.arc(px, py, tileSize / 3, 0, Math.PI * 2);
                     ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
 
                     // Label
                     ctx.fillStyle = '#fff';
