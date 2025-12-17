@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Tavern Test</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        body {
+            background: #111;
+            overflow: hidden;
+            font-family: monospace;
+        }
+        canvas { display: block; }
+        #info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 5px;
+            max-width: 280px;
+            z-index: 100;
+        }
+        #info h2 { color: #4af; margin-bottom: 10px; }
+        #info p { margin: 5px 0; color: #aaa; font-size: 12px; }
+        #info .controls { margin-top: 15px; border-top: 1px solid #444; padding-top: 10px; }
+        #info label { display: block; margin: 8px 0 4px 0; color: #888; }
+        #info input[type="range"] { width: 100%; }
+        #info .value { color: #4f8; float: right; }
+        #info button {
+            margin-top: 8px;
+            padding: 8px 15px;
+            background: #4a7c59;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        #info button:hover { background: #5a9c69; }
+        #info button.active { background: #c44; }
+        #info button.spawn-btn { background: #c84; }
+        #info button.spawn-btn:hover { background: #ea6; }
+        #info .position-display {
+            background: #1a1a2e;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 11px;
+        }
+        #info .position-display div { margin: 3px 0; }
+        #info .position-display span { color: #4f8; }
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            z-index: 200;
+        }
+        #loading .progress {
+            width: 300px;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+        #loading .bar {
+            height: 100%;
+            background: #4af;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        #crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+            z-index: 50;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.5);
+        }
+        #crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 9px;
+            top: 0;
+        }
+        #crosshair::after {
+            width: 20px;
+            height: 2px;
+            left: 0;
+            top: 9px;
+        }
+        #modeIndicator {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: #4af;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        #spawnMarker {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #0f0;
+            font-size: 48px;
+            pointer-events: none;
+            z-index: 60;
+            text-shadow: 0 0 10px #0f0;
+            display: none;
+        }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="loading">
+        Loading Tavern Model...
+        <div class="progress"><div class="bar" id="loadBar"></div></div>
+        <div id="loadPercent">0%</div>
+    </div>
+
+    <div id="crosshair" style="display:none;"></div>
+    <div id="spawnMarker">+</div>
+
+    <div id="info" style="display:none;">
+        <h2>3D Tavern Test</h2>
+        <p><b>Click canvas</b> - Enter look mode</p>
+        <p><b>ESC</b> - Exit look mode</p>
+        <p><b>WASD</b> - Move horizontal</p>
+        <p><b>Q/E</b> - Move up/down</p>
+        <p><b>Shift</b> - Move faster</p>
+
+        <div class="position-display">
+            <div>Position: <span id="posDisplay">0, 0, 0</span></div>
+            <div>Height (Y): <span id="heightDisplay">1.6</span></div>
+            <div>Looking: <span id="lookDisplay">0, 0</span></div>
+        </div>
+
+        <div class="controls">
+            <label>Move Speed: <span class="value" id="speedVal">5</span></label>
+            <input type="range" id="speedSlider" min="1" max="20" step="0.5" value="5">
+
+            <label>Look Sensitivity: <span class="value" id="sensVal">2</span></label>
+            <input type="range" id="sensSlider" min="0.5" max="5" step="0.1" value="2">
+
+            <button class="spawn-btn" id="setSpawnBtn" onclick="toggleSetSpawn()">Set Spawn Point</button>
+            <div id="spawnInfo" style="color:#888; font-size:11px; margin-top:5px;">
+                Spawn: <span id="spawnDisplay">Not set</span>
+            </div>
+
+            <button onclick="goToSpawn()">Go To Spawn</button>
+            <button onclick="resetCamera()">Reset Camera</button>
+            <button onclick="copySpawnData()">Copy Spawn Data</button>
+
+            <div style="border-top: 1px solid #444; margin-top: 12px; padding-top: 10px;">
+                <label style="color:#f84;">Spraypaint Tool</label>
+                <button id="sprayBtn" onclick="toggleSpray()" style="background:#c44;">Enable Spraypaint</button>
+                <div style="display:flex; gap:5px; margin-top:8px; flex-wrap:wrap;">
+                    <input type="color" id="sprayColor" value="#ff0000" style="width:40px; height:30px; border:none; cursor:pointer;">
+                    <button onclick="setSprayColor('#ff0000')" style="background:#ff0000; width:24px; height:30px; border:1px solid #666; padding:0;"></button>
+                    <button onclick="setSprayColor('#00ff00')" style="background:#00ff00; width:24px; height:30px; border:1px solid #666; padding:0;"></button>
+                    <button onclick="setSprayColor('#0088ff')" style="background:#0088ff; width:24px; height:30px; border:1px solid #666; padding:0;"></button>
+                    <button onclick="setSprayColor('#ffff00')" style="background:#ffff00; width:24px; height:30px; border:1px solid #666; padding:0;"></button>
+                    <button onclick="setSprayColor('#ff00ff')" style="background:#ff00ff; width:24px; height:30px; border:1px solid #666; padding:0;"></button>
+                    <button onclick="setSprayColor('#ffffff')" style="background:#ffffff; width:24px; height:30px; border:1px solid #666; padding:0;"></button>
+                    <button onclick="setSprayColor('#000000')" style="background:#000000; width:24px; height:30px; border:1px solid #666; padding:0;"></button>
+                </div>
+                <div style="margin-top:8px; display:flex; gap:5px; align-items:center;">
+                    <label style="color:#888; font-size:11px;">Shape:</label>
+                    <select id="brushShape" style="padding:3px;">
+                        <option value="circle">Circle</option>
+                        <option value="square">Square</option>
+                    </select>
+                </div>
+                <div style="margin-top:6px;">
+                    <label style="color:#888; font-size:11px;">Width: <span id="brushWidthVal">0.1</span></label>
+                    <input type="range" id="brushWidth" min="0.01" max="2.0" step="0.01" value="0.1" style="width:100%;">
+                </div>
+                <div style="margin-top:4px;">
+                    <label style="color:#888; font-size:11px;">Height: <span id="brushHeightVal">0.1</span></label>
+                    <input type="range" id="brushHeight" min="0.01" max="2.0" step="0.01" value="0.1" style="width:100%;">
+                </div>
+                <div style="font-size:10px; color:#888; margin-top:5px;">
+                    Splats: <span id="splatCount">0</span>
+                    <button onclick="clearSplats()" style="float:right; padding:2px 8px; font-size:10px;">Clear All</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modeIndicator">Click to enable mouse look</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // Settings
+        let moveSpeed = 5;
+        let lookSensitivity = 2;
+
+        // Spawn point
+        let spawnPoint = null;
+        let settingSpawn = false;
+
+        // Spraypaint
+        let sprayEnabled = false;
+        let spraying = false;
+        let splats = [];
+        let lastSprayTime = 0;
+        const sprayInterval = 50; // ms between sprays when holding
+        const raycaster = new THREE.Raycaster();
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+
+        // Camera
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(17.261, 5.684, 23.341);
+
+        // Default spawn rotation
+        let yaw = 7.93;
+        let pitch = -0.33;
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1;
+        document.body.appendChild(renderer.domElement);
+
+        // Mouse look variables
+        let isLooking = false;
+        const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+        // Apply initial rotation
+        euler.set(pitch, yaw, 0);
+        camera.quaternion.setFromEuler(euler);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 5);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // Warm point lights (tavern feel)
+        const warmLight1 = new THREE.PointLight(0xffaa55, 2, 15);
+        warmLight1.position.set(0, 3, 0);
+        scene.add(warmLight1);
+
+        const warmLight2 = new THREE.PointLight(0xff8844, 1.5, 10);
+        warmLight2.position.set(-3, 2, -2);
+        scene.add(warmLight2);
+
+        // Spawn point marker (3D sphere)
+        const spawnMarkerGeom = new THREE.SphereGeometry(0.2, 16, 16);
+        const spawnMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.7 });
+        const spawnMarker3D = new THREE.Mesh(spawnMarkerGeom, spawnMarkerMat);
+        spawnMarker3D.visible = false;
+        scene.add(spawnMarker3D);
+
+        // Spawn direction arrow
+        const arrowHelper = new THREE.ArrowHelper(
+            new THREE.Vector3(0, 0, -1),
+            new THREE.Vector3(0, 0, 0),
+            1,
+            0x00ff00
+        );
+        arrowHelper.visible = false;
+        scene.add(arrowHelper);
+
+        // Store initial camera position (default spawn)
+        let initialCameraPos = new THREE.Vector3(17.261, 5.684, 23.341);
+        let initialYaw = 7.93;
+        let initialPitch = -0.33;
+
+        // Load the tavern model
+        const loader = new GLTFLoader();
+
+        loader.load(
+            'assets3d/tavern.glb',
+            function(gltf) {
+                const model = gltf.scene;
+
+                // Get model bounds
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+
+                // Center model horizontally but keep on ground
+                model.position.x = -center.x;
+                model.position.z = -center.z;
+                model.position.y = -box.min.y; // Put floor at y=0
+
+                // Scale if too big
+                const maxDim = Math.max(size.x, size.y, size.z);
+                if (maxDim > 100) {
+                    const scale = 20 / maxDim;
+                    model.scale.setScalar(scale);
+                }
+
+                // Enable shadows
+                model.traverse(function(child) {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+
+                scene.add(model);
+
+                // Hide loading, show info
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('info').style.display = 'block';
+
+                console.log('Tavern loaded!', 'Size:', size);
+            },
+            function(progress) {
+                if (progress.total > 0) {
+                    const percent = Math.round((progress.loaded / progress.total) * 100);
+                    document.getElementById('loadBar').style.width = percent + '%';
+                    document.getElementById('loadPercent').textContent = percent + '%';
+                }
+            },
+            function(error) {
+                console.error('Error loading tavern:', error);
+                document.getElementById('loading').innerHTML =
+                    '<div style="color:#f66;">Error loading model!</div>' +
+                    '<div style="color:#888;font-size:14px;margin-top:10px;">' + error.message + '</div>';
+            }
+        );
+
+        // Pointer lock for mouse look
+        renderer.domElement.addEventListener('click', () => {
+            if (settingSpawn) {
+                // Set spawn point at current position
+                spawnPoint = {
+                    position: camera.position.clone(),
+                    yaw: yaw,
+                    pitch: pitch
+                };
+
+                // Update 3D marker
+                spawnMarker3D.position.copy(spawnPoint.position);
+                spawnMarker3D.visible = true;
+
+                // Update arrow direction
+                const dir = new THREE.Vector3(0, 0, -1);
+                dir.applyEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+                arrowHelper.position.copy(spawnPoint.position);
+                arrowHelper.setDirection(dir);
+                arrowHelper.visible = true;
+
+                // Update UI
+                const pos = spawnPoint.position;
+                document.getElementById('spawnDisplay').textContent =
+                    `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`;
+
+                // Exit spawn setting mode
+                settingSpawn = false;
+                document.getElementById('setSpawnBtn').classList.remove('active');
+                document.getElementById('setSpawnBtn').textContent = 'Set Spawn Point';
+                document.getElementById('spawnMarker').style.display = 'none';
+                document.getElementById('modeIndicator').textContent = 'Spawn point set! Click to look around';
+
+                return;
+            }
+
+            if (!isLooking) {
+                renderer.domElement.requestPointerLock();
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            isLooking = document.pointerLockElement === renderer.domElement;
+            document.getElementById('crosshair').style.display = isLooking ? 'block' : 'none';
+
+            if (settingSpawn) {
+                document.getElementById('modeIndicator').textContent = 'Move to spawn location, then click to set';
+                document.getElementById('spawnMarker').style.display = 'block';
+            } else {
+                document.getElementById('modeIndicator').textContent = isLooking
+                    ? 'Mouse look enabled (ESC to exit)'
+                    : 'Click to enable mouse look';
+            }
+        });
+
+        // Mouse movement for looking
+        document.addEventListener('mousemove', (e) => {
+            if (!isLooking) return;
+
+            const sensitivity = lookSensitivity * 0.001;
+            yaw -= e.movementX * sensitivity;
+            pitch -= e.movementY * sensitivity;
+
+            // Clamp pitch to prevent flipping
+            pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
+
+            euler.set(pitch, yaw, 0);
+            camera.quaternion.setFromEuler(euler);
+        });
+
+        // Keyboard input
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key === 'Escape') {
+                if (settingSpawn) {
+                    settingSpawn = false;
+                    document.getElementById('setSpawnBtn').classList.remove('active');
+                    document.getElementById('setSpawnBtn').textContent = 'Set Spawn Point';
+                    document.getElementById('spawnMarker').style.display = 'none';
+                }
+                if (isLooking) {
+                    document.exitPointerLock();
+                }
+            }
+        });
+        document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+
+        // Slider controls
+        document.getElementById('speedSlider').addEventListener('input', (e) => {
+            moveSpeed = parseFloat(e.target.value);
+            document.getElementById('speedVal').textContent = moveSpeed;
+        });
+
+        document.getElementById('sensSlider').addEventListener('input', (e) => {
+            lookSensitivity = parseFloat(e.target.value);
+            document.getElementById('sensVal').textContent = lookSensitivity;
+        });
+
+        // Toggle spawn setting mode
+        window.toggleSetSpawn = function() {
+            settingSpawn = !settingSpawn;
+            const btn = document.getElementById('setSpawnBtn');
+
+            if (settingSpawn) {
+                btn.classList.add('active');
+                btn.textContent = 'Click in 3D to Set Spawn';
+                document.getElementById('spawnMarker').style.display = 'block';
+                document.getElementById('modeIndicator').textContent = 'Move to spawn location, then click to set (ESC to cancel)';
+            } else {
+                btn.classList.remove('active');
+                btn.textContent = 'Set Spawn Point';
+                document.getElementById('spawnMarker').style.display = 'none';
+            }
+        };
+
+        // Go to spawn point
+        window.goToSpawn = function() {
+            if (!spawnPoint) {
+                alert('No spawn point set!');
+                return;
+            }
+            camera.position.copy(spawnPoint.position);
+            yaw = spawnPoint.yaw;
+            pitch = spawnPoint.pitch;
+            euler.set(pitch, yaw, 0);
+            camera.quaternion.setFromEuler(euler);
+        };
+
+        // Reset camera
+        window.resetCamera = function() {
+            camera.position.copy(initialCameraPos);
+            yaw = initialYaw;
+            pitch = initialPitch;
+            euler.set(pitch, yaw, 0);
+            camera.quaternion.setFromEuler(euler);
+        };
+
+        // Copy spawn data as JSON
+        window.copySpawnData = function() {
+            if (!spawnPoint) {
+                alert('No spawn point set!');
+                return;
+            }
+            const data = {
+                position: {
+                    x: parseFloat(spawnPoint.position.x.toFixed(3)),
+                    y: parseFloat(spawnPoint.position.y.toFixed(3)),
+                    z: parseFloat(spawnPoint.position.z.toFixed(3))
+                },
+                rotation: {
+                    yaw: parseFloat(spawnPoint.yaw.toFixed(3)),
+                    pitch: parseFloat(spawnPoint.pitch.toFixed(3))
+                }
+            };
+            navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+            alert('Spawn data copied to clipboard!');
+        };
+
+        // Spraypaint functions
+        window.toggleSpray = function() {
+            sprayEnabled = !sprayEnabled;
+            const btn = document.getElementById('sprayBtn');
+            if (sprayEnabled) {
+                btn.style.background = '#4c4';
+                btn.textContent = 'Spraypaint ON (click to spray)';
+                document.getElementById('modeIndicator').textContent = 'Spraypaint mode - hold click to spray';
+            } else {
+                btn.style.background = '#c44';
+                btn.textContent = 'Enable Spraypaint';
+                document.getElementById('modeIndicator').textContent = 'Click to enable mouse look';
+            }
+        };
+
+        window.clearSplats = function() {
+            splats.forEach(splat => scene.remove(splat));
+            splats = [];
+            document.getElementById('splatCount').textContent = '0';
+        };
+
+        window.setSprayColor = function(color) {
+            document.getElementById('sprayColor').value = color;
+        };
+
+        // Brush size slider updates
+        document.getElementById('brushWidth').addEventListener('input', (e) => {
+            document.getElementById('brushWidthVal').textContent = e.target.value;
+        });
+        document.getElementById('brushHeight').addEventListener('input', (e) => {
+            document.getElementById('brushHeightVal').textContent = e.target.value;
+        });
+
+        function createSplat(point, normal, hitObject) {
+            const color = document.getElementById('sprayColor').value;
+            const shape = document.getElementById('brushShape').value;
+            const width = parseFloat(document.getElementById('brushWidth').value);
+            const height = parseFloat(document.getElementById('brushHeight').value);
+
+            // Create splat geometry based on shape
+            let geometry;
+            if (shape === 'square') {
+                geometry = new THREE.PlaneGeometry(width, height);
+            } else {
+                // Circle - use width for radius, height for vertical stretch
+                geometry = new THREE.CircleGeometry(width / 2, 24);
+            }
+
+            const material = new THREE.MeshBasicMaterial({
+                color: color,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.9,
+                depthWrite: false,
+                polygonOffset: true,
+                polygonOffsetFactor: -1
+            });
+
+            const splat = new THREE.Mesh(geometry, material);
+
+            // Transform normal to world space (account for object rotation/scale)
+            const worldNormal = normal.clone();
+            if (hitObject && hitObject.matrixWorld) {
+                const normalMatrix = new THREE.Matrix3().getNormalMatrix(hitObject.matrixWorld);
+                worldNormal.applyMatrix3(normalMatrix).normalize();
+            }
+
+            // Position slightly off surface to prevent z-fighting
+            splat.position.copy(point).addScaledVector(worldNormal, 0.005);
+
+            // Align splat to surface using quaternion rotation
+            const up = new THREE.Vector3(0, 0, 1);
+            const quaternion = new THREE.Quaternion();
+            quaternion.setFromUnitVectors(up, worldNormal);
+            splat.quaternion.copy(quaternion);
+
+            // Add slight random rotation around the normal for variety
+            const randomRotation = new THREE.Quaternion();
+            randomRotation.setFromAxisAngle(worldNormal, Math.random() * Math.PI * 2);
+            splat.quaternion.premultiply(randomRotation);
+
+            // Apply height scaling for circles (makes ovals)
+            if (shape === 'circle') {
+                splat.scale.set(1, height / width, 1);
+            }
+
+            // Random size variation (subtle)
+            const sizeVar = 0.9 + Math.random() * 0.2;
+            splat.scale.multiplyScalar(sizeVar);
+
+            scene.add(splat);
+            splats.push(splat);
+
+            document.getElementById('splatCount').textContent = splats.length;
+        }
+
+        function doSpray() {
+            if (!sprayEnabled || !isLooking) return;
+
+            // Raycast from center of screen
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
+
+            for (const hit of intersects) {
+                // Skip our own splats and markers
+                if (splats.includes(hit.object)) continue;
+                if (hit.object === spawnMarker3D) continue;
+                if (hit.object.parent === arrowHelper) continue;
+
+                // Add some spread for spray effect
+                const spread = 0.05;
+                const offset = new THREE.Vector3(
+                    (Math.random() - 0.5) * spread,
+                    (Math.random() - 0.5) * spread,
+                    (Math.random() - 0.5) * spread
+                );
+
+                createSplat(hit.point.add(offset), hit.face.normal, hit.object);
+                break;
+            }
+        }
+
+        // Spray on mouse down/hold
+        renderer.domElement.addEventListener('mousedown', (e) => {
+            if (sprayEnabled && isLooking && e.button === 0) {
+                spraying = true;
+                doSpray();
+            }
+        });
+
+        renderer.domElement.addEventListener('mouseup', () => {
+            spraying = false;
+        });
+
+        // Animation loop
+        let lastTime = performance.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const delta = (now - lastTime) / 1000;
+            lastTime = now;
+
+            // Movement
+            const speed = moveSpeed * delta * (keys['shift'] ? 2.5 : 1);
+            const direction = new THREE.Vector3();
+
+            if (keys['w']) direction.z -= 1;
+            if (keys['s']) direction.z += 1;
+            if (keys['a']) direction.x -= 1;
+            if (keys['d']) direction.x += 1;
+
+            if (direction.length() > 0) {
+                direction.normalize();
+                direction.applyQuaternion(camera.quaternion);
+                direction.y = 0; // Keep movement horizontal
+                direction.normalize();
+                camera.position.addScaledVector(direction, speed);
+            }
+
+            // Vertical movement (Q/E) - independent of horizontal
+            if (keys['q']) camera.position.y -= speed;
+            if (keys['e']) camera.position.y += speed;
+
+            // Continuous spraying when holding mouse button
+            if (spraying && sprayEnabled && isLooking) {
+                if (now - lastSprayTime > sprayInterval) {
+                    doSpray();
+                    lastSprayTime = now;
+                }
+            }
+
+            // Update position display
+            const pos = camera.position;
+            document.getElementById('posDisplay').textContent =
+                `${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}`;
+            document.getElementById('heightDisplay').textContent = pos.y.toFixed(2);
+            document.getElementById('lookDisplay').textContent =
+                `${(yaw * 180 / Math.PI).toFixed(1)}°, ${(pitch * 180 / Math.PI).toFixed(1)}°`;
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

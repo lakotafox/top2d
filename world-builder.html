@@ -749,6 +749,7 @@
                 <button id="animPropMode" onclick="setMode('animProp')">Animated</button>
                 <button id="soundMode" onclick="setMode('sound')">Sounds</button>
                 <button id="lightingMode" onclick="setMode('lighting')">Lights</button>
+                <button id="triggerMode" onclick="setMode('trigger')">Triggers</button>
             </div>
             <div class="resize-handle" id="sidebarResize"></div>
 
@@ -833,7 +834,10 @@
                     <h3 style="margin-top:0;">Path for: <span id="npcPathName">NPC</span></h3>
 
                     <div style="margin-bottom:10px;">
-                        <button id="npcDrawPathBtn" onclick="toggleNpcPathDrawing()" style="width:100%; background:#4a4;">Draw Path</button>
+                        <div style="display:flex; gap:5px; margin-bottom:5px;">
+                            <button id="npcDrawPathBtn" onclick="toggleNpcPathDrawing()" style="flex:1; background:#4a4;">Draw Path</button>
+                            <button id="npcEditPathBtn" onclick="toggleNpcPathEditing()" style="flex:1; background:#47a;">Edit Path</button>
+                        </div>
                         <p id="npcPathInfo" style="font-size:10px; color:#666; margin-top:5px;">Click tiles to add waypoints</p>
                     </div>
 
@@ -847,10 +851,19 @@
                         </select>
                     </div>
 
-                    <div style="margin-bottom:10px;">
-                        <label style="font-size:11px;">Walk Speed:</label>
+                    <div style="margin-bottom:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label style="font-size:11px;">Walk Speed:</label>
+                            <span id="npcSpeedValue" style="font-size:10px; color:#4af;">3</span>
+                        </div>
                         <input type="range" id="npcWalkSpeed" min="1" max="10" value="3" onchange="updateNpcSpeed()" style="width:100%;">
-                        <span id="npcSpeedValue" style="font-size:10px; color:#888;">3</span>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label style="font-size:11px;">Anim Speed:</label>
+                            <span id="npcAnimSpeedValue" style="font-size:10px; color:#4af;">8 fps</span>
+                        </div>
+                        <input type="range" id="npcAnimSpeed" min="1" max="24" value="8" onchange="updateNpcAnimSpeed()" style="width:100%;">
                     </div>
 
                     <div style="display:flex; gap:5px; margin-bottom:8px;">
@@ -859,7 +872,7 @@
                     </div>
                     <button onclick="deleteSelectedPlacedNpc()" style="width:100%; background:#a33;">Delete NPC</button>
 
-                    <div id="npcWaypointList" style="margin-top:10px; font-size:10px; color:#888; max-height:80px; overflow-y:auto;">
+                    <div id="npcWaypointList" style="margin-top:10px; font-size:10px; color:#888; max-height:300px; overflow-y:auto;">
                         No waypoints
                     </div>
                 </div>
@@ -1067,6 +1080,75 @@
                     <div id="placedLightsList" style="max-height:150px; overflow-y:auto; font-size:11px;"></div>
                 </div>
             </div>
+
+            <!-- TRIGGER MODE -->
+            <div id="triggerModeContent" style="display:none;">
+                <h3>Map Triggers</h3>
+
+                <!-- Current Map Selector -->
+                <div style="background:#1a2a3a; padding:10px; border-radius:4px; margin-bottom:15px;">
+                    <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Current Map:</label>
+                    <select id="currentMapSelect" style="width:100%; padding:6px; margin-bottom:8px;" onchange="switchToMap(this.value)">
+                        <option value="main">main</option>
+                    </select>
+                    <div style="display:flex; gap:5px;">
+                        <button onclick="promptNewMap()" style="flex:1; padding:6px;">+ New Map</button>
+                        <button onclick="promptDeleteMap()" style="flex:1; padding:6px; background:#a33;">Delete</button>
+                    </div>
+                </div>
+
+                <!-- Trigger List -->
+                <div style="background:#222; padding:10px; border-radius:4px; margin-bottom:15px;">
+                    <h4 style="margin:0 0 8px 0; color:#f4f;">Triggers on this map:</h4>
+                    <div id="triggerList" style="max-height:150px; overflow-y:auto; font-size:11px;">
+                        <div style="color:#666; text-align:center; padding:10px;">No triggers placed</div>
+                    </div>
+                </div>
+
+                <!-- Place New Trigger -->
+                <div style="background:#1a1a2e; padding:10px; border-radius:4px; margin-bottom:15px;">
+                    <h4 style="margin:0 0 10px 0; color:#4af;">Place New Trigger</h4>
+
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:3px;">Target Map:</label>
+                        <select id="triggerTargetMap" style="width:100%; padding:5px;">
+                            <option value="">-- Select Map --</option>
+                        </select>
+                        <input type="text" id="triggerNewMapName" placeholder="Or type new map name" style="width:100%; padding:5px; margin-top:4px; box-sizing:border-box;">
+                    </div>
+
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:3px;">Spawn Point:</label>
+                        <div style="display:flex; gap:5px; align-items:center;">
+                            <span id="triggerSpawnDisplay" style="flex:1; padding:5px; background:#333; border-radius:3px; font-size:12px;">(5, 5)</span>
+                            <button onclick="startSetSpawnMode()" style="padding:5px 10px;">Set on Map</button>
+                        </div>
+                        <input type="hidden" id="triggerTargetX" value="5">
+                        <input type="hidden" id="triggerTargetY" value="5">
+                    </div>
+
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:3px;">Type:</label>
+                        <select id="triggerType" style="width:100%; padding:5px;">
+                            <option value="door">Door</option>
+                            <option value="cave">Cave/Entrance</option>
+                            <option value="stairs">Stairs</option>
+                            <option value="edge">Screen Edge</option>
+                            <option value="invisible">Invisible</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:3px;">Transition:</label>
+                        <select id="triggerTransition" style="width:100%; padding:5px;">
+                            <option value="fade">Fade</option>
+                            <option value="instant">Instant</option>
+                        </select>
+                    </div>
+
+                    <p style="font-size:10px; color:#888; margin-top:10px; text-align:center;">Click map to place trigger. Right-click to remove.</p>
+                </div>
+            </div>
         </div>
 
         <div class="map-panel">
@@ -1141,12 +1223,19 @@
                 <!-- Step 3: Animation Selection -->
                 <div id="npcAnimSection" style="margin-bottom:15px; display:none;">
                     <h3>3. Select Animation</h3>
-                    <div style="display:flex; flex-direction:column; gap:5px;">
+                    <div id="npcAnimButtons" style="display:flex; flex-direction:column; gap:5px;">
                         <button id="npcAnimDown" onclick="npcSelectAnim('walkDown')" class="active" style="padding:6px; font-size:11px;">Walk Down</button>
                         <button id="npcAnimUp" onclick="npcSelectAnim('walkUp')" style="padding:6px; font-size:11px;">Walk Up</button>
                         <button id="npcAnimLeft" onclick="npcSelectAnim('walkLeft')" style="padding:6px; font-size:11px;">Walk Left</button>
                         <button id="npcAnimRight" onclick="npcSelectAnim('walkRight')" style="padding:6px; font-size:11px;">Walk Right</button>
                         <button id="npcAnimIdle" onclick="npcSelectAnim('idle')" style="padding:6px; font-size:11px;">Idle</button>
+                    </div>
+                    <!-- Custom animations list -->
+                    <div id="npcCustomAnimList" style="margin-top:8px;"></div>
+                    <!-- Add custom animation -->
+                    <div style="display:flex; gap:5px; margin-top:8px;">
+                        <input type="text" id="npcCustomAnimName" placeholder="e.g. swing, dance" style="flex:1; padding:4px; font-size:11px;">
+                        <button onclick="npcAddCustomAnim()" style="padding:4px 8px; font-size:11px; background:#4a4;">+ Add</button>
                     </div>
                     <p style="font-size:10px; color:#666; margin-top:8px;">Select animation type, then click frames on sprite sheet</p>
                 </div>
@@ -1155,6 +1244,26 @@
                 <div id="npcNameSection" style="margin-bottom:15px; display:none;">
                     <h3>4. Name</h3>
                     <input type="text" id="npcNameInput" placeholder="e.g. villager, guard" style="width:100%;">
+                </div>
+
+                <!-- Step 5: Collision & Depth -->
+                <div id="npcCollisionSection" style="margin-bottom:15px; display:none;">
+                    <h3>5. Collision & Depth</h3>
+                    <div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:10px;">
+                        <button id="npcToolNone" class="active" onclick="setNpcTool('none')" style="padding:5px 8px; font-size:11px;">Select</button>
+                        <button id="npcToolCollision" onclick="setNpcTool('collision')" style="padding:5px 8px; font-size:11px; background:#a55;">Collision</button>
+                        <button id="npcToolErase" onclick="setNpcTool('erase')" style="padding:5px 8px; font-size:11px;">Erase</button>
+                        <button id="npcToolSplit" onclick="setNpcTool('split')" style="padding:5px 8px; font-size:11px; background:#0aa;">Split</button>
+                    </div>
+                    <!-- Brush Size for Collision -->
+                    <div id="npcBrushSection" style="display:none; margin-bottom:10px;">
+                        <span style="font-size:10px; color:#aaa;">Brush:</span>
+                        <button id="npcBrush1" onclick="setNpcBrush(1)" style="padding:3px 6px; font-size:10px;">1</button>
+                        <button id="npcBrush2" onclick="setNpcBrush(2)" style="padding:3px 6px; font-size:10px;">2</button>
+                        <button id="npcBrush4" class="active" onclick="setNpcBrush(4)" style="padding:3px 6px; font-size:10px;">4</button>
+                        <button id="npcBrush8" onclick="setNpcBrush(8)" style="padding:3px 6px; font-size:10px;">8</button>
+                    </div>
+                    <p style="font-size:9px; color:#555;">Draw collision on sprite. Split line = depth sorting.</p>
                 </div>
 
                 <!-- Actions -->
@@ -1169,6 +1278,12 @@
                 <div class="anim-header">
                     <h2>Sprite Sheet</h2>
                     <span style="color:#888; font-size:12px;">Click frames to add to current animation</span>
+                    <div style="display:flex; align-items:center; gap:5px; margin-left:auto;">
+                        <span style="color:#888; font-size:11px;">Zoom:</span>
+                        <button onclick="npcZoomOut()" style="padding:2px 8px; font-size:14px;">-</button>
+                        <span id="npcZoomLevel" style="color:#4af; font-size:11px; min-width:35px; text-align:center;">3x</span>
+                        <button onclick="npcZoomIn()" style="padding:2px 8px; font-size:14px;">+</button>
+                    </div>
                 </div>
 
                 <div class="anim-canvas-area">
@@ -1297,6 +1412,12 @@
                 <div class="anim-header">
                     <h2>Sprite Sheet</h2>
                     <span style="color:#888; font-size:12px;">Click or drag to select frames (multi-tile supported)</span>
+                    <div style="display:flex; align-items:center; gap:5px; margin-left:auto;">
+                        <span style="color:#888; font-size:11px;">Zoom:</span>
+                        <button onclick="animPropZoomOut()" style="padding:2px 8px; font-size:14px;">-</button>
+                        <span id="animPropZoomLevel" style="color:#4af; font-size:11px; min-width:35px; text-align:center;">3x</span>
+                        <button onclick="animPropZoomIn()" style="padding:2px 8px; font-size:14px;">+</button>
+                    </div>
                 </div>
 
                 <div class="anim-canvas-area">
@@ -1384,7 +1505,11 @@
         let panStartY = 0;
 
         let mode = 'tile';
-        let currentMap = 'main'; // Current map name (for multi-map support)
+        let currentMapName = 'main'; // Current map name (for multi-map support)
+        let maps = {}; // All maps data: { 'main': {layers, tileCollisions, ...}, 'dungeon1': {...} }
+        let placedTriggers = []; // Map transition triggers: { x, y, mapName, targetMap, targetX, targetY, type, ... }
+        let settingSpawnPoint = false; // True when clicking to set trigger spawn point
+        let spawnSourceMap = null; // Map we came from when setting spawn
 
         // Player sprite (embedded as base64)
         let playerSpriteData = null; // Base64 data URL of player sprite
@@ -1431,6 +1556,8 @@
         let placedNpcs = []; // NPCs placed on map: { npcIndex, x, y, path: [{x,y},...], trigger, speed }
         let selectedPlacedNpcIndex = -1; // Currently selected placed NPC for editing
         let npcPathDrawing = false; // Currently drawing a path
+        let npcPathEditing = false; // Currently editing/moving waypoints
+        let npcDraggingWaypoint = -1; // Index of waypoint being dragged (-1 = none)
         let npcEditorImage = null;
 
         // NPC Path Preview
@@ -1441,6 +1568,12 @@
         let npcEditorFrameW = 16;
         let npcEditorFrameH = 16;
         let npcEditorEditingIndex = -1;
+        let npcEditorZoom = 3; // Zoom level for sprite sheet display
+        let npcTool = 'none'; // 'none', 'collision', 'erase', 'split'
+        let npcBrushSize = 4;
+        let npcCollisionMask = null; // 2D array for collision pixels
+        let npcSplitLine = null; // Y value for depth split
+        let npcPainting = false;
         let npcFrames = []; // Frames being edited
         let npcPreviewPlaying = false;
         let npcPreviewFrame = 0;
@@ -2598,14 +2731,16 @@
             document.getElementById('animPropMode').classList.toggle('active', m === 'animProp');
             document.getElementById('soundMode').classList.toggle('active', m === 'sound');
             document.getElementById('lightingMode').classList.toggle('active', m === 'lighting');
+            document.getElementById('triggerMode').classList.toggle('active', m === 'trigger');
             document.getElementById('tileModeContent').style.display = m === 'tile' ? 'block' : 'none';
             document.getElementById('npcModeContent').style.display = m === 'npc' ? 'block' : 'none';
             document.getElementById('animPropModeContent').style.display = m === 'animProp' ? 'block' : 'none';
             document.getElementById('soundModeContent').style.display = m === 'sound' ? 'block' : 'none';
             document.getElementById('lightingModeContent').style.display = m === 'lighting' ? 'block' : 'none';
+            document.getElementById('triggerModeContent').style.display = m === 'trigger' ? 'block' : 'none';
 
             // Update mode label for mobile
-            const labels = { tile: 'Tiles', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights' };
+            const labels = { tile: 'Tiles', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers' };
             document.getElementById('currentModeLabel').textContent = labels[m] || m;
 
             // Collapse menu on mobile after selection
@@ -2613,6 +2748,10 @@
 
             // Update lists when switching modes
             if (m === 'npc') updateNpcList();
+            if (m === 'trigger') {
+                updateMapDropdowns();
+                updateTriggerList();
+            }
 
             // Redraw map to show appropriate overlays
             renderMap();
@@ -2816,7 +2955,7 @@
             const loopEl = document.getElementById('soundLoop');
             const volumeEl = document.getElementById('soundVolume');
             const fadeEl = document.getElementById('soundFade');
-            const key = `${gridX},${gridY}`;
+            const key = `${currentMapName}:${gridX},${gridY}`;
             tileSounds[key] = {
                 soundIndex: currentSoundIndex,
                 radius: radiusEl ? parseInt(radiusEl.value) : 3,
@@ -2839,17 +2978,18 @@
         function updatePlacedSoundsList() {
             const container = document.getElementById('placedSoundsList');
             if (!container) return;
-            const keys = Object.keys(tileSounds);
+            const keys = Object.keys(tileSounds).filter(k => k.startsWith(currentMapName + ':'));
             if (keys.length === 0) {
                 container.innerHTML = '<div style="color:#888;">No sounds placed</div>';
                 return;
             }
             container.innerHTML = keys.map(key => {
                 const ts = tileSounds[key];
+                const coords = key.split(':')[1]; // Get "x,y" part after map name
                 const soundName = sounds[ts.soundIndex]?.name || 'Unknown';
                 const isSelected = key === selectedTileSoundKey;
                 return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:${isSelected ? '#4a7c59' : '#333'}; border-radius:3px; cursor:pointer;" onclick="selectTileSound('${key}')">
-                    <span style="flex:1;">📍 ${key}: ${soundName}</span>
+                    <span style="flex:1;">📍 ${coords}: ${soundName}</span>
                     <button onclick="event.stopPropagation(); removeTileSound('${key}')" style="padding:2px 6px;">×</button>
                 </div>`;
             }).join('');
@@ -2958,7 +3098,7 @@
         }
 
         function placeLightAt(x, y) {
-            const key = currentMap + ':' + x + ',' + y;
+            const key = currentMapName + ':' + x + ',' + y;
             const radius = parseInt(document.getElementById('pointLightRadius').value) || 3;
             const flicker = document.getElementById('pointLightFlicker').checked;
             pointLights[key] = { radius, flicker };
@@ -2968,7 +3108,7 @@
         }
 
         function removeLightAt(x, y) {
-            const key = currentMap + ':' + x + ',' + y;
+            const key = currentMapName + ':' + x + ',' + y;
             if (pointLights[key]) {
                 delete pointLights[key];
                 updatePlacedLightsList();
@@ -2981,7 +3121,7 @@
             let nearestKey = null;
             let nearestDist = 1.5;
             Object.keys(pointLights).forEach(key => {
-                if (!key.startsWith(currentMap + ':')) return;
+                if (!key.startsWith(currentMapName + ':')) return;
                 const coords = key.split(':')[1].split(',');
                 const lx = parseFloat(coords[0]);
                 const ly = parseFloat(coords[1]);
@@ -3001,7 +3141,7 @@
         function updatePlacedLightsList() {
             const container = document.getElementById('placedLightsList');
             if (!container) return;
-            const keys = Object.keys(pointLights).filter(k => k.startsWith(currentMap + ':'));
+            const keys = Object.keys(pointLights).filter(k => k.startsWith(currentMapName + ':'));
             if (keys.length === 0) {
                 container.innerHTML = '<div style="color:#888;">No lights placed</div>';
                 return;
@@ -3486,7 +3626,7 @@
 
             // Sound mode - click to place/select tile sound, right-click to remove
             if (mode === 'sound' && soundAttachMode === 'tile') {
-                const key = `${x},${y}`;
+                const key = `${currentMapName}:${x},${y}`;
                 if (e.button === 0) {
                     // If clicking on existing sound, select it for editing
                     if (tileSounds[key]) {
@@ -3521,9 +3661,49 @@
                 return;
             }
 
-            // NPC mode - place, select, or draw path
+            // Trigger mode - click to place triggers, right-click to remove
+            if (mode === 'trigger') {
+                console.log('[CLICK DEBUG] Trigger mode click at', x, y, 'button:', e.button);
+                console.log('[CLICK DEBUG] settingSpawnPoint:', settingSpawnPoint);
+
+                // Check if we're setting spawn point
+                if (settingSpawnPoint && e.button === 0) {
+                    console.log('[CLICK DEBUG] Calling setSpawnPointAt');
+                    setSpawnPointAt(x, y);
+                    return;
+                }
+                if (e.button === 0) {
+                    console.log('[CLICK DEBUG] Calling placeTriggerAt');
+                    placeTriggerAt(x, y);
+                } else if (e.button === 2) {
+                    removeTriggerAt(x, y);
+                }
+                return;
+            }
+
+            // NPC mode - place, select, draw path, or edit path
             if (mode === 'npc') {
-                if (npcPathDrawing && selectedPlacedNpcIndex >= 0) {
+                if (npcPathEditing && selectedPlacedNpcIndex >= 0) {
+                    // Editing path - drag waypoints
+                    const placed = placedNpcs[selectedPlacedNpcIndex];
+                    if (placed && placed.path) {
+                        if (e.button === 0) {
+                            // Find closest waypoint to click
+                            const waypointIdx = findNearestWaypoint(x, y, placed.path);
+                            if (waypointIdx >= 0) {
+                                npcDraggingWaypoint = waypointIdx;
+                            }
+                        } else if (e.button === 2) {
+                            // Right-click to delete waypoint
+                            const waypointIdx = findNearestWaypoint(x, y, placed.path);
+                            if (waypointIdx >= 0) {
+                                placed.path.splice(waypointIdx, 1);
+                                updateNpcWaypointList();
+                                renderMap();
+                            }
+                        }
+                    }
+                } else if (npcPathDrawing && selectedPlacedNpcIndex >= 0) {
                     // Drawing path - add waypoint
                     if (e.button === 0) {
                         addNpcWaypoint(x, y);
@@ -3574,6 +3754,18 @@
                 return;
             }
 
+            // Handle waypoint dragging
+            if (npcDraggingWaypoint >= 0 && selectedPlacedNpcIndex >= 0) {
+                const placed = placedNpcs[selectedPlacedNpcIndex];
+                if (placed && placed.path && placed.path[npcDraggingWaypoint]) {
+                    placed.path[npcDraggingWaypoint].x = x;
+                    placed.path[npcDraggingWaypoint].y = y;
+                    updateNpcWaypointList();
+                    renderMap();
+                }
+                return;
+            }
+
             // Update hover position for preview
             if (hoverMapPos?.x !== x || hoverMapPos?.y !== y) {
                 hoverMapPos = { x, y };
@@ -3600,6 +3792,8 @@
             }
             painting = false;
             erasing = false;
+            // Stop waypoint dragging
+            npcDraggingWaypoint = -1;
         });
         mapCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -3638,7 +3832,7 @@
 
             // Sound mode
             if (mode === 'sound' && soundAttachMode === 'tile') {
-                const key = `${x},${y}`;
+                const key = `${currentMapName}:${x},${y}`;
                 if (tileSounds[key]) {
                     selectTileSound(key);
                 } else if (!selectedTileSoundKey) {
@@ -4308,7 +4502,10 @@
             if (mode === 'sound' && tileSounds) {
                 Object.keys(tileSounds).forEach(key => {
                     try {
-                        const parts = key.split(',');
+                        // Filter by current map (keys are "mapName:x,y")
+                        if (!key.startsWith(currentMapName + ':')) return;
+                        const coords = key.split(':')[1];
+                        const parts = coords.split(',');
                         const sx = parseInt(parts[0]) || 0;
                         const sy = parseInt(parts[1]) || 0;
                         const ts = tileSounds[key];
@@ -4362,7 +4559,7 @@
             if (mode === 'lighting' && pointLights) {
                 Object.keys(pointLights).forEach(key => {
                     try {
-                        if (!key.startsWith(currentMap + ':')) return;
+                        if (!key.startsWith(currentMapName + ':')) return;
                         const coords = key.split(':')[1];
                         const parts = coords.split(',');
                         const lx = parseInt(parts[0]) || 0;
@@ -4410,9 +4607,83 @@
                 });
             }
 
+            // Draw triggers when in trigger mode
+            if (mode === 'trigger') {
+                // Show spawn point marker when setting spawn
+                if (settingSpawnPoint) {
+                    // Draw current spawn position
+                    const spawnX = parseInt(document.getElementById('triggerTargetX').value) || 5;
+                    const spawnY = parseInt(document.getElementById('triggerTargetY').value) || 5;
+                    const sx = spawnX * tileSize;
+                    const sy = spawnY * tileSize;
+
+                    mapCtx.fillStyle = 'rgba(0, 255, 100, 0.3)';
+                    mapCtx.fillRect(sx, sy, tileSize, tileSize);
+                    mapCtx.strokeStyle = '#0f0';
+                    mapCtx.lineWidth = 2;
+                    mapCtx.setLineDash([4, 4]);
+                    mapCtx.strokeRect(sx, sy, tileSize, tileSize);
+                    mapCtx.setLineDash([]);
+
+                    // Draw hover position if available
+                    if (hoverMapPos) {
+                        const hx = hoverMapPos.x * tileSize;
+                        const hy = hoverMapPos.y * tileSize;
+
+                        mapCtx.fillStyle = 'rgba(0, 255, 100, 0.5)';
+                        mapCtx.fillRect(hx, hy, tileSize, tileSize);
+                        mapCtx.strokeStyle = '#0f0';
+                        mapCtx.lineWidth = 3;
+                        mapCtx.strokeRect(hx, hy, tileSize, tileSize);
+
+                        mapCtx.fillStyle = '#fff';
+                        mapCtx.font = 'bold 10px monospace';
+                        mapCtx.textAlign = 'center';
+                        mapCtx.textBaseline = 'middle';
+                        mapCtx.fillText('SPAWN', hx + tileSize / 2, hy + tileSize / 2);
+                    }
+
+                    // Draw instruction at top of screen
+                    mapCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    mapCtx.fillRect(0, 0, mapCanvas.width, 30);
+                    mapCtx.fillStyle = '#0f0';
+                    mapCtx.font = 'bold 14px monospace';
+                    mapCtx.textAlign = 'center';
+                    mapCtx.fillText('CLICK TO SET SPAWN POINT - Then switch back to place trigger', mapCanvas.width / 2, 18);
+                }
+
+                const currentTriggers = placedTriggers.filter(t => t.mapName === currentMapName);
+                currentTriggers.forEach(trigger => {
+                    const px = trigger.x * tileSize;
+                    const py = trigger.y * tileSize;
+                    const pw = (trigger.width || 1) * tileSize;
+                    const ph = (trigger.height || 1) * tileSize;
+
+                    // Draw trigger zone fill
+                    mapCtx.fillStyle = 'rgba(255, 100, 255, 0.3)';
+                    mapCtx.fillRect(px, py, pw, ph);
+
+                    // Draw border
+                    mapCtx.strokeStyle = 'rgba(255, 100, 255, 0.8)';
+                    mapCtx.lineWidth = 2;
+                    mapCtx.strokeRect(px, py, pw, ph);
+
+                    // Draw type label
+                    mapCtx.fillStyle = '#fff';
+                    mapCtx.font = 'bold 10px monospace';
+                    mapCtx.textAlign = 'center';
+                    mapCtx.textBaseline = 'middle';
+                    mapCtx.fillText(trigger.type.toUpperCase(), px + pw / 2, py + ph / 2);
+
+                    // Draw target map below
+                    mapCtx.font = '10px monospace';
+                    mapCtx.fillText('> ' + trigger.targetMap, px + pw / 2, py + ph + 10);
+                });
+            }
+
             // === DRAW PLACED NPCs AND PATHS ===
             if (mode === 'npc' || placedNpcs.length > 0) {
-                const currentMapNpcs = placedNpcs.filter(p => p.mapName === currentMap);
+                const currentMapNpcs = placedNpcs.filter(p => p.mapName === currentMapName);
 
                 currentMapNpcs.forEach((placed, idx) => {
                     const globalIdx = placedNpcs.indexOf(placed);
@@ -4428,8 +4699,8 @@
                     const px = drawX * tileSize;
                     const py = drawY * tileSize;
 
-                    // Draw path if has waypoints
-                    if (placed.path && placed.path.length > 0) {
+                    // Draw path if has waypoints (only in NPC mode, hide during preview)
+                    if (placed.path && placed.path.length > 0 && mode === 'npc' && !npcPathPreviewActive) {
                         mapCtx.strokeStyle = isSelected ? '#4f4' : 'rgba(100, 255, 100, 0.5)';
                         mapCtx.lineWidth = isSelected ? 3 : 2;
                         mapCtx.setLineDash(isSelected ? [] : [5, 5]);
@@ -4478,9 +4749,16 @@
                     let frameIdx = 0;
 
                     if (usePreview && npcPreviewState) {
-                        // Use directional animation during preview
+                        // Use waypoint animation if idling, otherwise directional walk
                         const dirMap = { 'down': 'walkDown', 'up': 'walkUp', 'left': 'walkLeft', 'right': 'walkRight' };
-                        anim = anims[dirMap[npcPreviewState.direction]] || anims.walkDown || anims.idle;
+                        if (npcPreviewState.waypointAnimation && npcPreviewState.waypointAnimation !== 'walk' &&
+                            anims[npcPreviewState.waypointAnimation] && anims[npcPreviewState.waypointAnimation].length > 0) {
+                            // Playing waypoint animation (idle, dance, etc.)
+                            anim = anims[npcPreviewState.waypointAnimation];
+                        } else {
+                            // Walking animation
+                            anim = anims[dirMap[npcPreviewState.direction]] || anims.walkDown || anims.idle;
+                        }
                         frameIdx = npcPreviewState.frame % (anim ? anim.length : 1);
                     } else {
                         anim = anims.walkDown || anims.idle || Object.values(anims).find(a => a && a.length > 0);
@@ -4557,7 +4835,7 @@
                     // Cut out point lights
                     lightCtx.globalCompositeOperation = 'destination-out';
                     Object.keys(pointLights).forEach(key => {
-                        if (!key.startsWith(currentMap + ':')) return;
+                        if (!key.startsWith(currentMapName + ':')) return;
                         const light = pointLights[key];
                         const coords = key.split(':')[1].split(',');
                         const lx = parseFloat(coords[0]);
@@ -5119,6 +5397,10 @@
             npcEditorEditingIndex = editIndex;
             npcCurrentAnim = 'walkDown';
             npcAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [] };
+            // Reset collision tool to Select mode
+            npcTool = 'none';
+            npcPainting = false;
+            setNpcTool('none');
 
             if (editIndex >= 0 && npcs[editIndex]) {
                 // Editing existing NPC
@@ -5136,12 +5418,24 @@
                     npcAnimations = JSON.parse(JSON.stringify(npc.animations));
                 }
 
+                // Load collision mask and split line
+                npcSplitLine = npc.splitLine ?? null;
+
                 if (npc.spriteData) {
                     npcEditorImage = new Image();
                     npcEditorImage.onload = () => {
                         document.getElementById('npcFrameSection').style.display = 'block';
                         document.getElementById('npcAnimSection').style.display = 'block';
                         document.getElementById('npcNameSection').style.display = 'block';
+                        document.getElementById('npcCollisionSection').style.display = 'block';
+                        // Load or initialize collision mask
+                        const w = npcEditorImage.naturalWidth;
+                        const h = npcEditorImage.naturalHeight;
+                        if (npc.collisionMask && npc.collisionMask.length === h) {
+                            npcCollisionMask = JSON.parse(JSON.stringify(npc.collisionMask));
+                        } else {
+                            npcCollisionMask = Array(h).fill(null).map(() => Array(w).fill(0));
+                        }
                         npcUpdateGrid();
                         npcDrawCanvas();
                         npcUpdateFramesList();
@@ -5156,6 +5450,8 @@
                 npcEditorData = null;
                 npcEditorFrameW = 32;
                 npcEditorFrameH = 32;
+                npcCollisionMask = null;
+                npcSplitLine = null;
                 document.getElementById('npcNameInput').value = '';
                 document.getElementById('npcSpeedSlider').value = 8;
                 document.getElementById('npcSpeedLabel').textContent = '8 fps';
@@ -5163,6 +5459,7 @@
                 document.getElementById('npcFrameSection').style.display = 'none';
                 document.getElementById('npcAnimSection').style.display = 'none';
                 document.getElementById('npcNameSection').style.display = 'none';
+                document.getElementById('npcCollisionSection').style.display = 'none';
                 // Clear canvases
                 const previewCtx = document.getElementById('npcLivePreview').getContext('2d');
                 previewCtx.clearRect(0, 0, 96, 96);
@@ -5192,6 +5489,12 @@
                     document.getElementById('npcFrameSection').style.display = 'block';
                     document.getElementById('npcAnimSection').style.display = 'block';
                     document.getElementById('npcNameSection').style.display = 'block';
+                    document.getElementById('npcCollisionSection').style.display = 'block';
+                    // Initialize collision mask for new image
+                    const w = npcEditorImage.naturalWidth;
+                    const h = npcEditorImage.naturalHeight;
+                    npcCollisionMask = Array(h).fill(null).map(() => Array(w).fill(0));
+                    npcSplitLine = null;
                     npcUpdateGrid();
                     npcDrawCanvas();
                 };
@@ -5268,6 +5571,127 @@
                     }
                 }
             }
+            // Update custom animations list
+            npcUpdateCustomAnimList();
+        }
+
+        function npcAddCustomAnim() {
+            const input = document.getElementById('npcCustomAnimName');
+            const name = input.value.trim().toLowerCase().replace(/\s+/g, '_');
+            if (!name) return;
+
+            // Don't allow duplicates or reserved names
+            const reserved = ['walkdown', 'walkup', 'walkleft', 'walkright', 'idle'];
+            if (reserved.includes(name) || npcAnimations[name]) {
+                alert('Animation "' + name + '" already exists');
+                return;
+            }
+
+            // Create the new animation category
+            npcAnimations[name] = [];
+            input.value = '';
+
+            // Select the new animation
+            npcSelectAnim(name);
+        }
+
+        function npcUpdateCustomAnimList() {
+            const container = document.getElementById('npcCustomAnimList');
+            if (!container) return;
+
+            // Get custom animations (not the default ones)
+            const defaultAnims = ['walkDown', 'walkUp', 'walkLeft', 'walkRight', 'idle'];
+            const customAnims = Object.keys(npcAnimations).filter(k => !defaultAnims.includes(k));
+
+            if (customAnims.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '<div style="font-size:10px; color:#888; margin-bottom:3px;">Custom:</div>';
+            html += '<div style="display:flex; flex-direction:column; gap:3px;">';
+            customAnims.forEach(name => {
+                const frames = npcAnimations[name] || [];
+                const isActive = npcCurrentAnim === name;
+                const hasFrames = frames.length > 0;
+                const bgColor = isActive ? (hasFrames ? '#2a5a2a' : '#555') : (hasFrames ? '#1a3a1a' : '#333');
+                html += `<div style="display:flex; gap:3px;">`;
+                html += `<button onclick="npcSelectAnim('${name}')" style="flex:1; padding:4px; font-size:10px; background:${bgColor};">`;
+                html += hasFrames ? `✓ ${name} <span style="color:#4f4;">(${frames.length})</span>` : name;
+                html += `</button>`;
+                html += `<button onclick="npcRemoveCustomAnim('${name}')" style="padding:4px 6px; font-size:10px; background:#a33;" title="Remove">×</button>`;
+                html += `</div>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function npcRemoveCustomAnim(name) {
+            if (!npcAnimations[name]) return;
+            if (npcAnimations[name].length > 0) {
+                if (!confirm('Delete "' + name + '" animation with ' + npcAnimations[name].length + ' frames?')) return;
+            }
+            delete npcAnimations[name];
+            if (npcCurrentAnim === name) {
+                npcSelectAnim('walkDown');
+            } else {
+                npcUpdateCustomAnimList();
+            }
+        }
+
+        function setNpcTool(tool) {
+            npcTool = tool;
+            document.getElementById('npcToolNone').classList.toggle('active', tool === 'none');
+            document.getElementById('npcToolCollision').classList.toggle('active', tool === 'collision');
+            document.getElementById('npcToolErase').classList.toggle('active', tool === 'erase');
+            document.getElementById('npcToolSplit').classList.toggle('active', tool === 'split');
+
+            // Show brush section for collision/erase
+            document.getElementById('npcBrushSection').style.display =
+                (tool === 'collision' || tool === 'erase') ? 'block' : 'none';
+
+            // Update canvas cursor
+            const canvas = document.getElementById('npcEditorCanvas');
+            if (canvas) canvas.style.cursor = (tool === 'none') ? 'crosshair' : 'cell';
+        }
+
+        function setNpcBrush(size) {
+            npcBrushSize = size;
+            document.querySelectorAll('[id^="npcBrush"]').forEach(b => b.classList.remove('active'));
+            document.getElementById('npcBrush' + size).classList.add('active');
+        }
+
+        function npcPaintCollision(x, y, erase) {
+            if (!npcCollisionMask || !npcEditorImage) return;
+
+            const halfBrush = Math.floor(npcBrushSize / 2);
+            for (let dy = -halfBrush; dy < halfBrush; dy++) {
+                for (let dx = -halfBrush; dx < halfBrush; dx++) {
+                    const px = x + dx;
+                    const py = y + dy;
+                    if (py >= 0 && py < npcCollisionMask.length && px >= 0 && px < npcCollisionMask[0].length) {
+                        npcCollisionMask[py][px] = erase ? 0 : 1;
+                    }
+                }
+            }
+        }
+
+        function npcPaintSplit(x, y) {
+            if (!npcEditorImage) return;
+            // Split line is a single Y value for the entire sprite
+            npcSplitLine = Math.max(0, Math.min(npcEditorFrameH, y));
+        }
+
+        function npcZoomIn() {
+            npcEditorZoom = Math.min(6, npcEditorZoom + 1);
+            document.getElementById('npcZoomLevel').textContent = npcEditorZoom + 'x';
+            npcDrawCanvas();
+        }
+
+        function npcZoomOut() {
+            npcEditorZoom = Math.max(1, npcEditorZoom - 1);
+            document.getElementById('npcZoomLevel').textContent = npcEditorZoom + 'x';
+            npcDrawCanvas();
         }
 
         function npcDrawCanvas() {
@@ -5286,7 +5710,7 @@
                 return;
             }
 
-            const scale = 3;
+            const scale = npcEditorZoom;
             canvas.width = npcEditorImage.naturalWidth * scale;
             canvas.height = npcEditorImage.naturalHeight * scale;
 
@@ -5333,6 +5757,37 @@
                 ctx.textAlign = 'center';
                 ctx.fillText((i + 1).toString(), sx + sw / 2, sy + sh / 2 + 5);
             });
+
+            // Draw collision mask overlay
+            if (npcCollisionMask && (npcTool === 'collision' || npcTool === 'erase' || npcTool === 'split' || npcTool === 'none')) {
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.35)';
+                for (let py = 0; py < npcCollisionMask.length; py++) {
+                    for (let px = 0; px < npcCollisionMask[py].length; px++) {
+                        if (npcCollisionMask[py][px] === 1) {
+                            ctx.fillRect(px * scale, py * scale, scale, scale);
+                        }
+                    }
+                }
+            }
+
+            // Draw split line
+            if (npcSplitLine !== null) {
+                const splitY = npcSplitLine * scale;
+                ctx.strokeStyle = '#0f0';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 4]);
+                ctx.beginPath();
+                ctx.moveTo(0, splitY);
+                ctx.lineTo(canvas.width, splitY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Label
+                ctx.fillStyle = '#0f0';
+                ctx.font = 'bold 10px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText('DEPTH SPLIT', 4, splitY - 4);
+            }
         }
 
         function npcCanvasClick(e) {
@@ -5340,7 +5795,7 @@
 
             const canvas = document.getElementById('npcEditorCanvas');
             const rect = canvas.getBoundingClientRect();
-            const scale = 3;
+            const scale = npcEditorZoom;
 
             const clickX = e.clientX - rect.left;
             const clickY = e.clientY - rect.top;
@@ -5493,7 +5948,9 @@
                 frameWidth: npcEditorFrameW,
                 frameHeight: npcEditorFrameH,
                 animations: JSON.parse(JSON.stringify(npcAnimations)),
-                fps: fps
+                fps: fps,
+                collisionMask: npcCollisionMask ? JSON.parse(JSON.stringify(npcCollisionMask)) : null,
+                splitLine: npcSplitLine
             };
 
             if (npcEditorEditingIndex >= 0) {
@@ -5586,11 +6043,56 @@
             });
         }
 
-        // Set up NPC canvas click handler
+        // Set up NPC canvas mouse handlers
         document.addEventListener('DOMContentLoaded', () => {
             const npcCanvas = document.getElementById('npcEditorCanvas');
             if (npcCanvas) {
-                npcCanvas.addEventListener('click', npcCanvasClick);
+                npcCanvas.addEventListener('mousedown', function(e) {
+                    if (!npcEditorImage) return;
+
+                    const rect = this.getBoundingClientRect();
+                    const scale = npcEditorZoom;
+                    const clickX = (e.clientX - rect.left) / scale;
+                    const clickY = (e.clientY - rect.top) / scale;
+
+                    if (npcTool === 'collision' || npcTool === 'erase') {
+                        npcPainting = true;
+                        npcPaintCollision(Math.floor(clickX), Math.floor(clickY), npcTool === 'erase');
+                        npcDrawCanvas();
+                    } else if (npcTool === 'split') {
+                        npcPainting = true;
+                        npcPaintSplit(Math.floor(clickX), Math.floor(clickY));
+                        npcDrawCanvas();
+                    } else {
+                        // Frame selection mode (npcTool === 'none')
+                        npcCanvasClick(e);
+                    }
+                });
+
+                npcCanvas.addEventListener('mousemove', function(e) {
+                    if (!npcEditorImage || !npcPainting) return;
+
+                    const rect = this.getBoundingClientRect();
+                    const scale = npcEditorZoom;
+                    const clickX = (e.clientX - rect.left) / scale;
+                    const clickY = (e.clientY - rect.top) / scale;
+
+                    if (npcTool === 'collision' || npcTool === 'erase') {
+                        npcPaintCollision(Math.floor(clickX), Math.floor(clickY), npcTool === 'erase');
+                        npcDrawCanvas();
+                    } else if (npcTool === 'split') {
+                        npcPaintSplit(Math.floor(clickX), Math.floor(clickY));
+                        npcDrawCanvas();
+                    }
+                });
+
+                npcCanvas.addEventListener('mouseup', function(e) {
+                    npcPainting = false;
+                });
+
+                npcCanvas.addEventListener('mouseleave', function(e) {
+                    npcPainting = false;
+                });
             }
         });
 
@@ -5604,7 +6106,7 @@
             }
 
             // Check if there's already an NPC at this position
-            const existing = placedNpcs.findIndex(p => p.x === x && p.y === y && p.mapName === currentMap);
+            const existing = placedNpcs.findIndex(p => p.x === x && p.y === y && p.mapName === currentMapName);
             if (existing >= 0) {
                 // Select existing instead of placing new
                 selectPlacedNpc(existing);
@@ -5613,7 +6115,7 @@
 
             const placed = {
                 npcIndex: currentNpcIndex,
-                mapName: currentMap,
+                mapName: currentMapName,
                 x: x,
                 y: y,
                 path: [],
@@ -5630,7 +6132,7 @@
         }
 
         function findPlacedNpcAt(x, y) {
-            return placedNpcs.findIndex(p => p.x === x && p.y === y && p.mapName === currentMap);
+            return placedNpcs.findIndex(p => p.x === x && p.y === y && p.mapName === currentMapName);
         }
 
         function selectPlacedNpc(index) {
@@ -5641,12 +6143,21 @@
 
             selectedPlacedNpcIndex = index;
             npcPathDrawing = false;
+            npcPathEditing = false;
+            npcDraggingWaypoint = -1;
+            updatePathDrawButton();
 
             const placed = placedNpcs[index];
             if (placed) {
                 document.getElementById('npcTriggerType').value = placed.trigger || 'loop';
                 document.getElementById('npcWalkSpeed').value = placed.speed || 3;
                 document.getElementById('npcSpeedValue').textContent = placed.speed || 3;
+                // Load animation speed (default to NPC's fps or 8)
+                const npc = npcs[placed.npcIndex];
+                const defaultFps = npc?.fps || 8;
+                const animSpeed = placed.animSpeed || defaultFps;
+                document.getElementById('npcAnimSpeed').value = animSpeed;
+                document.getElementById('npcAnimSpeedValue').textContent = animSpeed + ' fps';
             }
 
             updatePlacedNpcList();
@@ -5706,23 +6217,66 @@
 
         function toggleNpcPathDrawing() {
             npcPathDrawing = !npcPathDrawing;
+            if (npcPathDrawing) {
+                npcPathEditing = false; // Disable edit mode when drawing
+            }
             updatePathDrawButton();
         }
 
         function updatePathDrawButton() {
-            const btn = document.getElementById('npcDrawPathBtn');
+            const drawBtn = document.getElementById('npcDrawPathBtn');
+            const editBtn = document.getElementById('npcEditPathBtn');
             const info = document.getElementById('npcPathInfo');
+
             if (npcPathDrawing) {
-                btn.textContent = 'Stop Drawing';
-                btn.style.background = '#a55';
+                drawBtn.textContent = 'Stop Drawing';
+                drawBtn.style.background = '#a55';
+                editBtn.style.background = '#47a';
                 info.textContent = 'Click tiles to add waypoints. Right-click to undo.';
                 info.style.color = '#4f4';
+            } else if (npcPathEditing) {
+                drawBtn.textContent = 'Draw Path';
+                drawBtn.style.background = '#4a4';
+                editBtn.textContent = 'Stop Editing';
+                editBtn.style.background = '#a55';
+                info.textContent = 'Drag waypoint markers to move them. Right-click to delete.';
+                info.style.color = '#fa4';
             } else {
-                btn.textContent = 'Draw Path';
-                btn.style.background = '#4a4';
+                drawBtn.textContent = 'Draw Path';
+                drawBtn.style.background = '#4a4';
+                editBtn.textContent = 'Edit Path';
+                editBtn.style.background = '#47a';
                 info.textContent = 'Click tiles to add waypoints';
                 info.style.color = '#666';
             }
+        }
+
+        function toggleNpcPathEditing() {
+            npcPathEditing = !npcPathEditing;
+            if (npcPathEditing) {
+                npcPathDrawing = false; // Disable draw mode when editing
+            }
+            npcDraggingWaypoint = -1;
+            updatePathDrawButton();
+        }
+
+        // Find the nearest waypoint to a given position (within 1 tile distance)
+        function findNearestWaypoint(x, y, path) {
+            if (!path || path.length === 0) return -1;
+
+            let nearest = -1;
+            let minDist = 2; // Max distance of 2 tiles to select
+
+            for (let i = 0; i < path.length; i++) {
+                const wp = path[i];
+                const dist = Math.abs(wp.x - x) + Math.abs(wp.y - y); // Manhattan distance
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearest = i;
+                }
+            }
+
+            return nearest;
         }
 
         function addNpcWaypoint(x, y) {
@@ -5772,6 +6326,13 @@
             document.getElementById('npcSpeedValue').textContent = speed;
         }
 
+        function updateNpcAnimSpeed() {
+            if (selectedPlacedNpcIndex < 0) return;
+            const fps = parseInt(document.getElementById('npcAnimSpeed').value);
+            placedNpcs[selectedPlacedNpcIndex].animSpeed = fps;
+            document.getElementById('npcAnimSpeedValue').textContent = fps + ' fps';
+        }
+
         function updateNpcWaypointList() {
             const container = document.getElementById('npcWaypointList');
             if (selectedPlacedNpcIndex < 0) {
@@ -5787,12 +6348,102 @@
                 return;
             }
 
-            container.innerHTML = '<strong>Waypoints:</strong> ' + path.map((p, i) => `${i + 1}:(${p.x},${p.y})`).join(' → ');
+            // Get available animations for this NPC
+            const npc = npcs[placed.npcIndex];
+            const customAnims = [];
+            if (npc && npc.animations) {
+                Object.keys(npc.animations).forEach(key => {
+                    if (!['walkDown', 'walkUp', 'walkLeft', 'walkRight', 'idle'].includes(key)) {
+                        customAnims.push(key);
+                    }
+                });
+            }
+
+            // Show list of waypoints with clear action controls
+            let html = '<strong>Waypoints:</strong><div style="margin-top:8px;">';
+            path.forEach((wp, i) => {
+                const duration = wp.idleTime || 0;
+                const action = wp.animation || 'walk';
+                const hasStop = duration > 0;
+
+                html += `<div style="background:#1a1a2e; border-radius:4px; padding:6px; margin-bottom:6px; border-left:3px solid ${hasStop ? '#4af' : '#444'};">`;
+
+                // Header row: waypoint number and position
+                html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">`;
+                html += `<span style="font-weight:bold; color:#4af;">#${i + 1}</span>`;
+                html += `<span style="color:#666; font-size:10px;">(${wp.x}, ${wp.y})</span>`;
+                html += `</div>`;
+
+                // Action row: what to do at this waypoint
+                html += `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`;
+
+                // Action dropdown
+                html += `<select id="wpAction${i}" style="font-size:11px; padding:3px; background:#333; border:1px solid #555; color:#fff; border-radius:3px;" onchange="setWaypointAction(${i}, this.value)">`;
+                html += `<option value="walk"${action === 'walk' ? ' selected' : ''}>Walk through</option>`;
+                html += `<option value="idle"${action === 'idle' ? ' selected' : ''}>Stop & Idle</option>`;
+                customAnims.forEach(anim => {
+                    html += `<option value="${anim}"${action === anim ? ' selected' : ''}>Stop & ${anim}</option>`;
+                });
+                html += `</select>`;
+
+                // Duration (only show if not walking through)
+                if (action !== 'walk') {
+                    html += `<span style="color:#888; font-size:10px;">for</span>`;
+                    html += `<input type="number" min="1" max="60" value="${duration || 2}" style="width:40px; padding:3px; font-size:11px; background:#333; border:1px solid #555; color:#fff; border-radius:3px; text-align:center;" onchange="setWaypointDuration(${i}, this.value)">`;
+                    html += `<span style="color:#888; font-size:10px;">sec</span>`;
+                }
+
+                html += `</div>`;
+                html += `</div>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function setWaypointAction(index, action) {
+            if (selectedPlacedNpcIndex < 0) return;
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            if (placed.path && placed.path[index]) {
+                placed.path[index].animation = action;
+                // If switching from walk to an action, set default duration
+                if (action !== 'walk' && !placed.path[index].idleTime) {
+                    placed.path[index].idleTime = 2; // Default 2 seconds
+                }
+                // If switching to walk, clear duration
+                if (action === 'walk') {
+                    placed.path[index].idleTime = 0;
+                }
+                updateNpcWaypointList(); // Refresh to show/hide duration
+            }
+        }
+
+        function setWaypointDuration(index, value) {
+            if (selectedPlacedNpcIndex < 0) return;
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            if (placed.path && placed.path[index]) {
+                placed.path[index].idleTime = Math.max(1, parseFloat(value) || 2);
+            }
+        }
+
+        function setWaypointIdle(index, value) {
+            if (selectedPlacedNpcIndex < 0) return;
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            if (placed.path && placed.path[index]) {
+                placed.path[index].idleTime = parseFloat(value) || 0;
+            }
+        }
+
+        function setWaypointAnim(index, value) {
+            if (selectedPlacedNpcIndex < 0) return;
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            if (placed.path && placed.path[index]) {
+                placed.path[index].animation = value || '';
+            }
         }
 
         function updatePlacedNpcList() {
             const container = document.getElementById('placedNpcList');
-            const currentMapNpcs = placedNpcs.filter(p => p.mapName === currentMap);
+            const currentMapNpcs = placedNpcs.filter(p => p.mapName === currentMapName);
 
             if (currentMapNpcs.length === 0) {
                 container.innerHTML = 'No NPCs placed on this map';
@@ -5839,12 +6490,14 @@
                 waypointIndex: 0,
                 direction: 'down',
                 frame: 0,
-                frameTimer: 0
+                frameTimer: 0,
+                idleUntil: 0,  // Timestamp when idle ends
+                waypointAnimation: ''  // Current animation at waypoint
             };
 
             // Update button
             const btn = document.getElementById('npcPreviewPathBtn');
-            btn.textContent = '⏹ Stop';
+            btn.textContent = 'Edit';
             btn.style.background = '#a55';
 
             // Start animation loop
@@ -5888,6 +6541,39 @@
                 return;
             }
 
+            // Check if currently idling at a waypoint
+            if (npcPreviewState.idleUntil > 0) {
+                if (timestamp < npcPreviewState.idleUntil) {
+                    // Still idling - just animate, don't move
+                    npcPreviewState.frameTimer++;
+                    const npc = npcs[placed.npcIndex];
+                    const fps = placed.animSpeed || npc?.fps || 8;
+                    const animDelay = Math.max(1, Math.round(60 / fps));
+                    if (npcPreviewState.frameTimer >= animDelay) {
+                        npcPreviewState.frameTimer = 0;
+                        npcPreviewState.frame = (npcPreviewState.frame + 1) % 4;
+                    }
+                    renderMap();
+                    npcPreviewAnimId = requestAnimationFrame(npcPathPreviewLoop);
+                    return;
+                } else {
+                    // Idle complete - advance to next waypoint
+                    npcPreviewState.idleUntil = 0;
+                    npcPreviewState.waypointAnimation = '';
+                    npcPreviewState.waypointIndex++;
+
+                    // Check if path complete
+                    if (npcPreviewState.waypointIndex >= path.length) {
+                        npcPreviewState.waypointIndex = 0;
+                        npcPreviewState.x = placed.x;
+                        npcPreviewState.y = placed.y;
+                    }
+                    renderMap();
+                    npcPreviewAnimId = requestAnimationFrame(npcPathPreviewLoop);
+                    return;
+                }
+            }
+
             // Get target waypoint
             const waypoint = path[npcPreviewState.waypointIndex];
             if (!waypoint) {
@@ -5908,13 +6594,29 @@
                 // Reached waypoint
                 npcPreviewState.x = waypoint.x;
                 npcPreviewState.y = waypoint.y;
-                npcPreviewState.waypointIndex++;
 
-                // Check if done
-                if (npcPreviewState.waypointIndex >= path.length) {
-                    npcPreviewState.waypointIndex = 0;
-                    npcPreviewState.x = placed.x;
-                    npcPreviewState.y = placed.y;
+                // Check for waypoint action (idle time, animation)
+                let idleTime = waypoint.idleTime || 0;
+                const wpAnim = waypoint.animation || '';
+
+                // If animation is set but not "walk", ensure minimum idle time
+                if (wpAnim && wpAnim !== 'walk' && wpAnim !== '' && idleTime <= 0) {
+                    idleTime = 2;
+                }
+
+                if (idleTime > 0) {
+                    // Start idling at this waypoint
+                    npcPreviewState.idleUntil = timestamp + (idleTime * 1000);
+                    npcPreviewState.waypointAnimation = wpAnim;
+                    // Don't advance waypoint yet
+                } else {
+                    // No idle - advance immediately
+                    npcPreviewState.waypointIndex++;
+                    if (npcPreviewState.waypointIndex >= path.length) {
+                        npcPreviewState.waypointIndex = 0;
+                        npcPreviewState.x = placed.x;
+                        npcPreviewState.y = placed.y;
+                    }
                 }
             } else {
                 // Move
@@ -5931,7 +6633,10 @@
 
             // Update animation frame
             npcPreviewState.frameTimer++;
-            if (npcPreviewState.frameTimer >= 8) {
+            const npc = npcs[placed.npcIndex];
+            const fps = placed.animSpeed || npc?.fps || 8;
+            const animDelay = Math.max(1, Math.round(60 / fps));
+            if (npcPreviewState.frameTimer >= animDelay) {
                 npcPreviewState.frameTimer = 0;
                 npcPreviewState.frame = (npcPreviewState.frame + 1) % 4;
             }
@@ -5949,10 +6654,23 @@
         let animPropEditorFrameW = 16;
         let animPropEditorFrameH = 16;
         let animPropEditorEditingIndex = -1;
+        let animPropEditorZoom = 3; // Zoom level for sprite sheet
         let animPropTool = 'none'; // 'none', 'collision', 'erase', 'split'
         let animPropCollisionMask = null; // 2D array for collision pixels
         let animPropSplitLine = null; // Array of Y values per column (like tileSplitLines)
         let animPropPainting = false;
+
+        function animPropZoomIn() {
+            animPropEditorZoom = Math.min(6, animPropEditorZoom + 1);
+            document.getElementById('animPropZoomLevel').textContent = animPropEditorZoom + 'x';
+            animPropDrawCanvas();
+        }
+
+        function animPropZoomOut() {
+            animPropEditorZoom = Math.max(1, animPropEditorZoom - 1);
+            document.getElementById('animPropZoomLevel').textContent = animPropEditorZoom + 'x';
+            animPropDrawCanvas();
+        }
 
         function openAnimPropEditor(editIndex = -1) {
             // Stop any running preview from previous session
@@ -6105,7 +6823,7 @@
                 return;
             }
 
-            const scale = 3;
+            const scale = animPropEditorZoom;
             canvas.width = animPropEditorImage.naturalWidth * scale;
             canvas.height = animPropEditorImage.naturalHeight * scale;
 
@@ -6379,7 +7097,7 @@
             if (!animPropEditorImage) return;
 
             const rect = this.getBoundingClientRect();
-            const scale = 3;
+            const scale = animPropEditorZoom;
             const clickX = (e.clientX - rect.left) / scale;
             const clickY = (e.clientY - rect.top) / scale;
 
@@ -6407,7 +7125,7 @@
             if (!animPropEditorImage) return;
 
             const rect = this.getBoundingClientRect();
-            const scale = 3;
+            const scale = animPropEditorZoom;
             const clickX = (e.clientX - rect.left) / scale;
             const clickY = (e.clientY - rect.top) / scale;
 
@@ -6909,7 +7627,9 @@
                     frameWidth: npc.frameWidth,
                     frameHeight: npc.frameHeight,
                     animations: npc.animations,
-                    fps: npc.fps
+                    fps: npc.fps,
+                    collisionMask: npc.collisionMask || null,
+                    splitLine: npc.splitLine ?? null
                 })),
                 currentNpcIndex,
                 placedNpcs,
@@ -6966,6 +7686,9 @@
         }
 
         function getProjectData() {
+            // Save current map state to maps object before saving
+            saveCurrentMapState();
+
             // Save current prop's collision masks before saving
             if (currentPropIndex >= 0 && props[currentPropIndex]) {
                 props[currentPropIndex].collisionMasks = { ...propCollisionMasks };
@@ -7029,7 +7752,9 @@
                     frameWidth: npc.frameWidth,
                     frameHeight: npc.frameHeight,
                     animations: npc.animations,
-                    fps: npc.fps
+                    fps: npc.fps,
+                    collisionMask: npc.collisionMask || null,
+                    splitLine: npc.splitLine ?? null
                 })),
                 currentNpcIndex,
                 placedNpcs,
@@ -7045,7 +7770,11 @@
                 lightingSettings,
                 pointLights,
                 // Save player sprite
-                playerSpriteData
+                playerSpriteData,
+                // Multi-map support
+                maps,
+                currentMapName,
+                placedTriggers
             };
         }
 
@@ -7386,6 +8115,21 @@
                 document.getElementById('playerSpriteInfo').textContent = 'Default sprite';
             }
 
+            // Load multi-map data
+            if (p.maps && Object.keys(p.maps).length > 0) {
+                maps = p.maps;
+                currentMapName = p.currentMapName || 'main';
+                console.log('Loaded', Object.keys(maps).length, 'maps');
+            } else {
+                // No multi-map data - will create 'main' map from current data after load
+                maps = {};
+                currentMapName = 'main';
+            }
+
+            // Load triggers
+            placedTriggers = p.placedTriggers || [];
+            console.log('Loaded', placedTriggers.length, 'triggers');
+
             // Load tilesets (new format with multiple tilesets)
             if (p.tilesets && p.tilesets.length > 0) {
                 let loadedCount = 0;
@@ -7400,12 +8144,21 @@
                             currentTilesetIndex = p.currentTilesetIndex || 0;
                             tilesetImg = tilesets[currentTilesetIndex].img;
                             mapInitialized = true; // Mark map as loaded
+
+                            // Initialize maps object if empty (old format project)
+                            if (Object.keys(maps).length === 0) {
+                                saveCurrentMapState();
+                                console.log('Initialized maps object with current data');
+                            }
+
                             updateTilesetDropdown();
                             setPhase('build');
                             drawPaintTileset();
                             renderLayerList();
                             renderMap();
                             updateAnimPropListDisplay();
+                            updateMapDropdowns();
+                            updateTriggerList();
                             alert('Project loaded!');
                         }
                     };
@@ -7419,12 +8172,21 @@
                     currentTilesetIndex = 0;
                     tilesetImg = img;
                     mapInitialized = true; // Mark map as loaded
+
+                    // Initialize maps object if empty (old format project)
+                    if (Object.keys(maps).length === 0) {
+                        saveCurrentMapState();
+                        console.log('Initialized maps object with current data');
+                    }
+
                     updateTilesetDropdown();
                     setPhase('build');
                     drawPaintTileset();
                     renderLayerList();
                     renderMap();
                     updateAnimPropListDisplay();
+                    updateMapDropdowns();
+                    updateTriggerList();
                     alert('Project loaded!');
                 };
                 img.src = p.tilesetData;
@@ -7436,6 +8198,337 @@
         function exportConfig() {
             const config = { gridSize, mapSize: { cols: mapCols, rows: mapRows }, tileCollisions, layers };
             navigator.clipboard.writeText(JSON.stringify(config, null, 2)).then(() => alert('Copied!'));
+        }
+
+        // ===== MULTI-MAP FUNCTIONS =====
+
+        // Save the current map state to the maps object
+        function saveCurrentMapState() {
+            maps[currentMapName] = {
+                layers: JSON.parse(JSON.stringify(layers)),
+                layerVisibility: [...layerVisibility],
+                layerNames: [...layerNames],
+                currentLayer: currentLayer,
+                tileCollisions: JSON.parse(JSON.stringify(tileCollisions)),
+                collisionMasks: JSON.parse(JSON.stringify(collisionMasks)),
+                tileSplitLines: JSON.parse(JSON.stringify(tileSplitLines)),
+                mapCols: mapCols,
+                mapRows: mapRows
+            };
+            console.log('Saved map state for:', currentMapName);
+        }
+
+        // Load a map state from the maps object
+        function loadMapState(mapData) {
+            layers = JSON.parse(JSON.stringify(mapData.layers));
+            layerVisibility = [...mapData.layerVisibility];
+            layerNames = [...mapData.layerNames];
+            currentLayer = mapData.currentLayer || 0;
+            tileCollisions = JSON.parse(JSON.stringify(mapData.tileCollisions || {}));
+            collisionMasks = JSON.parse(JSON.stringify(mapData.collisionMasks || {}));
+            tileSplitLines = JSON.parse(JSON.stringify(mapData.tileSplitLines || {}));
+            mapCols = mapData.mapCols || mapCols;
+            mapRows = mapData.mapRows || mapRows;
+            map = layers[currentLayer];
+        }
+
+        // Create a new empty map
+        function createMapData(name) {
+            maps[name] = {
+                layers: [createEmptyLayer()],
+                layerVisibility: [true],
+                layerNames: ['Layer 1'],
+                currentLayer: 0,
+                tileCollisions: {},
+                collisionMasks: {},
+                tileSplitLines: {},
+                mapCols: mapCols,
+                mapRows: mapRows
+            };
+            console.log('Created new map:', name);
+        }
+
+        // Switch to a different map
+        function switchToMap(mapName) {
+            if (!maps[mapName]) {
+                console.warn('Map not found:', mapName);
+                return false;
+            }
+
+            // Save current map state first
+            saveCurrentMapState();
+
+            // Load the new map
+            currentMapName = mapName;
+            loadMapState(maps[mapName]);
+
+            // Update UI
+            renderLayerList();
+            renderMap();
+            updateTriggerList();
+            updatePlacedNpcList();
+            updatePlacedSoundsList();
+            updatePlacedLightsList();
+            updateMapDropdowns(); // Update dropdown to show current map
+
+            console.log('Switched to map:', mapName);
+            return true;
+        }
+
+        // Get list of all map names
+        function getMapNames() {
+            return Object.keys(maps);
+        }
+
+        // Delete a map (cannot delete last map)
+        function deleteMap(mapName) {
+            const mapNames = getMapNames();
+            if (mapNames.length <= 1) {
+                alert('Cannot delete the last map');
+                return false;
+            }
+            if (mapName === currentMapName) {
+                // Switch to another map first
+                const otherMap = mapNames.find(n => n !== mapName);
+                switchToMap(otherMap);
+            }
+            delete maps[mapName];
+
+            // Remove triggers that are on or target this map
+            placedTriggers = placedTriggers.filter(t => t.mapName !== mapName && t.targetMap !== mapName);
+
+            console.log('Deleted map:', mapName);
+            return true;
+        }
+
+        // Update map dropdown selectors
+        function updateMapDropdowns() {
+            const mapNames = getMapNames();
+
+            // Update current map selector
+            const currentSelect = document.getElementById('currentMapSelect');
+            if (currentSelect) {
+                currentSelect.innerHTML = mapNames.map(name =>
+                    `<option value="${name}" ${name === currentMapName ? 'selected' : ''}>${name}</option>`
+                ).join('');
+            }
+
+            // Update target map selector
+            const targetSelect = document.getElementById('triggerTargetMap');
+            if (targetSelect) {
+                targetSelect.innerHTML = '<option value="">-- Select Map --</option>' +
+                    mapNames.map(name => `<option value="${name}">${name}</option>`).join('');
+            }
+        }
+
+        // Update trigger list UI
+        function updateTriggerList() {
+            const container = document.getElementById('triggerList');
+            if (!container) return;
+
+            const currentTriggers = placedTriggers.filter(t => t.mapName === currentMapName);
+
+            if (currentTriggers.length === 0) {
+                container.innerHTML = '<div style="color:#666; text-align:center; padding:10px;">No triggers placed</div>';
+                return;
+            }
+
+            container.innerHTML = currentTriggers.map((t, i) => {
+                const globalIdx = placedTriggers.indexOf(t);
+                return `<div style="background:#333; padding:8px; margin-bottom:4px; border-radius:3px; border-left:3px solid #f4f;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>[${t.type}] <b>To ${t.targetMap}</b></span>
+                        <button onclick="deleteTrigger(${globalIdx})" style="background:#a33; padding:2px 6px; font-size:10px;">x</button>
+                    </div>
+                    <div style="font-size:10px; color:#888; margin-top:4px;">
+                        (${t.x}, ${t.y}) > (${t.targetX}, ${t.targetY}) | ${t.transitionStyle}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Prompt for new map name
+        function promptNewMap() {
+            const name = prompt('Enter new map name:');
+            if (!name || !name.trim()) return;
+
+            const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+            if (maps[cleanName]) {
+                alert('Map "' + cleanName + '" already exists');
+                return;
+            }
+
+            // Save current map first
+            saveCurrentMapState();
+
+            // Create new map and switch to it
+            createMapData(cleanName);
+            currentMapName = cleanName;
+            loadMapState(maps[cleanName]);
+
+            updateMapDropdowns();
+            updateTriggerList();
+            renderLayerList();
+            renderMap();
+
+            alert('Created and switched to map: ' + cleanName);
+        }
+
+        // Prompt to delete current map
+        function promptDeleteMap() {
+            if (getMapNames().length <= 1) {
+                alert('Cannot delete the last map');
+                return;
+            }
+
+            if (!confirm('Delete map "' + currentMapName + '"? This cannot be undone.')) {
+                return;
+            }
+
+            const deletedName = currentMapName;
+            deleteMap(deletedName);
+            updateMapDropdowns();
+            updateTriggerList();
+            renderMap();
+
+            alert('Deleted map: ' + deletedName);
+        }
+
+        // Place a trigger at the given tile position
+        function placeTriggerAt(x, y) {
+            console.log('[TRIGGER DEBUG] placeTriggerAt called at x:', x, 'y:', y);
+
+            // Get target map from selector or text input
+            let targetMap = document.getElementById('triggerTargetMap').value;
+            const newMapName = document.getElementById('triggerNewMapName').value.trim();
+
+            console.log('[TRIGGER DEBUG] targetMap from dropdown:', targetMap);
+            console.log('[TRIGGER DEBUG] newMapName from input:', newMapName);
+
+            if (newMapName) {
+                targetMap = newMapName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+                // Clear the input
+                document.getElementById('triggerNewMapName').value = '';
+            }
+
+            if (!targetMap) {
+                alert('Please select or enter a target map name');
+                return;
+            }
+
+            // Create target map if it doesn't exist
+            if (!maps[targetMap]) {
+                createMapData(targetMap);
+                updateMapDropdowns();
+            }
+
+            // Read spawn coordinates from hidden inputs
+            const targetXInput = document.getElementById('triggerTargetX');
+            const targetYInput = document.getElementById('triggerTargetY');
+            console.log('[TRIGGER DEBUG] Reading hidden inputs:');
+            console.log('[TRIGGER DEBUG] triggerTargetX element:', targetXInput);
+            console.log('[TRIGGER DEBUG] triggerTargetX.value:', targetXInput ? targetXInput.value : 'ELEMENT NOT FOUND');
+            console.log('[TRIGGER DEBUG] triggerTargetY element:', targetYInput);
+            console.log('[TRIGGER DEBUG] triggerTargetY.value:', targetYInput ? targetYInput.value : 'ELEMENT NOT FOUND');
+
+            const trigger = {
+                x: x,
+                y: y,
+                width: 1,
+                height: 1,
+                mapName: currentMapName,
+                targetMap: targetMap,
+                targetX: parseInt(targetXInput ? targetXInput.value : '5') || 5,
+                targetY: parseInt(targetYInput ? targetYInput.value : '5') || 5,
+                type: document.getElementById('triggerType').value,
+                transitionStyle: document.getElementById('triggerTransition').value
+            };
+
+            console.log('[TRIGGER DEBUG] Created trigger object:', JSON.stringify(trigger));
+
+            placedTriggers.push(trigger);
+            updateTriggerList();
+            renderMap();
+            console.log('[TRIGGER DEBUG] Trigger placed successfully');
+        }
+
+        // Delete a trigger by index
+        function deleteTrigger(index) {
+            if (index >= 0 && index < placedTriggers.length) {
+                placedTriggers.splice(index, 1);
+                updateTriggerList();
+                renderMap();
+            }
+        }
+
+        // Remove trigger at position (for right-click)
+        function removeTriggerAt(x, y) {
+            const idx = placedTriggers.findIndex(t =>
+                t.mapName === currentMapName &&
+                x >= t.x && x < t.x + t.width &&
+                y >= t.y && y < t.y + t.height
+            );
+            if (idx >= 0) {
+                deleteTrigger(idx);
+            }
+        }
+
+        // Start spawn point setting mode
+        function startSetSpawnMode() {
+            // Get target map
+            let targetMap = document.getElementById('triggerTargetMap').value;
+            const newMapName = document.getElementById('triggerNewMapName').value.trim();
+
+            console.log('[SPAWN DEBUG] startSetSpawnMode called');
+            console.log('[SPAWN DEBUG] targetMap from dropdown:', targetMap);
+            console.log('[SPAWN DEBUG] newMapName from input:', newMapName);
+
+            if (newMapName) {
+                targetMap = newMapName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+                console.log('[SPAWN DEBUG] Using new map name:', targetMap);
+            }
+
+            if (!targetMap) {
+                alert('Please select or enter a target map first');
+                return;
+            }
+
+            // Create target map if it doesn't exist
+            if (!maps[targetMap]) {
+                console.log('[SPAWN DEBUG] Creating new map:', targetMap);
+                createMapData(targetMap);
+                updateMapDropdowns();
+            }
+
+            // Remember where we came from
+            spawnSourceMap = currentMapName;
+            settingSpawnPoint = true;
+            console.log('[SPAWN DEBUG] Source map:', spawnSourceMap, 'settingSpawnPoint:', settingSpawnPoint);
+
+            // Switch to target map
+            switchToMap(targetMap);
+            console.log('[SPAWN DEBUG] Switched to:', currentMapName);
+            renderMap(); // Force redraw to show spawn marker
+        }
+
+        // Set spawn point at clicked location
+        function setSpawnPointAt(x, y) {
+            console.log('[SPAWN DEBUG] setSpawnPointAt called with x:', x, 'y:', y);
+
+            document.getElementById('triggerTargetX').value = x;
+            document.getElementById('triggerTargetY').value = y;
+            document.getElementById('triggerSpawnDisplay').textContent = '(' + x + ', ' + y + ')';
+
+            console.log('[SPAWN DEBUG] Hidden inputs set - triggerTargetX:', document.getElementById('triggerTargetX').value);
+            console.log('[SPAWN DEBUG] Hidden inputs set - triggerTargetY:', document.getElementById('triggerTargetY').value);
+
+            // Exit spawn setting mode but stay on this map
+            // User will use map dropdown to switch back
+            settingSpawnPoint = false;
+            spawnSourceMap = null;
+
+            renderMap();
+            console.log('[SPAWN DEBUG] Spawn set at:', x, y, '- Switch back to original map to place trigger');
         }
 
         // ===== TEST MAP =====
@@ -7738,6 +8831,35 @@
             font-size: 14px;
             color: #888;
         }
+        /* 3D Interior styles */
+        #interior3D canvas {
+            display: block;
+        }
+        #exitButton3D {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: 2px solid #4af;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: monospace;
+            z-index: 600;
+        }
+        #exitButton3D:hover { background: rgba(50,100,150,0.8); }
+        .hotspot-label {
+            position: absolute;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
     </style>
 </head>
 <body>
@@ -7749,6 +8871,8 @@
         <div id="loadingPercent">0%</div>
     </div>
     <canvas id="game"></canvas>
+    <!-- 3D Interior container (hidden by default) -->
+    <div id="interior3D" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:500;"></div>
     <div id="leftTouchZone"></div>
     <div class="joystick-base" id="joystickBase">
         <div class="joystick-thumb" id="joystickThumb"></div>
@@ -7934,8 +9058,8 @@
         console.log('Initializing game with project data:', projectData);
 
         const gridSize = projectData.gridSize || 16;
-        const mapRows = projectData.mapRows || 30;
-        const mapCols = projectData.mapCols || 40;
+        let mapRows = projectData.mapRows || 30;
+        let mapCols = projectData.mapCols || 40;
 
         // Load layers
         let layers = [];
@@ -7949,7 +9073,7 @@
             console.error('No map data found!');
         }
 
-        const layerVisibility = projectData.layerVisibility || layers.map(() => true);
+        let layerVisibility = projectData.layerVisibility || layers.map(() => true);
         const playerLayerIndex = projectData.playerLayerIndex !== undefined ? projectData.playerLayerIndex : 1;
 
         console.log('Layers:', layers.length, 'MapRows:', mapRows, 'MapCols:', mapCols, 'PlayerLayer:', playerLayerIndex);
@@ -7973,9 +9097,9 @@
             }
         }
 
-        const tileCollisions = projectData.tileCollisions || {};
-        const collisionMasks = projectData.collisionMasks || {};
-        const tileSplitLines = projectData.tileSplitLines || {}; // Depth split for Y-sorting
+        let tileCollisions = projectData.tileCollisions || {};
+        let collisionMasks = projectData.collisionMasks || {};
+        let tileSplitLines = projectData.tileSplitLines || {}; // Depth split for Y-sorting
 
         console.log('Tiles with collision:', Object.keys(tileCollisions).length);
         console.log('Tiles with depth split:', Object.keys(tileSplitLines).length);
@@ -8184,6 +9308,12 @@
         console.log('Tile sounds:', Object.keys(tileSoundsData).length, tileSoundsData);
         console.log('Player sounds:', playerSoundsData);
 
+        // === TRIGGER/MAP SYSTEM ===
+        const placedTriggersData = projectData.placedTriggers || [];
+        const mapsData = projectData.maps || {};
+        let currentGameMap = projectData.currentMapName || 'main';
+        console.log('Triggers:', placedTriggersData.length, 'Maps:', Object.keys(mapsData).length);
+
         // Listen for streamed sound data from builder (mobile only)
         if (soundsWillStream) {
             console.log('Waiting for sound data to stream from builder...');
@@ -8273,7 +9403,10 @@
             targetY: placed.y * gridSize,
             // Trigger state
             triggered: placed.trigger === 'loop', // Loop starts immediately
-            waitTimer: 0
+            waitTimer: 0,
+            // Waypoint properties
+            idleUntil: 0, // Timestamp when idle ends
+            waypointAnimation: '' // Custom animation at waypoint
         }));
 
         console.log('NPCs loaded:', npcsData.length, 'Placed:', placedNpcsData.length);
@@ -8371,6 +9504,9 @@
         // === NPC UPDATE FUNCTION ===
         function updateNPCs() {
             placedNpcsData.forEach((placed, i) => {
+                // Only update NPCs on current map
+                if (placed.mapName && placed.mapName !== currentGameMap) return;
+
                 const state = npcRuntimeState[i];
                 if (!state) return;
 
@@ -8435,10 +9571,67 @@
                 const dy = state.targetY - state.y;
                 const dist = Math.hypot(dx, dy);
 
+                // Check if currently idling at a waypoint
+                if (state.idleUntil > 0) {
+                    if (performance.now() < state.idleUntil) {
+                        // Still idling - don't move, but keep animating
+                        state.moving = false;
+                        // Update animation while idling (use per-NPC animation speed)
+                        state.frameTimer++;
+                        const idleFps = placed.animSpeed || npc.fps || 8;
+                        const idleAnimSpeed = Math.max(1, Math.round(60 / idleFps));
+                        if (state.frameTimer >= idleAnimSpeed) {
+                            state.frameTimer = 0;
+                            state.frame = (state.frame + 1) % 4;
+                        }
+                        return;
+                    } else {
+                        // Idle complete - advance to next waypoint
+                        state.idleUntil = 0;
+                        state.waypointAnimation = '';
+                        state.currentWaypoint++;
+
+                        // Check if path complete after advancing
+                        if (state.currentWaypoint >= path.length) {
+                            if (placed.trigger === 'loop') {
+                                state.currentWaypoint = 0;
+                                state.x = placed.x * gridSize;
+                                state.y = placed.y * gridSize;
+                            } else {
+                                state.triggered = false;
+                                state.currentWaypoint = 0;
+                                state.x = placed.x * gridSize;
+                                state.y = placed.y * gridSize;
+                            }
+                        }
+                        return; // Start moving to next waypoint on next frame
+                    }
+                }
+
                 if (dist < speed) {
                     // Reached waypoint
                     state.x = state.targetX;
                     state.y = state.targetY;
+
+                    // Check for waypoint properties (idle time, animation)
+                    const currentWp = path[state.currentWaypoint];
+                    let idleTime = currentWp?.idleTime || 0;
+                    const wpAnim = currentWp?.animation || '';
+
+                    // If animation is set but not "walk", ensure minimum idle time
+                    if (wpAnim && wpAnim !== 'walk' && wpAnim !== '' && idleTime <= 0) {
+                        idleTime = 2; // Default 2 seconds if animation set but no duration
+                    }
+
+                    if (idleTime > 0 && state.idleUntil === 0) {
+                        // Start idling/performing action at this waypoint
+                        state.idleUntil = performance.now() + (idleTime * 1000);
+                        state.waypointAnimation = wpAnim;
+                        state.moving = false;
+                        // Don't advance waypoint - will advance after idle completes
+                        return;
+                    }
+
                     state.currentWaypoint++;
 
                     // Check if path complete
@@ -8459,23 +9652,40 @@
                     state.moving = false;
                 } else {
                     // Move towards waypoint
-                    state.moving = true;
                     const moveX = (dx / dist) * speed;
                     const moveY = (dy / dist) * speed;
-                    state.x += moveX;
-                    state.y += moveY;
+                    const newX = state.x + moveX;
+                    const newY = state.y + moveY;
 
-                    // Set direction based on movement
-                    if (Math.abs(dx) > Math.abs(dy)) {
-                        state.direction = dx > 0 ? 'right' : 'left';
+                    // Check if NPC would collide with player
+                    if (checkNPCPlayerCollision(newX, newY, i)) {
+                        // Stop and wait for player to move
+                        state.moving = false;
+                        // Still face the direction of movement
+                        if (Math.abs(dx) > Math.abs(dy)) {
+                            state.direction = dx > 0 ? 'right' : 'left';
+                        } else {
+                            state.direction = dy > 0 ? 'down' : 'up';
+                        }
                     } else {
-                        state.direction = dy > 0 ? 'down' : 'up';
+                        // No collision, proceed with movement
+                        state.moving = true;
+                        state.x = newX;
+                        state.y = newY;
+
+                        // Set direction based on movement
+                        if (Math.abs(dx) > Math.abs(dy)) {
+                            state.direction = dx > 0 ? 'right' : 'left';
+                        } else {
+                            state.direction = dy > 0 ? 'down' : 'up';
+                        }
                     }
                 }
 
-                // Update animation
+                // Update animation using per-NPC animation speed
                 state.frameTimer++;
-                const animSpeed = 10;
+                const fps = placed.animSpeed || npc.fps || 8;
+                const animSpeed = Math.max(1, Math.round(60 / fps)); // Convert fps to frame delay
                 if (state.frameTimer >= animSpeed) {
                     state.frameTimer = 0;
                     state.frame = (state.frame + 1) % 4;
@@ -8650,7 +9860,18 @@
             const fadeTime = 0.1; // Smooth transition time in seconds
 
             Object.keys(tileSoundsData).forEach(key => {
-                const [sx, sy] = key.split(',').map(Number);
+                // Filter by current map (keys are "mapName:x,y" or legacy "x,y")
+                let sx, sy;
+                if (key.includes(':')) {
+                    // New format: "mapName:x,y"
+                    const parts = key.split(':');
+                    if (parts[0] !== currentGameMap) return; // Skip sounds on other maps
+                    [sx, sy] = parts[1].split(',').map(Number);
+                } else {
+                    // Legacy format: "x,y" (treat as main map)
+                    if (currentGameMap !== 'main') return;
+                    [sx, sy] = key.split(',').map(Number);
+                }
                 const ts = tileSoundsData[key];
                 let soundBuffer = soundBuffers[ts.soundIndex];
 
@@ -8788,7 +10009,7 @@
             }
 
             // Cut out placed point lights
-            const mapPrefix = currentMapName + ':';
+            const mapPrefix = currentGameMap + ':';
             Object.keys(pointLightsData).forEach(key => {
                 if (!key.startsWith(mapPrefix)) return;
 
@@ -8985,6 +10206,10 @@
             if (e.key === 'Escape') window.close();
             if (e.key === 'c' || e.key === 'C') showCollision = !showCollision;
             if (e.key === ' ' && !player.attacking) {
+                // Check for trigger interaction first
+                if (checkTriggerInteraction()) {
+                    return; // Trigger found, don't attack
+                }
                 player.attacking = true;
                 player.attackTimer = 18;
                 // Play attack sound
@@ -9103,6 +10328,7 @@
         document.getElementById('attackBtn').addEventListener('touchstart', (e) => {
             e.preventDefault();
             if (!player.attacking) {
+                if (checkTriggerInteraction()) return;
                 player.attacking = true;
                 player.attackTimer = 18;
                 if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
@@ -9112,6 +10338,7 @@
         }, { passive: false });
         document.getElementById('attackBtn').addEventListener('click', () => {
             if (!player.attacking) {
+                if (checkTriggerInteraction()) return;
                 player.attacking = true;
                 player.attackTimer = 18;
                 if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
@@ -9204,6 +10431,119 @@
             return false;
         }
 
+        // Check collision with all NPCs - uses collision mask bounds or foot hitbox
+        function checkNPCCollision(x, y, w, h) {
+            const tileSize = gridSize * TILE_SCALE;
+            for (let i = 0; i < placedNpcsData.length; i++) {
+                const placed = placedNpcsData[i];
+                // Only check NPCs on current map
+                if (placed.mapName && placed.mapName !== currentGameMap) continue;
+
+                const state = npcRuntimeState[i];
+                if (!state) continue;
+                const npc = npcsData[placed.npcIndex];
+                if (!npc) continue;
+
+                let npcX, npcY, npcW, npcH;
+
+                // Use collision mask if available
+                if (npc.collisionMask && npc.collisionMask.length > 0) {
+                    // Calculate bounds from collision mask
+                    let minX = Infinity, maxX = -1, minY = Infinity, maxY = -1;
+                    const frameW = npc.frameWidth || gridSize;
+                    const frameH = npc.frameHeight || gridSize;
+                    for (let py = 0; py < Math.min(frameH, npc.collisionMask.length); py++) {
+                        for (let px = 0; px < Math.min(frameW, npc.collisionMask[py]?.length || 0); px++) {
+                            if (npc.collisionMask[py][px] === 1) {
+                                minX = Math.min(minX, px);
+                                maxX = Math.max(maxX, px);
+                                minY = Math.min(minY, py);
+                                maxY = Math.max(maxY, py);
+                            }
+                        }
+                    }
+                    if (maxX >= 0) {
+                        // Found collision pixels - use bounds
+                        const scaleX = tileSize / frameW;
+                        const scaleY = tileSize / frameH;
+                        npcX = state.x * TILE_SCALE + minX * scaleX;
+                        npcY = state.y * TILE_SCALE + minY * scaleY;
+                        npcW = (maxX - minX + 1) * scaleX;
+                        npcH = (maxY - minY + 1) * scaleY;
+                    } else {
+                        // No collision mask pixels drawn - no collision
+                        continue;
+                    }
+                } else {
+                    // Default foot hitbox (bottom 33%, 70% width)
+                    npcW = tileSize * 0.7;
+                    npcH = tileSize * 0.33;
+                    npcX = state.x * TILE_SCALE + (tileSize - npcW) / 2;
+                    npcY = state.y * TILE_SCALE + tileSize * 0.67;
+                }
+
+                // AABB collision check
+                if (x < npcX + npcW && x + w > npcX &&
+                    y < npcY + npcH && y + h > npcY) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Check if NPC at given position would collide with player
+        function checkNPCPlayerCollision(npcX, npcY, npcIndex) {
+            const tileSize = gridSize * TILE_SCALE;
+            const placed = placedNpcsData[npcIndex];
+            const npc = npcsData[placed?.npcIndex];
+            if (!npc) return false;
+
+            let npcHitX, npcHitY, npcW, npcH;
+
+            // Use collision mask if available
+            if (npc.collisionMask && npc.collisionMask.length > 0) {
+                let minX = Infinity, maxX = -1, minY = Infinity, maxY = -1;
+                const frameW = npc.frameWidth || gridSize;
+                const frameH = npc.frameHeight || gridSize;
+                for (let py = 0; py < Math.min(frameH, npc.collisionMask.length); py++) {
+                    for (let px = 0; px < Math.min(frameW, npc.collisionMask[py]?.length || 0); px++) {
+                        if (npc.collisionMask[py][px] === 1) {
+                            minX = Math.min(minX, px);
+                            maxX = Math.max(maxX, px);
+                            minY = Math.min(minY, py);
+                            maxY = Math.max(maxY, py);
+                        }
+                    }
+                }
+                if (maxX >= 0) {
+                    const scaleX = tileSize / frameW;
+                    const scaleY = tileSize / frameH;
+                    npcHitX = npcX * TILE_SCALE + minX * scaleX;
+                    npcHitY = npcY * TILE_SCALE + minY * scaleY;
+                    npcW = (maxX - minX + 1) * scaleX;
+                    npcH = (maxY - minY + 1) * scaleY;
+                } else {
+                    return false; // No collision mask drawn
+                }
+            } else {
+                // Default foot hitbox
+                npcW = tileSize * 0.7;
+                npcH = tileSize * 0.33;
+                npcHitX = npcX * TILE_SCALE + (tileSize - npcW) / 2;
+                npcHitY = npcY * TILE_SCALE + tileSize * 0.67;
+            }
+
+            // Player foot hitbox (bottom 1/3)
+            const playerW = player.width * 0.7;
+            const playerH = player.height / 3;
+            const playerHitX = player.x + (player.width - playerW) / 2;
+            const playerHitY = player.y + player.height * 2/3;
+
+            // AABB collision check
+            return npcHitX < playerHitX + playerW && npcHitX + npcW > playerHitX &&
+                   npcHitY < playerHitY + playerH && npcHitY + npcH > playerHitY;
+        }
+
         function update() {
             let dx = 0, dy = 0;
             player.moving = false;
@@ -9233,11 +10573,14 @@
             let movedX = false;
             let movedY = false;
 
-            if (dx !== 0 && !checkCollision(player.x + dx, collisionY, player.width, collisionHeight)) {
+            // Check tile collision AND NPC collision
+            if (dx !== 0 && !checkCollision(player.x + dx, collisionY, player.width, collisionHeight) &&
+                !checkNPCCollision(player.x + dx, collisionY, player.width, collisionHeight)) {
                 player.x += dx;
                 movedX = true;
             }
-            if (dy !== 0 && !checkCollision(player.x, collisionY + dy, player.width, collisionHeight)) {
+            if (dy !== 0 && !checkCollision(player.x, collisionY + dy, player.width, collisionHeight) &&
+                !checkNPCCollision(player.x, collisionY + dy, player.width, collisionHeight)) {
                 player.y += dy;
                 movedY = true;
             }
@@ -9327,6 +10670,139 @@
             updateAmbientSounds();
         }
 
+        // === MAP TRANSITION SYSTEM ===
+        let isTransitioning = false;
+        let transitionAlpha = 0;
+        let transitionPhase = 'none'; // 'fadeOut', 'fadeIn', 'none'
+        let pendingTransition = null;
+
+        // Check if player is on a trigger and interact
+        function checkTriggerInteraction() {
+            if (isTransitioning) return false;
+
+            const tileSize = gridSize * TILE_SCALE;
+            // Get player's foot position (center bottom)
+            const playerTileX = Math.floor((player.x + player.width / 2) / tileSize);
+            const playerTileY = Math.floor((player.y + player.height * 0.8) / tileSize);
+
+            for (const trigger of placedTriggersData) {
+                if (trigger.mapName !== currentGameMap) continue;
+
+                // Check if player is in trigger zone
+                if (playerTileX >= trigger.x && playerTileX < trigger.x + (trigger.width || 1) &&
+                    playerTileY >= trigger.y && playerTileY < trigger.y + (trigger.height || 1)) {
+
+                    // Found a trigger - start transition
+                    startMapTransition(trigger);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Start map transition
+        function startMapTransition(trigger) {
+            console.log('[GAME TRIGGER DEBUG] startMapTransition called');
+            console.log('[GAME TRIGGER DEBUG] Full trigger object:', JSON.stringify(trigger));
+
+            if (isTransitioning) {
+                console.log('[GAME TRIGGER DEBUG] Already transitioning, ignoring');
+                return;
+            }
+
+            isTransitioning = true;
+            pendingTransition = trigger;
+
+            if (trigger.transitionStyle === 'instant') {
+                executeMapTransition(trigger);
+            } else {
+                // Fade transition
+                transitionPhase = 'fadeOut';
+                transitionAlpha = 0;
+            }
+        }
+
+        // Execute the actual map switch
+        function executeMapTransition(trigger) {
+            console.log('[GAME TRIGGER DEBUG] executeMapTransition called');
+            console.log('[GAME TRIGGER DEBUG] trigger.targetMap:', trigger.targetMap);
+            console.log('[GAME TRIGGER DEBUG] trigger.targetX:', trigger.targetX, 'type:', typeof trigger.targetX);
+            console.log('[GAME TRIGGER DEBUG] trigger.targetY:', trigger.targetY, 'type:', typeof trigger.targetY);
+
+            const targetMapData = mapsData[trigger.targetMap];
+            if (!targetMapData) {
+                console.error('[GAME TRIGGER DEBUG] Target map not found:', trigger.targetMap);
+                console.log('[GAME TRIGGER DEBUG] Available maps:', Object.keys(mapsData));
+                isTransitioning = false;
+                pendingTransition = null;
+                return;
+            }
+
+            // Switch to new map
+            currentGameMap = trigger.targetMap;
+
+            // Load the new map data
+            layers = targetMapData.layers || layers;
+            tileCollisions = targetMapData.tileCollisions || {};
+            collisionMasks = targetMapData.collisionMasks || {};
+            tileSplitLines = targetMapData.tileSplitLines || {};
+            mapCols = targetMapData.mapCols || mapCols;
+            mapRows = targetMapData.mapRows || mapRows;
+
+            // Position player at target spawn
+            const tileSize = gridSize * TILE_SCALE;
+            console.log('[GAME TRIGGER DEBUG] tileSize:', tileSize, '(gridSize:', gridSize, 'TILE_SCALE:', TILE_SCALE, ')');
+
+            player.x = trigger.targetX * tileSize;
+            player.y = trigger.targetY * tileSize;
+            console.log('[GAME TRIGGER DEBUG] Player positioned at pixel x:', player.x, 'y:', player.y);
+
+            // Reset camera to center on player
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+
+            console.log('[GAME TRIGGER DEBUG] Transition complete to map:', trigger.targetMap, 'at tile', trigger.targetX, trigger.targetY);
+
+            // Start fade in (or finish if instant)
+            if (pendingTransition && pendingTransition.transitionStyle !== 'instant') {
+                transitionPhase = 'fadeIn';
+            } else {
+                isTransitioning = false;
+                pendingTransition = null;
+            }
+        }
+
+        // Update transition animation
+        function updateTransition() {
+            if (!isTransitioning) return;
+
+            const speed = 0.05;
+
+            if (transitionPhase === 'fadeOut') {
+                transitionAlpha += speed;
+                if (transitionAlpha >= 1) {
+                    transitionAlpha = 1;
+                    executeMapTransition(pendingTransition);
+                }
+            } else if (transitionPhase === 'fadeIn') {
+                transitionAlpha -= speed;
+                if (transitionAlpha <= 0) {
+                    transitionAlpha = 0;
+                    transitionPhase = 'none';
+                    isTransitioning = false;
+                    pendingTransition = null;
+                }
+            }
+        }
+
+        // Draw transition overlay
+        function drawTransitionOverlay() {
+            if (transitionAlpha > 0) {
+                ctx.fillStyle = 'rgba(0, 0, 0, ' + transitionAlpha + ')';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
         function draw() {
             ctx.fillStyle = '#1a1a2e';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -9383,9 +10859,16 @@
             // Draw sound debug visualization
             if (showSounds) {
                 Object.keys(tileSoundsData).forEach(key => {
-                    const parts = key.split(',');
-                    const sx = parseInt(parts[0]) || 0;
-                    const sy = parseInt(parts[1]) || 0;
+                    // Filter by current map
+                    let sx, sy;
+                    if (key.includes(':')) {
+                        const parts = key.split(':');
+                        if (parts[0] !== currentGameMap) return;
+                        [sx, sy] = parts[1].split(',').map(Number);
+                    } else {
+                        if (currentGameMap !== 'main') return;
+                        [sx, sy] = key.split(',').map(Number);
+                    }
                     const ts = tileSoundsData[key];
                     if (!ts) return;
 
@@ -9469,6 +10952,38 @@
                         }
                     }
                 }
+            }
+
+            // Draw trigger zones when collision debug is enabled
+            if (showCollision && placedTriggersData) {
+                const triggersOnMap = placedTriggersData.filter(t => t.mapName === currentGameMap);
+
+                triggersOnMap.forEach(trigger => {
+                    const px = trigger.x * tileSize - camX;
+                    const py = trigger.y * tileSize - camY;
+                    const pw = (trigger.width || 1) * tileSize;
+                    const ph = (trigger.height || 1) * tileSize;
+
+                    // Draw trigger zone - bright magenta
+                    ctx.fillStyle = 'rgba(255, 0, 255, 0.4)';
+                    ctx.fillRect(px, py, pw, ph);
+                    ctx.strokeStyle = '#f0f';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(px, py, pw, ph);
+
+                    // Draw type label
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 12px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(trigger.type.toUpperCase(), px + pw / 2, py + ph / 2 - 8);
+
+                    // Show target info
+                    ctx.font = '10px monospace';
+                    ctx.fillText('> ' + trigger.targetMap, px + pw / 2, py + ph / 2 + 6);
+                    ctx.fillStyle = '#ff0';
+                    ctx.fillText('(' + trigger.targetX + ',' + trigger.targetY + ')', px + pw / 2, py + ph + 12);
+                });
             }
 
             ctx.restore();
@@ -9665,12 +11180,17 @@
 
             // Add NPCs
             placedNpcsData.forEach((placed, i) => {
+                // Only show NPCs on current map
+                if (placed.mapName && placed.mapName !== currentGameMap) return;
+
                 const state = npcRuntimeState[i];
                 if (!state) return;
                 const npc = npcsData[placed.npcIndex];
                 if (!npc) return;
 
-                const npcGridY = Math.floor((state.y + gridSize) / (gridSize * TILE_SCALE));
+                // state.y is in grid pixels (unscaled), so divide by gridSize to get tile Y
+                // Add gridSize to get bottom of NPC (feet position) for proper Y-sorting
+                const npcGridY = Math.floor((state.y + gridSize) / gridSize);
                 entities.push({
                     type: 'npc',
                     npcIndex: i,
@@ -10270,7 +11790,7 @@
             const sx = Math.round(state.x * TILE_SCALE - camX);
             const sy = Math.round(state.y * TILE_SCALE - camY);
 
-            // Get correct animation based on direction
+            // Get correct animation based on direction or waypoint animation
             const anims = npc.animations || {};
             const dirMap = {
                 'down': 'walkDown',
@@ -10278,7 +11798,14 @@
                 'left': 'walkLeft',
                 'right': 'walkRight'
             };
-            const animKey = state.moving ? dirMap[state.direction] : 'idle';
+            // Use waypoint animation if set AND has frames, otherwise use walk/idle based on state
+            let animKey;
+            if (state.waypointAnimation && state.waypointAnimation !== 'walk' &&
+                anims[state.waypointAnimation] && anims[state.waypointAnimation].length > 0) {
+                animKey = state.waypointAnimation;
+            } else {
+                animKey = state.moving ? dirMap[state.direction] : 'idle';
+            }
             let anim = anims[animKey];
 
             // Fallback to any available animation
@@ -10323,8 +11850,12 @@
 
         function gameLoop() {
             updateDayCycle();
-            update();
+            updateTransition();
+            if (!isTransitioning || transitionPhase === 'fadeIn') {
+                update();
+            }
             draw();
+            drawTransitionOverlay();
             requestAnimationFrame(gameLoop);
         }
 
