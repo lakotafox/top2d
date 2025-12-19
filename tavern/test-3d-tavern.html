@@ -275,6 +275,10 @@
                         <label style="color:#666; font-size:10px;">Side Offset: <span id="tpSideOffsetVal">0</span></label>
                         <input type="range" id="tpSideOffsetSlider" min="-3" max="3" step="0.1" value="0" style="width:100%;">
                     </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Pitch: <span id="tpPitchVal">0</span>°</label>
+                        <input type="range" id="tpPitchSlider" min="-45" max="45" step="1" value="0" style="width:100%;">
+                    </div>
                 </div>
                 <!-- FPS Hands Position -->
                 <div style="margin-top:8px; background:#1a3a2a; padding:8px; border-radius:4px;">
@@ -368,8 +372,8 @@
                         <input type="range" id="playerDepth" min="0.2" max="2.0" step="0.1" value="0.8" style="width:100%;">
                     </div>
                     <div style="margin-top:4px;">
-                        <label style="color:#666; font-size:10px;">Height: <span id="playerHeightVal">1.4</span></label>
-                        <input type="range" id="playerHeight" min="0.5" max="3.0" step="0.1" value="1.4" style="width:100%;">
+                        <label style="color:#666; font-size:10px;">Height: <span id="playerHeightVal">2.4</span></label>
+                        <input type="range" id="playerHeight" min="0.5" max="3.0" step="0.1" value="2.4" style="width:100%;">
                     </div>
                     <div style="margin-top:6px; display:flex; gap:5px;">
                         <button id="toggleBodyBtn" onclick="togglePlayerBody()" style="flex:1; padding:5px; font-size:10px; background:#555;">Hide Body</button>
@@ -865,7 +869,7 @@
         // Player Body dimensions (VISUAL ONLY)
         let playerWidth = 0.5;
         let playerDepth = 0.8;
-        let playerHeight = 1.4;
+        let playerHeight = 2.4;
 
         // Collision Box dimensions (ACTUAL COLLISION)
         let collWidth = 0.6;
@@ -903,6 +907,7 @@
         let thirdPersonHeight = 1.5; // Camera height offset
         let thirdPersonLookOffset = 0; // Y offset for where camera looks
         let thirdPersonSideOffset = 0; // Horizontal offset (left/right)
+        let thirdPersonPitch = 0; // Camera pitch angle in degrees
 
         // Update eye height when player height changes
         function updateEyeHeight() {
@@ -1769,6 +1774,10 @@
         document.getElementById('tpSideOffsetSlider').addEventListener('input', function(e) {
             thirdPersonSideOffset = parseFloat(e.target.value);
             document.getElementById('tpSideOffsetVal').textContent = thirdPersonSideOffset;
+        });
+        document.getElementById('tpPitchSlider').addEventListener('input', function(e) {
+            thirdPersonPitch = parseFloat(e.target.value);
+            document.getElementById('tpPitchVal').textContent = thirdPersonPitch;
         });
 
         // Camera marker (white box at camera position)
@@ -6267,6 +6276,8 @@
                     );
                     // Look at player with Y offset
                     camera.lookAt(playerPos.x, playerPos.y + thirdPersonLookOffset, playerPos.z);
+                    // Apply pitch adjustment (rotate camera up/down)
+                    camera.rotateX(thirdPersonPitch * Math.PI / 180);
                 }
             }
 
