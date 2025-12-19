@@ -1093,14 +1093,14 @@
                 // Cache collision meshes immediately
                 cacheCollisionMeshes();
 
-                // Load first person hands
-                loader.load('tavern_assets3d/fp_arms_low_poly.glb', function(handsGltf) {
+                // Load player model (Hooded Adventurer)
+                loader.load('../Hooded Adventurer.glb', function(handsGltf) {
                     fpsHands = handsGltf.scene;
 
-                    // Scale and position hands relative to camera
-                    fpsHands.scale.setScalar(1.5);
-                    fpsHands.position.set(0, -0.85, -1.35);
-                    fpsHands.rotation.set(60 * Math.PI / 180, Math.PI, 0); // RotX=60°, RotY=180°
+                    // Scale and position model relative to camera (full body visible)
+                    fpsHands.scale.setScalar(0.8);
+                    fpsHands.position.set(0, -1.5, -0.8);
+                    fpsHands.rotation.set(0, Math.PI, 0); // Face forward
 
                     // Add hands as child of camera so they move with view
                     camera.add(fpsHands);
