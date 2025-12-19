@@ -1093,14 +1093,14 @@
                 // Cache collision meshes immediately
                 cacheCollisionMeshes();
 
-                // Load player model (Hooded Adventurer)
-                loader.load('../Hooded Adventurer.glb', function(handsGltf) {
+                // Load first person arms
+                loader.load('tavern_assets3d/fp_arms_low_poly.glb', function(handsGltf) {
                     fpsHands = handsGltf.scene;
 
-                    // Scale and position model relative to camera (full body visible)
-                    fpsHands.scale.setScalar(0.8);
-                    fpsHands.position.set(0, -1.5, -0.8);
-                    fpsHands.rotation.set(0, Math.PI, 0); // Face forward
+                    // Scale and position arms relative to camera
+                    fpsHands.scale.setScalar(1.5);
+                    fpsHands.position.set(0, -0.85, -1.35);
+                    fpsHands.rotation.set(60 * Math.PI / 180, Math.PI, 0); // RotX=60°, RotY=180°
 
                     // Add hands as child of camera so they move with view
                     camera.add(fpsHands);
@@ -1109,30 +1109,26 @@
                     // Set up animation mixer
                     fpsHandsMixer = new THREE.AnimationMixer(fpsHands);
 
-                    // Map animations to simple names
-                    const animMap = {
-                        'characterarmature|run': 'run_forward',
-                        'characterarmature|run_back': 'run_back',
-                        'characterarmature|run_left': 'run_left',
-                        'characterarmature|run_right': 'run_right'
-                    };
-
-                    // Store animations by mapped name
+                    // Store animations by name
                     handsGltf.animations.forEach(clip => {
-                        const rawName = clip.name.toLowerCase();
-                        const mappedName = animMap[rawName] || rawName;
-                        fpsHandsAnimations[mappedName] = fpsHandsMixer.clipAction(clip);
-                        console.log('[PLAYER] Animation:', clip.name, '->', mappedName);
+                        const name = clip.name.toLowerCase();
+                        fpsHandsAnimations[name] = fpsHandsMixer.clipAction(clip);
+                        console.log('[HANDS] Animation found:', clip.name);
                     });
 
-                    // Start with forward run as idle (or first available)
-                    const startAnim = fpsHandsAnimations['run_forward'] ? 'run_forward' : Object.keys(fpsHandsAnimations)[0];
-                    if (startAnim && fpsHandsAnimations[startAnim]) {
-                        fpsHandsAnimations[startAnim].play();
-                        currentHandsAnim = startAnim;
+                    // Start with idle animation
+                    if (fpsHandsAnimations['idle']) {
+                        fpsHandsAnimations['idle'].play();
+                        currentHandsAnim = 'idle';
+                    } else {
+                        const firstAnim = Object.keys(fpsHandsAnimations)[0];
+                        if (firstAnim) {
+                            fpsHandsAnimations[firstAnim].play();
+                            currentHandsAnim = firstAnim;
+                        }
                     }
 
-                    console.log('[PLAYER] Hooded Adventurer loaded!', Object.keys(fpsHandsAnimations));
+                    console.log('[HANDS] First person arms loaded!', Object.keys(fpsHandsAnimations));
                 });
 
                 // Hide loading (UI starts hidden, press H to show)
@@ -6109,32 +6105,24 @@
                     keys[' '] = false; // Prevent continuous jumping while held
                 }
 
-                // Update player animation based on movement direction
+                // Update hands animation based on movement
                 if (fpsHandsMixer) {
                     // Only auto-switch if not forcing a specific animation
                     if (forceAnim === 'auto') {
-                        // Determine target animation based on movement keys
-                        let targetAnim = null;
-                        if (keys['w']) targetAnim = 'run_forward';
-                        else if (keys['s']) targetAnim = 'run_back';
-                        else if (keys['a']) targetAnim = 'run_left';
-                        else if (keys['d']) targetAnim = 'run_right';
+                        const isMoving = keys['w'] || keys['s'] || keys['a'] || keys['d'];
+                        const isRunning = keys['shift'] && isMoving;
 
-                        // If moving, switch animation
-                        if (targetAnim && targetAnim !== currentHandsAnim && fpsHandsAnimations[targetAnim]) {
+                        let targetAnim = 'idle';
+                        if (isRunning) targetAnim = 'run';
+                        else if (isMoving) targetAnim = 'walk';
+
+                        // Switch animation if needed
+                        if (targetAnim !== currentHandsAnim && fpsHandsAnimations[targetAnim]) {
                             if (fpsHandsAnimations[currentHandsAnim]) {
                                 fpsHandsAnimations[currentHandsAnim].fadeOut(animBlendDuration);
                             }
                             fpsHandsAnimations[targetAnim].reset().fadeIn(animBlendDuration).play();
                             currentHandsAnim = targetAnim;
-                        }
-                        // If not moving, pause current animation (hold pose)
-                        else if (!targetAnim && fpsHandsAnimations[currentHandsAnim]) {
-                            fpsHandsAnimations[currentHandsAnim].paused = true;
-                        }
-                        // Resume if moving again
-                        else if (targetAnim && fpsHandsAnimations[currentHandsAnim]) {
-                            fpsHandsAnimations[currentHandsAnim].paused = false;
                         }
                     }
 
