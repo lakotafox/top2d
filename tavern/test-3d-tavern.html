@@ -1109,27 +1109,30 @@
                     // Set up animation mixer
                     fpsHandsMixer = new THREE.AnimationMixer(fpsHands);
 
-                    // Store animations by name
+                    // Map animations to simple names
+                    const animMap = {
+                        'characterarmature|run': 'run_forward',
+                        'characterarmature|run_back': 'run_back',
+                        'characterarmature|run_left': 'run_left',
+                        'characterarmature|run_right': 'run_right'
+                    };
+
+                    // Store animations by mapped name
                     handsGltf.animations.forEach(clip => {
-                        const name = clip.name.toLowerCase();
-                        fpsHandsAnimations[name] = fpsHandsMixer.clipAction(clip);
-                        console.log('[HANDS] Animation found:', clip.name);
+                        const rawName = clip.name.toLowerCase();
+                        const mappedName = animMap[rawName] || rawName;
+                        fpsHandsAnimations[mappedName] = fpsHandsMixer.clipAction(clip);
+                        console.log('[PLAYER] Animation:', clip.name, '->', mappedName);
                     });
 
-                    // Start with idle animation
-                    if (fpsHandsAnimations['idle']) {
-                        fpsHandsAnimations['idle'].play();
-                        currentHandsAnim = 'idle';
-                    } else {
-                        // Try first animation if 'idle' not found
-                        const firstAnim = Object.keys(fpsHandsAnimations)[0];
-                        if (firstAnim) {
-                            fpsHandsAnimations[firstAnim].play();
-                            currentHandsAnim = firstAnim;
-                        }
+                    // Start with forward run as idle (or first available)
+                    const startAnim = fpsHandsAnimations['run_forward'] ? 'run_forward' : Object.keys(fpsHandsAnimations)[0];
+                    if (startAnim && fpsHandsAnimations[startAnim]) {
+                        fpsHandsAnimations[startAnim].play();
+                        currentHandsAnim = startAnim;
                     }
 
-                    console.log('[HANDS] First person hands loaded!', fpsHandsAnimations);
+                    console.log('[PLAYER] Hooded Adventurer loaded!', Object.keys(fpsHandsAnimations));
                 });
 
                 // Hide loading (UI starts hidden, press H to show)
@@ -6106,25 +6109,32 @@
                     keys[' '] = false; // Prevent continuous jumping while held
                 }
 
-                // Update hands animation based on movement
+                // Update player animation based on movement direction
                 if (fpsHandsMixer) {
                     // Only auto-switch if not forcing a specific animation
                     if (forceAnim === 'auto') {
-                        const isMoving = keys['w'] || keys['s']; // Only forward/back triggers walk anim
-                        const isRunning = keys['shift'] && isMoving;
+                        // Determine target animation based on movement keys
+                        let targetAnim = null;
+                        if (keys['w']) targetAnim = 'run_forward';
+                        else if (keys['s']) targetAnim = 'run_back';
+                        else if (keys['a']) targetAnim = 'run_left';
+                        else if (keys['d']) targetAnim = 'run_right';
 
-                        let targetAnim = 'idle';
-                        if (isRunning) targetAnim = 'run';
-                        else if (isMoving) targetAnim = 'walk';
-
-                        // Switch animation if needed
-                        if (targetAnim !== currentHandsAnim && fpsHandsAnimations[targetAnim]) {
-                            // Fade out current, fade in new
+                        // If moving, switch animation
+                        if (targetAnim && targetAnim !== currentHandsAnim && fpsHandsAnimations[targetAnim]) {
                             if (fpsHandsAnimations[currentHandsAnim]) {
                                 fpsHandsAnimations[currentHandsAnim].fadeOut(animBlendDuration);
                             }
                             fpsHandsAnimations[targetAnim].reset().fadeIn(animBlendDuration).play();
                             currentHandsAnim = targetAnim;
+                        }
+                        // If not moving, pause current animation (hold pose)
+                        else if (!targetAnim && fpsHandsAnimations[currentHandsAnim]) {
+                            fpsHandsAnimations[currentHandsAnim].paused = true;
+                        }
+                        // Resume if moving again
+                        else if (targetAnim && fpsHandsAnimations[currentHandsAnim]) {
+                            fpsHandsAnimations[currentHandsAnim].paused = false;
                         }
                     }
 
