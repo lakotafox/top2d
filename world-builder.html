@@ -720,8 +720,31 @@
                 </button>
             </div>
             <div>
-                <button class="retro-btn" onclick="startCraft()">
+                <button class="retro-btn" onclick="showCraftMultiplayerPrompt()">
                     > CRAFT
+                </button>
+            </div>
+        </div>
+        <div class="load-box" id="craftMultiplayerPrompt" style="display:none;">
+            <h1>CO-OP<br>BUILD</h1>
+            <p>- OPTIONAL -</p>
+            <div style="margin-top:15px;">
+                <input type="text" id="craftPlayerName" placeholder="YOUR NAME" maxlength="12"
+                    style="font-family:'Press Start 2P',monospace; font-size:10px; padding:10px; width:180px; text-align:center; background:#111; color:#fff; border:2px solid #fff;">
+            </div>
+            <div style="margin-top:10px;">
+                <input type="text" id="craftRoomCode" placeholder="ROOM CODE" maxlength="12"
+                    style="font-family:'Press Start 2P',monospace; font-size:10px; padding:10px; width:180px; text-align:center; background:#111; color:#fff; border:2px solid #fff;">
+            </div>
+            <p style="font-size:6px; color:#666; margin-top:8px;">LEAVE BLANK FOR SOLO</p>
+            <div style="margin-top:15px;">
+                <button class="retro-btn" onclick="startCraft()">
+                    > BUILD
+                </button>
+            </div>
+            <div>
+                <button class="retro-btn" onclick="hideCraftMultiplayerPrompt()" style="font-size:8px;">
+                    > BACK
                 </button>
             </div>
         </div>

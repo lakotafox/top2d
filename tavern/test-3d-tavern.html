@@ -275,9 +275,8 @@
                         <label style="color:#666; font-size:10px;">Side Offset: <span id="tpSideOffsetVal">0</span></label>
                         <input type="range" id="tpSideOffsetSlider" min="-3" max="3" step="0.1" value="0" style="width:100%;">
                     </div>
-                    <div style="margin-top:4px;">
-                        <label style="color:#666; font-size:10px;">Pitch: <span id="tpPitchVal">0</span>°</label>
-                        <input type="range" id="tpPitchSlider" min="-45" max="45" step="1" value="0" style="width:100%;">
+                    <div style="margin-top:6px;">
+                        <button id="setTPCamBtn" onclick="startTPCameraPlacement()" style="width:100%; padding:8px; background:#a64; font-size:11px;">Set Camera Position</button>
                     </div>
                 </div>
                 <!-- FPS Hands Position -->
@@ -904,10 +903,14 @@
         let thirdPersonAnimations = {};
         let currentThirdPersonAnim = 'run_forward';
         let isThirdPerson = false; // Toggle with V key
+        let thirdPersonDistance = 3; // Distance behind player
         let thirdPersonHeight = 1.5; // Camera height offset
         let thirdPersonLookOffset = 0; // Y offset for where camera looks
         let thirdPersonSideOffset = 0; // Horizontal offset (left/right)
-        let thirdPersonPitch = 0; // Camera pitch angle in degrees
+        // Free camera placement mode
+        let tpCameraPlacementMode = false;
+        let tpCamOffset = new THREE.Vector3(0, 2, 5); // Saved camera offset from player
+        let tpCamLookOffset = new THREE.Vector3(0, 0, 0); // Where camera looks relative to player
 
         // Update eye height when player height changes
         function updateEyeHeight() {
@@ -1231,6 +1234,11 @@
 
         // Pointer lock for mouse look
         renderer.domElement.addEventListener('click', () => {
+            // Confirm third person camera placement
+            if (tpCameraPlacementMode) {
+                confirmTPCameraPosition();
+                return;
+            }
             if (settingSpawn) {
                 // Set spawn point at current position
                 spawnPoint = {
@@ -1686,6 +1694,32 @@
             console.log('[VIEW] Switched to', mode === 'tp' ? 'third person' : 'first person');
         };
 
+        // Third person camera placement mode
+        window.startTPCameraPlacement = function() {
+            if (!isThirdPerson) {
+                alert('Switch to Third Person first!');
+                return;
+            }
+            tpCameraPlacementMode = true;
+            document.getElementById('setTPCamBtn').textContent = 'WASD+QE to fly, CLICK to set';
+            document.getElementById('setTPCamBtn').style.background = '#4a4';
+            console.log('[TP CAM] Placement mode started - fly around and click to set position');
+        };
+
+        window.confirmTPCameraPosition = function() {
+            if (!tpCameraPlacementMode) return;
+            // Save offset from player position
+            tpCamOffset.set(
+                camera.position.x - playerPos.x,
+                camera.position.y - playerPos.y,
+                camera.position.z - playerPos.z
+            );
+            tpCameraPlacementMode = false;
+            document.getElementById('setTPCamBtn').textContent = 'Set Camera Position';
+            document.getElementById('setTPCamBtn').style.background = '#a64';
+            console.log('[TP CAM] Camera offset saved:', tpCamOffset);
+        };
+
         // Visibility toggles
         window.togglePlayerBody = function() {
             playerBodyVisible = !playerBodyVisible;
@@ -1774,10 +1808,6 @@
         document.getElementById('tpSideOffsetSlider').addEventListener('input', function(e) {
             thirdPersonSideOffset = parseFloat(e.target.value);
             document.getElementById('tpSideOffsetVal').textContent = thirdPersonSideOffset;
-        });
-        document.getElementById('tpPitchSlider').addEventListener('input', function(e) {
-            thirdPersonPitch = parseFloat(e.target.value);
-            document.getElementById('tpPitchVal').textContent = thirdPersonPitch;
         });
 
         // Camera marker (white box at camera position)
@@ -6142,7 +6172,7 @@
             // Skip normal movement and physics when in adjust phase AND not in walk mode
             const inAdjustPhase = collisionPlaceMode && placementPhase === 'adjust';
             const canMove = (!inAdjustPhase || adjustWalkMode) && !farkleGameActive;
-            const flyMode = farkleCameraMode || farklePlaceMode; // Free fly in placement modes
+            const flyMode = farkleCameraMode || farklePlaceMode || tpCameraPlacementMode; // Free fly in placement modes
             const skipCollision = flyMode; // No collision when flying
 
             if (canMove) {
@@ -6262,23 +6292,17 @@
                 }
 
                 // Adjust camera for third person view
-                if (isThirdPerson) {
-                    // Camera behind and above player
-                    const camDirX = Math.sin(yaw) * thirdPersonDistance;
-                    const camDirZ = Math.cos(yaw) * thirdPersonDistance;
-                    // Side offset (perpendicular to camera direction)
-                    const sideX = Math.cos(yaw) * thirdPersonSideOffset;
-                    const sideZ = -Math.sin(yaw) * thirdPersonSideOffset;
-                    // Scale height with distance to maintain consistent viewing angle
-                    const scaledHeight = thirdPersonHeight * (thirdPersonDistance / 3);
+                if (isThirdPerson && !tpCameraPlacementMode) {
+                    // Use saved camera offset - rotate offset around player based on yaw
+                    const rotatedX = tpCamOffset.x * Math.cos(yaw) - tpCamOffset.z * Math.sin(yaw);
+                    const rotatedZ = tpCamOffset.x * Math.sin(yaw) + tpCamOffset.z * Math.cos(yaw);
                     camera.position.set(
-                        playerPos.x + camDirX + sideX,
-                        playerPos.y + scaledHeight,
-                        playerPos.z + camDirZ + sideZ
+                        playerPos.x + rotatedX,
+                        playerPos.y + tpCamOffset.y,
+                        playerPos.z + rotatedZ
                     );
-                    // Look at player with Y offset, adjusted by pitch
-                    const pitchOffset = Math.tan(thirdPersonPitch * Math.PI / 180) * thirdPersonDistance;
-                    camera.lookAt(playerPos.x, playerPos.y + thirdPersonLookOffset + pitchOffset, playerPos.z);
+                    // Look at player
+                    camera.lookAt(playerPos.x, playerPos.y + tpCamLookOffset.y, playerPos.z);
                 }
             }
 
