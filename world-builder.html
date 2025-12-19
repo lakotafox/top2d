@@ -3234,12 +3234,16 @@
             };
             console.log('Placed tile sound:', key, tileSounds[key]);
             console.log('Total tile sounds:', Object.keys(tileSounds).length);
+            // Broadcast to co-op builders
+            broadcastEdit({ editType: 'tileSound', key: key, sound: tileSounds[key] });
             updatePlacedSoundsList();
             renderMap();
         }
 
         function removeTileSound(key) {
             delete tileSounds[key];
+            // Broadcast to co-op builders
+            broadcastEdit({ editType: 'removeTileSound', key: key });
             updatePlacedSoundsList();
             renderMap();
         }
@@ -3372,6 +3376,8 @@
             const flicker = document.getElementById('pointLightFlicker').checked;
             pointLights[key] = { radius, flicker };
             console.log('Placed light:', key, pointLights[key]);
+            // Broadcast to co-op builders
+            broadcastEdit({ editType: 'light', key: key, light: pointLights[key] });
             updatePlacedLightsList();
             renderMap();
         }
@@ -3380,6 +3386,8 @@
             const key = currentMapName + ':' + x + ',' + y;
             if (pointLights[key]) {
                 delete pointLights[key];
+                // Broadcast to co-op builders
+                broadcastEdit({ editType: 'removeLight', key: key });
                 updatePlacedLightsList();
                 renderMap();
             }
@@ -3402,6 +3410,8 @@
             });
             if (nearestKey) {
                 delete pointLights[nearestKey];
+                // Broadcast to co-op builders
+                broadcastEdit({ editType: 'removeLight', key: nearestKey });
                 updatePlacedLightsList();
                 renderMap();
             }
@@ -4328,6 +4338,8 @@
                         placedH: placedH,
                         rotation: rot
                     };
+                    // Broadcast to co-op builders
+                    broadcastEdit({ editType: 'tile', layer: currentLayer, x: px, y: py, cell: layers[currentLayer][py][px], mapName: currentMapName });
                 }
             }
             renderMap();
@@ -4378,6 +4390,8 @@
                         if (mapX < 0 || mapY < 0 || mapX >= mapCols || mapY >= mapRows) continue;
                         if (layers[currentLayer][mapY]) {
                             layers[currentLayer][mapY][mapX] = null;
+                            // Broadcast to co-op builders
+                            broadcastEdit({ editType: 'eraseTile', layer: currentLayer, x: mapX, y: mapY, mapName: currentMapName });
                         }
                     }
                 }
@@ -4518,6 +4532,8 @@
                 if (erasing && x >= 0 && x < mapCols && y >= 0 && y < mapRows) {
                     saveForUndo(x, y, map[y][x]); // Save for undo
                     map[y][x] = null;
+                    // Broadcast erase to co-op builders
+                    broadcastEdit({ editType: 'eraseTile', layer: currentLayer, x: x, y: y, mapName: currentMapName });
                     renderMap();
                 }
                 return;
@@ -4535,6 +4551,8 @@
                         if (mx >= 0 && mx < mapCols && my >= 0 && my < mapRows) {
                             saveForUndo(mx, my, map[my][mx]); // Save for undo
                             map[my][mx] = null;
+                            // Broadcast erase to co-op builders
+                            broadcastEdit({ editType: 'eraseTile', layer: currentLayer, x: mx, y: my, mapName: currentMapName });
                         }
                     }
                 }
@@ -4556,6 +4574,8 @@
                                 if (srcCell) {
                                     saveForUndo(mx, my, map[my][mx]); // Save for undo
                                     map[my][mx] = { ...srcCell };
+                                    // Broadcast tile to co-op builders
+                                    broadcastEdit({ editType: 'tile', layer: currentLayer, x: mx, y: my, cell: map[my][mx], mapName: currentMapName });
                                 }
                             }
                         }
@@ -4586,6 +4606,8 @@
                                     // Paint as tile with rotation and flip
                                     map[my][mx] = { type: 'tile', x: tileX, y: tileY, rotation: tileRotation, flipped: tileFlippedH, tilesetIndex: currentTilesetIndex };
                                 }
+                                // Broadcast tile to co-op builders
+                                broadcastEdit({ editType: 'tile', layer: currentLayer, x: mx, y: my, cell: map[my][mx], mapName: currentMapName });
                             }
                         }
                     }
@@ -6735,6 +6757,8 @@
 
             placedNpcs.push(placed);
             selectedPlacedNpcIndex = placedNpcs.length - 1;
+            // Broadcast to co-op builders
+            broadcastEdit({ editType: 'placeNpc', npc: placed, index: selectedPlacedNpcIndex });
 
             updatePlacedNpcList();
             showNpcPathPanel();
@@ -6779,6 +6803,8 @@
             const idx = findPlacedNpcAt(x, y);
             if (idx >= 0) {
                 placedNpcs.splice(idx, 1);
+                // Broadcast to co-op builders
+                broadcastEdit({ editType: 'removeNpc', index: idx });
                 if (selectedPlacedNpcIndex === idx) {
                     selectedPlacedNpcIndex = -1;
                     hideNpcPathPanel();
@@ -6792,7 +6818,10 @@
 
         function deleteSelectedPlacedNpc() {
             if (selectedPlacedNpcIndex >= 0) {
+                const idx = selectedPlacedNpcIndex;
                 placedNpcs.splice(selectedPlacedNpcIndex, 1);
+                // Broadcast to co-op builders
+                broadcastEdit({ editType: 'removeNpc', index: idx });
                 selectedPlacedNpcIndex = -1;
                 npcPathDrawing = false;
                 hideNpcPathPanel();
@@ -8592,21 +8621,95 @@
         function applyRemoteEdit(edit) {
             console.log('[BUILDER MP] Applying remote edit:', edit.editType);
 
+            // Get the target map's layers
+            let targetLayers;
+            if (edit.mapName && edit.mapName !== currentMapName && maps[edit.mapName]) {
+                // Edit is for a different map
+                targetLayers = maps[edit.mapName].layers;
+            } else {
+                // Edit is for current map
+                targetLayers = layers;
+            }
+
             switch (edit.editType) {
                 case 'tile':
                     // Apply tile placement
-                    if (!layers[edit.layer]) layers[edit.layer] = [];
-                    if (!layers[edit.layer][edit.y]) layers[edit.layer][edit.y] = [];
-                    layers[edit.layer][edit.y][edit.x] = edit.cell;
-                    renderAllLayers();
+                    if (!targetLayers[edit.layer]) targetLayers[edit.layer] = [];
+                    if (!targetLayers[edit.layer][edit.y]) targetLayers[edit.layer][edit.y] = [];
+                    targetLayers[edit.layer][edit.y][edit.x] = edit.cell;
+                    if (!edit.mapName || edit.mapName === currentMapName) {
+                        renderMap();
+                    }
                     break;
 
                 case 'eraseTile':
                     // Apply tile erasure
-                    if (layers[edit.layer] && layers[edit.layer][edit.y]) {
-                        layers[edit.layer][edit.y][edit.x] = null;
+                    if (targetLayers[edit.layer] && targetLayers[edit.layer][edit.y]) {
+                        targetLayers[edit.layer][edit.y][edit.x] = null;
                     }
-                    renderAllLayers();
+                    if (!edit.mapName || edit.mapName === currentMapName) {
+                        renderMap();
+                    }
+                    break;
+
+                case 'tileSound':
+                    // Apply tile sound placement
+                    tileSounds[edit.key] = edit.sound;
+                    updatePlacedSoundsList();
+                    renderMap();
+                    break;
+
+                case 'removeTileSound':
+                    // Remove tile sound
+                    delete tileSounds[edit.key];
+                    updatePlacedSoundsList();
+                    renderMap();
+                    break;
+
+                case 'light':
+                    // Apply light placement
+                    pointLights[edit.key] = edit.light;
+                    updatePlacedLightsList();
+                    renderMap();
+                    break;
+
+                case 'removeLight':
+                    // Remove light
+                    delete pointLights[edit.key];
+                    updatePlacedLightsList();
+                    renderMap();
+                    break;
+
+                case 'placeNpc':
+                    // Add NPC
+                    placedNpcs.push(edit.npc);
+                    updatePlacedNpcList();
+                    renderMap();
+                    break;
+
+                case 'removeNpc':
+                    // Remove NPC by index
+                    if (edit.index >= 0 && edit.index < placedNpcs.length) {
+                        placedNpcs.splice(edit.index, 1);
+                        updatePlacedNpcList();
+                        renderMap();
+                    }
+                    break;
+
+                case 'placeTrigger':
+                    // Add trigger
+                    placedTriggers.push(edit.trigger);
+                    updatePlacedTriggerList();
+                    renderMap();
+                    break;
+
+                case 'removeTrigger':
+                    // Remove trigger by index
+                    if (edit.index >= 0 && edit.index < placedTriggers.length) {
+                        placedTriggers.splice(edit.index, 1);
+                        updatePlacedTriggerList();
+                        renderMap();
+                    }
                     break;
 
                 case 'collision':
@@ -9610,6 +9713,8 @@
                 console.log('[DOOR] Door ' + pendingDoorNumber + ' at (' + pendingDoorX + ', ' + pendingDoorY + ') -> "' + externalUrl + '"');
 
                 placedTriggers.push(trigger);
+                // Broadcast to co-op builders
+                broadcastEdit({ editType: 'placeTrigger', trigger: trigger });
                 updateTriggerList();
                 updateDoorNumberDropdown();
                 closeDoorMapModal();
@@ -9666,6 +9771,8 @@
             console.log('[DOOR] Door ' + pendingDoorNumber + ' at (' + pendingDoorX + ', ' + pendingDoorY + ') -> "' + cleanMapName + '"');
 
             placedTriggers.push(trigger);
+            // Broadcast to co-op builders
+            broadcastEdit({ editType: 'placeTrigger', trigger: trigger });
             updateTriggerList();
             updateDoorNumberDropdown();
 
@@ -9722,6 +9829,8 @@
         function deleteTrigger(index) {
             if (index >= 0 && index < placedTriggers.length) {
                 placedTriggers.splice(index, 1);
+                // Broadcast to co-op builders
+                broadcastEdit({ editType: 'removeTrigger', index: index });
                 updateTriggerList();
                 updateDoorNumberDropdown();
                 renderMap();
