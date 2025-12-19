@@ -256,22 +256,6 @@
                     </div>
                     <button onclick="copyCameraSettings()" style="width:100%; margin-top:6px; padding:5px; font-size:10px; background:#48a;">Copy Camera Settings</button>
                 </div>
-                <!-- Third Person Camera -->
-                <div style="margin-top:8px; background:#3a2a1a; padding:8px; border-radius:4px;">
-                    <label style="color:#fa8; font-size:11px;">Third Person Camera</label>
-                    <div style="margin-top:6px;">
-                        <label style="color:#666; font-size:10px;">Distance: <span id="tpDistVal">5</span></label>
-                        <input type="range" id="tpDistSlider" min="1" max="15" step="0.5" value="5" style="width:100%;">
-                    </div>
-                    <div style="margin-top:4px;">
-                        <label style="color:#666; font-size:10px;">Height: <span id="tpHeightVal">2</span></label>
-                        <input type="range" id="tpHeightSlider" min="0" max="8" step="0.5" value="2" style="width:100%;">
-                    </div>
-                    <div style="margin-top:4px;">
-                        <label style="color:#666; font-size:10px;">Look At Height: <span id="tpLookVal">1</span></label>
-                        <input type="range" id="tpLookSlider" min="0" max="3" step="0.1" value="1" style="width:100%;">
-                    </div>
-                </div>
                 <!-- FPS Hands Position -->
                 <div style="margin-top:8px; background:#1a3a2a; padding:8px; border-radius:4px;">
                     <label style="color:#8f8; font-size:11px;">FPS Hands Position</label>
@@ -895,9 +879,7 @@
         let thirdPersonAnimations = {};
         let currentThirdPersonAnim = 'run_forward';
         let isThirdPerson = false; // Toggle with V key
-        let tpCamDistance = 5; // Distance behind player
-        let tpCamHeight = 2; // Height above player
-        let tpCamLookHeight = 1; // Where to look (height on player)
+        let tpCamLookHeight = 1; // Where to look on player (Y offset)
 
         // Update eye height when player height changes
         function updateEyeHeight() {
@@ -1746,20 +1728,6 @@
         document.getElementById('camZSlider').addEventListener('input', function() {
             camOffsetZ = parseFloat(this.value);
             document.getElementById('camZVal').textContent = camOffsetZ.toFixed(2);
-        });
-
-        // Third person camera sliders
-        document.getElementById('tpDistSlider').addEventListener('input', function(e) {
-            tpCamDistance = parseFloat(e.target.value);
-            document.getElementById('tpDistVal').textContent = tpCamDistance;
-        });
-        document.getElementById('tpHeightSlider').addEventListener('input', function(e) {
-            tpCamHeight = parseFloat(e.target.value);
-            document.getElementById('tpHeightVal').textContent = tpCamHeight;
-        });
-        document.getElementById('tpLookSlider').addEventListener('input', function(e) {
-            tpCamLookHeight = parseFloat(e.target.value);
-            document.getElementById('tpLookVal').textContent = tpCamLookHeight;
         });
 
         // Camera marker (white box at camera position)
@@ -6124,7 +6092,7 @@
             // Skip normal movement and physics when in adjust phase AND not in walk mode
             const inAdjustPhase = collisionPlaceMode && placementPhase === 'adjust';
             const canMove = (!inAdjustPhase || adjustWalkMode) && !farkleGameActive;
-            const flyMode = farkleCameraMode || farklePlaceMode; // Free fly in placement modes
+            const flyMode = farkleCameraMode || farklePlaceMode || isThirdPerson; // Free fly in placement modes and third person
             const skipCollision = flyMode; // No collision when flying
 
             if (canMove) {
@@ -6243,13 +6211,8 @@
                     thirdPersonMixer.update(delta);
                 }
 
-                // Adjust camera for third person view
+                // In third person, camera just looks at player (user controls position with WASDQE)
                 if (isThirdPerson) {
-                    // Position camera behind player based on yaw
-                    const camX = playerPos.x + Math.sin(yaw) * tpCamDistance;
-                    const camZ = playerPos.z + Math.cos(yaw) * tpCamDistance;
-                    camera.position.set(camX, playerPos.y + tpCamHeight, camZ);
-                    // Look at player
                     camera.lookAt(playerPos.x, playerPos.y + tpCamLookHeight, playerPos.z);
                 }
             }
@@ -6323,22 +6286,6 @@
             // Check collisions in test mode
             if (testMode) {
                 checkCollisions();
-            }
-
-            // Handle third-person camera
-            let renderCamera = camera;
-            if (viewMode === 'tp') {
-                // Create a temporary camera position behind the player
-                const behindOffset = new THREE.Vector3(0, 1, tpCamDistance);
-                behindOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-                const tpCamPos = camera.position.clone().add(behindOffset);
-                tpCamPos.y += 1; // Slightly above
-
-                // Create a temporary camera for third-person view
-                const tpCamera = camera.clone();
-                tpCamera.position.copy(tpCamPos);
-                tpCamera.lookAt(camera.position);
-                renderCamera = tpCamera;
             }
 
             // Update position display

@@ -8552,69 +8552,90 @@
         let builderRoomCode = null;
 
         function connectBuilderMultiplayer(name, roomCode) {
-            if (!roomCode) return; // Solo mode
+            console.log('[BUILDER MP DEBUG] connectBuilderMultiplayer called with name:', name, 'roomCode:', roomCode);
+
+            if (!roomCode) {
+                console.log('[BUILDER MP DEBUG] No room code, solo mode');
+                return; // Solo mode
+            }
 
             builderPlayerName = name;
             builderRoomCode = roomCode;
-            console.log('[BUILDER MP] Connecting as', name, 'to room', roomCode);
+            const wsUrl = 'wss://multiplayer.lakotafox.partykit.dev/party/builder-' + roomCode;
+            console.log('[BUILDER MP DEBUG] Connecting to:', wsUrl);
 
             try {
-                builderSocket = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/party/builder-' + roomCode);
+                builderSocket = new WebSocket(wsUrl);
+                console.log('[BUILDER MP DEBUG] WebSocket created, waiting for open...');
 
                 builderSocket.onopen = () => {
-                    console.log('[BUILDER MP] Connected!');
+                    console.log('[BUILDER MP DEBUG] WebSocket OPEN!');
                     builderConnected = true;
-                    builderSocket.send(JSON.stringify({
+                    const joinMsg = {
                         type: 'join',
                         name: builderPlayerName,
                         gameType: 'builder'
-                    }));
+                    };
+                    console.log('[BUILDER MP DEBUG] Sending join message:', joinMsg);
+                    builderSocket.send(JSON.stringify(joinMsg));
                     showBuilderStatus('Connected: ' + roomCode);
+                    console.log('[BUILDER MP DEBUG] builderConnected is now:', builderConnected);
                 };
 
                 builderSocket.onmessage = (event) => {
+                    console.log('[BUILDER MP DEBUG] Raw message received:', event.data);
                     try {
                         const data = JSON.parse(event.data);
                         handleBuilderMessage(data);
                     } catch (e) {
-                        console.error('[BUILDER MP] Parse error:', e);
+                        console.error('[BUILDER MP DEBUG] Parse error:', e);
                     }
                 };
 
-                builderSocket.onclose = () => {
-                    console.log('[BUILDER MP] Disconnected');
+                builderSocket.onclose = (event) => {
+                    console.log('[BUILDER MP DEBUG] WebSocket CLOSED, code:', event.code, 'reason:', event.reason);
                     builderConnected = false;
                     showBuilderStatus('Disconnected');
                 };
 
                 builderSocket.onerror = (err) => {
-                    console.error('[BUILDER MP] Error:', err);
+                    console.error('[BUILDER MP DEBUG] WebSocket ERROR:', err);
                 };
             } catch (e) {
-                console.error('[BUILDER MP] Connect failed:', e);
+                console.error('[BUILDER MP DEBUG] Connect failed:', e);
             }
         }
 
         function handleBuilderMessage(data) {
+            console.log('[BUILDER MP DEBUG] handleBuilderMessage received:', data);
+            console.log('[BUILDER MP DEBUG] data.type:', data.type);
+
             // Ignore our own messages
             if (data.type === 'welcome' || data.type === 'join') {
                 if (data.player) {
-                    console.log('[BUILDER MP] Player joined:', data.player.name);
+                    console.log('[BUILDER MP DEBUG] Player joined:', data.player.name);
                 }
                 if (data.players) {
-                    console.log('[BUILDER MP] Players in room:', data.players.length);
+                    console.log('[BUILDER MP DEBUG] Players in room:', data.players.length);
                 }
                 return;
             }
 
             if (data.type === 'leave') {
-                console.log('[BUILDER MP] Player left');
+                console.log('[BUILDER MP DEBUG] Player left');
                 return;
             }
 
             // Handle edit messages from other builders
+            console.log('[BUILDER MP DEBUG] Checking for update message...');
+            console.log('[BUILDER MP DEBUG] data.player:', data.player);
+            console.log('[BUILDER MP DEBUG] data.player?.editType:', data.player?.editType);
+
             if (data.type === 'update' && data.player && data.player.editType) {
+                console.log('[BUILDER MP DEBUG] >>> APPLYING REMOTE EDIT <<<');
                 applyRemoteEdit(data.player);
+            } else {
+                console.log('[BUILDER MP DEBUG] Message not an edit update, ignoring');
             }
         }
 
@@ -8729,13 +8750,22 @@
         }
 
         function broadcastEdit(editData) {
-            if (!builderConnected || !builderSocket) return;
+            console.log('[BUILDER MP DEBUG] broadcastEdit called:', editData);
+            console.log('[BUILDER MP DEBUG] builderConnected:', builderConnected, 'builderSocket:', builderSocket ? 'exists' : 'null');
 
-            builderSocket.send(JSON.stringify({
+            if (!builderConnected || !builderSocket) {
+                console.log('[BUILDER MP DEBUG] NOT CONNECTED - broadcast skipped');
+                return;
+            }
+
+            const message = {
                 type: 'update',
                 ...editData,
                 gameType: 'builder'
-            }));
+            };
+            console.log('[BUILDER MP DEBUG] Sending message:', JSON.stringify(message));
+            builderSocket.send(JSON.stringify(message));
+            console.log('[BUILDER MP DEBUG] Message sent!');
         }
 
         function showBuilderStatus(msg) {
@@ -8798,11 +8828,16 @@
 
         // Craft mode - just load into editor
         async function startCraft() {
-            if (!pendingSaveData) return;
+            console.log('[BUILDER MP DEBUG] startCraft called');
+            if (!pendingSaveData) {
+                console.log('[BUILDER MP DEBUG] No pendingSaveData, returning');
+                return;
+            }
 
             // Get multiplayer settings from craft prompt
             const playerName = document.getElementById('craftPlayerName').value.trim() || 'Builder';
             const roomCode = document.getElementById('craftRoomCode').value.trim();
+            console.log('[BUILDER MP DEBUG] playerName:', playerName, 'roomCode:', roomCode);
 
             // Hide prompts
             document.getElementById('craftMultiplayerPrompt').style.display = 'none';
@@ -8813,8 +8848,12 @@
             document.getElementById('mainMenu').style.display = 'block';
 
             // Connect to builder multiplayer if room code provided
+            console.log('[BUILDER MP DEBUG] About to check roomCode for connection...');
             if (roomCode) {
+                console.log('[BUILDER MP DEBUG] Room code exists, calling connectBuilderMultiplayer');
                 connectBuilderMultiplayer(playerName, roomCode);
+            } else {
+                console.log('[BUILDER MP DEBUG] No room code, skipping multiplayer connection');
             }
         }
 
