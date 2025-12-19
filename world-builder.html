@@ -715,13 +715,36 @@
             <h1>SELECT<br>MODE</h1>
             <p>- PLAY OR EDIT? -</p>
             <div style="margin-top:20px;">
-                <button class="retro-btn" onclick="startAdventure()">
+                <button class="retro-btn" onclick="showMultiplayerPrompt()">
                     > ADVENTURE
                 </button>
             </div>
             <div>
                 <button class="retro-btn" onclick="startCraft()">
                     > CRAFT
+                </button>
+            </div>
+        </div>
+        <div class="load-box" id="multiplayerPrompt" style="display:none;">
+            <h1>MULTIPLAYER</h1>
+            <p>- OPTIONAL -</p>
+            <div style="margin-top:15px;">
+                <input type="text" id="mpPlayerName" placeholder="YOUR NAME" maxlength="12"
+                    style="font-family:'Press Start 2P',monospace; font-size:10px; padding:10px; width:180px; text-align:center; background:#111; color:#fff; border:2px solid #fff;">
+            </div>
+            <div style="margin-top:10px;">
+                <input type="text" id="mpRoomCode" placeholder="ROOM CODE" maxlength="12"
+                    style="font-family:'Press Start 2P',monospace; font-size:10px; padding:10px; width:180px; text-align:center; background:#111; color:#fff; border:2px solid #fff;">
+            </div>
+            <p style="font-size:6px; color:#666; margin-top:8px;">LEAVE BLANK FOR SOLO</p>
+            <div style="margin-top:15px;">
+                <button class="retro-btn" onclick="startAdventure()">
+                    > START
+                </button>
+            </div>
+            <div>
+                <button class="retro-btn" onclick="hideMultiplayerPrompt()" style="font-size:8px;">
+                    > BACK
                 </button>
             </div>
         </div>
@@ -8446,10 +8469,37 @@
             event.target.value = '';
         }
 
+        // Multiplayer prompt functions
+        function showMultiplayerPrompt() {
+            document.getElementById('modeSelect').style.display = 'none';
+            document.getElementById('multiplayerPrompt').style.display = 'block';
+            document.getElementById('mpPlayerName').focus();
+        }
+
+        function hideMultiplayerPrompt() {
+            document.getElementById('multiplayerPrompt').style.display = 'none';
+            document.getElementById('modeSelect').style.display = 'block';
+        }
+
         // Adventure mode - load project, open test, hide UI
         let launchAsAdventure = false;
+        let multiplayerSettings = null; // Will be set from prompt
+
         async function startAdventure() {
             if (!pendingSaveData) return;
+
+            // Get multiplayer settings from prompt
+            const playerName = document.getElementById('mpPlayerName').value.trim() || 'Player';
+            const roomCode = document.getElementById('mpRoomCode').value.trim();
+
+            if (roomCode) {
+                multiplayerSettings = { playerName, roomCode };
+            } else {
+                multiplayerSettings = null; // Solo mode
+            }
+
+            document.getElementById('multiplayerPrompt').style.display = 'none';
+            document.getElementById('modeSelect').style.display = 'block';
             document.getElementById('modeSelect').innerHTML = '<h1>LOADING...</h1>';
             // Keep loadPhase visible during entire loading process
             keepLoadPhaseVisible = true;
@@ -9791,6 +9841,14 @@
             if (launchAsAdventure) {
                 projectDataForTest.autoHideUI = true;
             }
+            // Add multiplayer settings if set
+            if (multiplayerSettings) {
+                projectDataForTest.multiplayer = {
+                    playerName: multiplayerSettings.playerName,
+                    roomCode: multiplayerSettings.roomCode
+                };
+                logTestEvent('Multiplayer: ' + multiplayerSettings.playerName + ' in room ' + multiplayerSettings.roomCode);
+            }
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
             logTestEvent('Mobile: ' + isMobile + ', Sounds: ' + (projectDataForTest.sounds?.length || 0));
@@ -10533,6 +10591,132 @@
             attacking: false,
             attackTimer: 0
         };
+
+        // === MULTIPLAYER SYSTEM ===
+        let mpSocket = null;
+        let mpConnected = false;
+        let mpPlayerName = 'Player';
+        let mpLastSendTime = 0;
+        const otherPlayers = new Map(); // id -> {x, y, direction, animation, name, frame, frameTimer}
+
+        // Initialize multiplayer if settings provided
+        if (projectData.multiplayer) {
+            mpPlayerName = projectData.multiplayer.playerName || 'Player';
+            const roomCode = projectData.multiplayer.roomCode;
+            console.log('[MP] Connecting as', mpPlayerName, 'to room', roomCode);
+
+            try {
+                mpSocket = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/party/' + roomCode);
+
+                mpSocket.onopen = () => {
+                    console.log('[MP] Connected to server');
+                    mpConnected = true;
+                    // Send join message
+                    mpSocket.send(JSON.stringify({
+                        type: 'join',
+                        name: mpPlayerName,
+                        x: player.x,
+                        y: player.y,
+                        direction: player.direction,
+                        animation: 'idle',
+                        currentMap: currentGameMap,
+                        gameType: 'game2d'
+                    }));
+                };
+
+                mpSocket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleMpMessage(data);
+                    } catch (e) {
+                        console.error('[MP] Error parsing message:', e);
+                    }
+                };
+
+                mpSocket.onclose = () => {
+                    console.log('[MP] Disconnected');
+                    mpConnected = false;
+                };
+
+                mpSocket.onerror = (err) => {
+                    console.error('[MP] WebSocket error:', err);
+                };
+            } catch (e) {
+                console.error('[MP] Failed to connect:', e);
+            }
+        }
+
+        function handleMpMessage(data) {
+            switch (data.type) {
+                case 'welcome':
+                    console.log('[MP] Welcome:', data.message);
+                    // Spawn existing players (only game2d ones)
+                    if (data.players) {
+                        data.players.filter(p => p.gameType === 'game2d').forEach(p => {
+                            otherPlayers.set(p.id, {
+                                x: p.x, y: p.y,
+                                direction: p.direction || 'down',
+                                animation: p.animation || 'idle',
+                                name: p.name || 'Player',
+                                frame: 0, frameTimer: 0
+                            });
+                            console.log('[MP] Added existing player:', p.name);
+                        });
+                    }
+                    break;
+
+                case 'join':
+                    if (data.player && data.player.gameType === 'game2d') {
+                        otherPlayers.set(data.player.id, {
+                            x: data.player.x, y: data.player.y,
+                            direction: data.player.direction || 'down',
+                            animation: data.player.animation || 'idle',
+                            name: data.player.name || 'Player',
+                            frame: 0, frameTimer: 0
+                        });
+                        console.log('[MP] Player joined:', data.player.name);
+                    }
+                    break;
+
+                case 'update':
+                    if (data.player && data.player.gameType === 'game2d') {
+                        const other = otherPlayers.get(data.player.id);
+                        if (other) {
+                            other.x = data.player.x;
+                            other.y = data.player.y;
+                            other.direction = data.player.direction || other.direction;
+                            other.animation = data.player.animation || other.animation;
+                        }
+                    }
+                    break;
+
+                case 'leave':
+                    if (data.playerId) {
+                        const leaving = otherPlayers.get(data.playerId);
+                        if (leaving) {
+                            console.log('[MP] Player left:', leaving.name);
+                            otherPlayers.delete(data.playerId);
+                        }
+                    }
+                    break;
+            }
+        }
+
+        function sendMpUpdate() {
+            if (!mpConnected || !mpSocket) return;
+            const now = Date.now();
+            if (now - mpLastSendTime < 100) return; // Throttle to 10/sec
+            mpLastSendTime = now;
+
+            mpSocket.send(JSON.stringify({
+                type: 'update',
+                x: player.x,
+                y: player.y,
+                direction: player.direction,
+                animation: player.moving ? 'walk' : 'idle',
+                currentMap: currentGameMap
+            }));
+        }
 
         // === SOUND SYSTEM ===
         let soundsData = projectData.sounds || []; // 'let' so we can receive streamed sounds
@@ -11944,6 +12128,19 @@
 
             // Update ambient sounds based on proximity
             updateAmbientSounds();
+
+            // === MULTIPLAYER UPDATES ===
+            // Send position update to server
+            sendMpUpdate();
+
+            // Update other players' animations
+            otherPlayers.forEach((other, id) => {
+                other.frameTimer++;
+                if (other.frameTimer >= animSpeed) {
+                    other.frameTimer = 0;
+                    other.frame = (other.frame + 1) % 4;
+                }
+            });
         }
 
         // === MAP TRANSITION SYSTEM ===
@@ -12736,6 +12933,18 @@
                 });
             });
 
+            // Add other multiplayer players
+            otherPlayers.forEach((other, odId) => {
+                // Only show players on same map (using currentMap from their data)
+                // For now, show all 2D players
+                const otherGridY = Math.floor((other.y + player.height) / (gridSize * TILE_SCALE));
+                entities.push({
+                    type: 'otherPlayer',
+                    playerId: odId,
+                    sortY: (otherGridY + 1) * 1000 + playerLayer + 0.45 // Between NPCs and player
+                });
+            });
+
             // Add tiles from all layers 1+
             for (let li = 1; li < layers.length; li++) {
                 if (!layerVisibility[li]) continue;
@@ -12791,6 +13000,8 @@
             for (const e of entities) {
                 if (e.type === 'player') {
                     drawPlayer();
+                } else if (e.type === 'otherPlayer') {
+                    drawOtherPlayer(e.playerId, camX, camY);
                 } else if (e.type === 'npc') {
                     drawNPC(e.npcIndex, camX, camY, tileSize);
                 } else if (e.type === 'trunk') {
@@ -13314,6 +13525,82 @@
                 ctx.arc(sx + player.width / 2, sy + collisionOffsetY + collisionHeight / 2, 3, 0, Math.PI * 2);
                 ctx.fill();
             }
+        }
+
+        // Draw other multiplayer player
+        function drawOtherPlayer(playerId, camX, camY) {
+            const other = otherPlayers.get(playerId);
+            if (!other) return;
+
+            const sx = Math.round(other.x - camX);
+            const sy = Math.round(other.y - camY);
+
+            // Same sprite layout as player
+            const frameWidth = 64;
+            const frameHeight = 64;
+
+            const idleFrames = {
+                down: [0, 1, 2],
+                up: [3, 4, 5],
+                right: [6, 7, 8],
+                left: [6, 7, 8]
+            };
+
+            const walkFrames = {
+                down: { row: 0, cols: [9, 10, 11, 12] },
+                up: { row: 0, cols: [13, 14, 15] },
+                right: { row: 1, cols: [1, 2, 3, 4] },
+                left: { row: 1, cols: [1, 2, 3, 4] }
+            };
+
+            let row = 0;
+            let col = 0;
+            let flipX = false;
+            const dir = other.direction || 'down';
+
+            if (other.animation === 'walk') {
+                const walk = walkFrames[dir];
+                row = walk.row;
+                col = walk.cols[other.frame % walk.cols.length];
+                if (dir === 'left') flipX = true;
+            } else {
+                row = 0;
+                col = idleFrames[dir][other.frame % idleFrames[dir].length];
+                if (dir === 'left') flipX = true;
+            }
+
+            const drawW = Math.round(64 * playerScale);
+            const drawH = Math.round(64 * playerScale);
+            const spriteX = sx + player.width / 2 - drawW / 2;
+            const spriteY = sy - 15;
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(spriteX + drawW / 2, spriteY + drawH - shadowYOffset, drawW * 0.2, drawW * 0.08, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw sprite with tint (slightly different color to distinguish)
+            if (playerImg.complete) {
+                ctx.save();
+                if (flipX) {
+                    ctx.translate(spriteX + drawW, spriteY);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(playerImg, col * frameWidth, row * frameHeight, frameWidth, frameHeight, 0, 0, drawW, drawH);
+                } else {
+                    ctx.drawImage(playerImg, col * frameWidth, row * frameHeight, frameWidth, frameHeight, spriteX, spriteY, drawW, drawH);
+                }
+                ctx.restore();
+            }
+
+            // Draw nametag above player
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'center';
+            const nameWidth = ctx.measureText(other.name).width + 8;
+            ctx.fillRect(spriteX + drawW / 2 - nameWidth / 2, spriteY - 18, nameWidth, 14);
+            ctx.fillStyle = '#fff';
+            ctx.fillText(other.name, spriteX + drawW / 2, spriteY - 8);
         }
 
         // Draw NPC with correct animation based on direction
