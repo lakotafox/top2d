@@ -5421,17 +5421,27 @@
             update2DDiceUI();
         }
 
-        // Select next/previous die with A/D keys
+        // Select next/previous die with A/D keys - skip kept dice
         function selectNextDie() {
             if (!farkleRolled || farkleDice.length === 0) return;
-            selectedDieIndex = (selectedDieIndex + 1) % farkleDice.length;
+            // Find next un-kept die
+            let attempts = 0;
+            do {
+                selectedDieIndex = (selectedDieIndex + 1) % farkleDice.length;
+                attempts++;
+            } while (farkleDice[selectedDieIndex].kept && attempts < farkleDice.length);
             updateDiceHighlights();
             updateSelectionMessage();
         }
 
         function selectPrevDie() {
             if (!farkleRolled || farkleDice.length === 0) return;
-            selectedDieIndex = (selectedDieIndex - 1 + farkleDice.length) % farkleDice.length;
+            // Find previous un-kept die
+            let attempts = 0;
+            do {
+                selectedDieIndex = (selectedDieIndex - 1 + farkleDice.length) % farkleDice.length;
+                attempts++;
+            } while (farkleDice[selectedDieIndex].kept && attempts < farkleDice.length);
             updateDiceHighlights();
             updateSelectionMessage();
         }
@@ -6022,8 +6032,9 @@
                             }
                         }, 2000);
                     } else {
-                        // Select first die and highlight
-                        selectedDieIndex = 0;
+                        // Select first un-kept die and highlight
+                        selectedDieIndex = farkleDice.findIndex(d => !d.kept);
+                        if (selectedDieIndex === -1) selectedDieIndex = 0;
                         updateDiceHighlights();
                         updateSelectionMessage();
                     }
