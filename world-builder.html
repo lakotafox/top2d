@@ -8463,14 +8463,16 @@
                 launchAsAdventure = true;
                 testMap();
                 launchAsAdventure = false;
-                // Keep loading visible for 3.5 more seconds after game opens
+                // Return to start menu after game opens
                 setTimeout(() => {
                     keepLoadPhaseVisible = false;
                     document.getElementById('loadPhase').style.zIndex = '';
-                    document.getElementById('loadPhase').classList.remove('active');
+                    // Reset to start screen (not builder)
                     document.getElementById('modeSelect').style.display = 'none';
                     document.getElementById('mainMenu').style.display = 'block';
-                }, 3500);
+                    document.getElementById('loadPhase').classList.add('active');
+                    setPhase('load');
+                }, 2000);
             }, 1000);
         }
 

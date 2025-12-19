@@ -5038,12 +5038,23 @@
         window.rollFarkleDice = function() {
             if (!canCurrentPlayerAct()) return;
 
-            // If already rolled and no dice kept, that's a problem
+            // If already rolled, check for valid roll conditions
             if (farkleRolled) {
                 const keptCount = farkleDice.filter(d => d.kept).length;
                 if (keptCount === 0) {
                     document.getElementById('farkleMessage').textContent = 'Keep at least one die before rolling again!';
                     return;
+                }
+
+                // HOT DICE: If all 6 dice are kept, reset them all for a fresh roll
+                if (keptCount === 6) {
+                    console.log('[FARKLE] HOT DICE! All 6 dice scored - rolling all again');
+                    document.getElementById('farkleMessage').textContent = 'HOT DICE! Rolling all 6 again!';
+                    update3DMessage('HOT DICE!', '#ffff00');
+                    for (const die of farkleDice) {
+                        die.kept = false;
+                    }
+                    updateDiceHighlights();
                 }
             }
 
