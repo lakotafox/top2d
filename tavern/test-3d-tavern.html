@@ -6269,13 +6269,14 @@
                     // Side offset (perpendicular to camera direction)
                     const sideX = Math.cos(yaw) * thirdPersonSideOffset;
                     const sideZ = -Math.sin(yaw) * thirdPersonSideOffset;
+                    // Scale height with distance to maintain consistent viewing angle
+                    const scaledHeight = thirdPersonHeight * (thirdPersonDistance / 3);
                     camera.position.set(
                         playerPos.x + camDirX + sideX,
-                        playerPos.y + thirdPersonHeight,
+                        playerPos.y + scaledHeight,
                         playerPos.z + camDirZ + sideZ
                     );
                     // Look at player with Y offset, adjusted by pitch
-                    // Pitch adjusts the vertical look target based on distance
                     const pitchOffset = Math.tan(thirdPersonPitch * Math.PI / 180) * thirdPersonDistance;
                     camera.lookAt(playerPos.x, playerPos.y + thirdPersonLookOffset + pitchOffset, playerPos.z);
                 }
