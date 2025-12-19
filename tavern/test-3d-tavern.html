@@ -5433,10 +5433,49 @@
             updateSelectionMessage();
         }
 
+        // Check if a die can be kept (contributes to scoring)
+        // Key rule: scoring combinations must be achieved in a SINGLE throw
+        function canKeepDie(die) {
+            // 1s and 5s can always be kept (score individually)
+            if (die.value === 1 || die.value === 5) return true;
+
+            const unkeptDice = farkleDice.filter(d => !d.kept);
+            const unkeptValues = unkeptDice.map(d => d.value);
+
+            // Check for straight (1-2-3-4-5-6) in current roll
+            if (unkeptValues.length === 6) {
+                const sorted = [...unkeptValues].sort();
+                if (sorted.join('') === '123456') return true;
+            }
+
+            // Check for three pairs in current roll
+            if (unkeptValues.length === 6) {
+                const counts = [0, 0, 0, 0, 0, 0, 0];
+                for (const v of unkeptValues) counts[v]++;
+                let pairs = 0;
+                for (let i = 1; i <= 6; i++) {
+                    if (counts[i] === 2) pairs++;
+                }
+                if (pairs === 3) return true;
+            }
+
+            // For 2, 3, 4, 6 - must have 3+ of same value in current roll
+            const sameValueInRoll = unkeptValues.filter(v => v === die.value).length;
+            return sameValueInRoll >= 3;
+        }
+
         // Toggle keep on currently selected die
         function toggleSelectedDieKept() {
             if (!farkleRolled || farkleDice.length === 0) return;
             const die = farkleDice[selectedDieIndex];
+
+            // If trying to keep, validate it's a scoring die
+            if (!die.kept && !canKeepDie(die)) {
+                document.getElementById('farkleMessage').textContent = 'That die doesn\'t score! Only 1s, 5s, or sets of 3+';
+                update3DMessage('Not a scoring die!', '#ff6666');
+                return;
+            }
+
             die.kept = !die.kept;
             updateDiceHighlights();
             readDiceValues();
@@ -5460,6 +5499,13 @@
         // Toggle die kept status (legacy click method)
         function toggleDieKept(die) {
             if (!farkleRolled) return; // Can't keep dice before rolling
+
+            // If trying to keep, validate it's a scoring die
+            if (!die.kept && !canKeepDie(die)) {
+                document.getElementById('farkleMessage').textContent = 'That die doesn\'t score! Only 1s, 5s, or sets of 3+';
+                update3DMessage('Not a scoring die!', '#ff6666');
+                return;
+            }
 
             die.kept = !die.kept;
             updateDiceHighlights();
