@@ -1362,10 +1362,7 @@
             }
             // V to toggle first/third person view
             if (e.key.toLowerCase() === 'v') {
-                isThirdPerson = !isThirdPerson;
-                if (fpsHands) fpsHands.visible = !isThirdPerson;
-                if (thirdPersonModel) thirdPersonModel.visible = isThirdPerson;
-                console.log('[VIEW] Switched to', isThirdPerson ? 'third person' : 'first person');
+                setViewMode(viewMode === 'fp' ? 'tp' : 'fp');
             }
             // E to interact with Farkle table - show mode selection
             if (e.key.toLowerCase() === 'e' && !farkleGameActive) {
@@ -1647,6 +1644,7 @@
         // View mode functions
         window.setViewMode = function(mode) {
             viewMode = mode;
+            isThirdPerson = (mode === 'tp');
             document.getElementById('viewFP').style.background = mode === 'fp' ? '#4a4' : '#555';
             document.getElementById('viewTP').style.background = mode === 'tp' ? '#4a4' : '#555';
             document.getElementById('currentViewDisplay').textContent = mode === 'fp' ? 'First Person' : 'Third Person';
@@ -1654,8 +1652,10 @@
             // Update visibility based on mode
             if (playerBody) playerBody.visible = playerBodyVisible && mode === 'tp';
             if (collisionBox) collisionBox.visible = collisionVisible && mode === 'tp';
-            // Show hands only in first person (if enabled)
-            if (fpsHands) fpsHands.visible = handsVisible;
+            // Show arms only in first person, third person model only in third person
+            if (fpsHands) fpsHands.visible = handsVisible && mode === 'fp';
+            if (thirdPersonModel) thirdPersonModel.visible = mode === 'tp';
+            console.log('[VIEW] Switched to', mode === 'tp' ? 'third person' : 'first person');
         };
 
         // Visibility toggles
