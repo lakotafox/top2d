@@ -8504,6 +8504,150 @@
             document.getElementById('modeSelect').style.display = 'block';
         }
 
+        // Craft multiplayer prompt functions
+        function showCraftMultiplayerPrompt() {
+            document.getElementById('modeSelect').style.display = 'none';
+            document.getElementById('craftMultiplayerPrompt').style.display = 'block';
+            document.getElementById('craftPlayerName').focus();
+        }
+
+        function hideCraftMultiplayerPrompt() {
+            document.getElementById('craftMultiplayerPrompt').style.display = 'none';
+            document.getElementById('modeSelect').style.display = 'block';
+        }
+
+        // === BUILDER MULTIPLAYER SYSTEM ===
+        let builderSocket = null;
+        let builderConnected = false;
+        let builderPlayerName = 'Builder';
+        let builderRoomCode = null;
+
+        function connectBuilderMultiplayer(name, roomCode) {
+            if (!roomCode) return; // Solo mode
+
+            builderPlayerName = name;
+            builderRoomCode = roomCode;
+            console.log('[BUILDER MP] Connecting as', name, 'to room', roomCode);
+
+            try {
+                builderSocket = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/party/builder-' + roomCode);
+
+                builderSocket.onopen = () => {
+                    console.log('[BUILDER MP] Connected!');
+                    builderConnected = true;
+                    builderSocket.send(JSON.stringify({
+                        type: 'join',
+                        name: builderPlayerName,
+                        gameType: 'builder'
+                    }));
+                    showBuilderStatus('Connected: ' + roomCode);
+                };
+
+                builderSocket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleBuilderMessage(data);
+                    } catch (e) {
+                        console.error('[BUILDER MP] Parse error:', e);
+                    }
+                };
+
+                builderSocket.onclose = () => {
+                    console.log('[BUILDER MP] Disconnected');
+                    builderConnected = false;
+                    showBuilderStatus('Disconnected');
+                };
+
+                builderSocket.onerror = (err) => {
+                    console.error('[BUILDER MP] Error:', err);
+                };
+            } catch (e) {
+                console.error('[BUILDER MP] Connect failed:', e);
+            }
+        }
+
+        function handleBuilderMessage(data) {
+            // Ignore our own messages
+            if (data.type === 'welcome' || data.type === 'join') {
+                if (data.player) {
+                    console.log('[BUILDER MP] Player joined:', data.player.name);
+                }
+                if (data.players) {
+                    console.log('[BUILDER MP] Players in room:', data.players.length);
+                }
+                return;
+            }
+
+            if (data.type === 'leave') {
+                console.log('[BUILDER MP] Player left');
+                return;
+            }
+
+            // Handle edit messages from other builders
+            if (data.type === 'update' && data.player && data.player.editType) {
+                applyRemoteEdit(data.player);
+            }
+        }
+
+        function applyRemoteEdit(edit) {
+            console.log('[BUILDER MP] Applying remote edit:', edit.editType);
+
+            switch (edit.editType) {
+                case 'tile':
+                    // Apply tile placement
+                    if (!layers[edit.layer]) layers[edit.layer] = [];
+                    if (!layers[edit.layer][edit.y]) layers[edit.layer][edit.y] = [];
+                    layers[edit.layer][edit.y][edit.x] = edit.cell;
+                    renderAllLayers();
+                    break;
+
+                case 'eraseTile':
+                    // Apply tile erasure
+                    if (layers[edit.layer] && layers[edit.layer][edit.y]) {
+                        layers[edit.layer][edit.y][edit.x] = null;
+                    }
+                    renderAllLayers();
+                    break;
+
+                case 'collision':
+                    // Apply collision change
+                    if (edit.value) {
+                        tileCollisions[edit.key] = true;
+                    } else {
+                        delete tileCollisions[edit.key];
+                    }
+                    break;
+
+                case 'collisionMask':
+                    // Apply collision mask
+                    collisionMasks[edit.key] = edit.mask;
+                    break;
+            }
+        }
+
+        function broadcastEdit(editData) {
+            if (!builderConnected || !builderSocket) return;
+
+            builderSocket.send(JSON.stringify({
+                type: 'update',
+                ...editData,
+                gameType: 'builder'
+            }));
+        }
+
+        function showBuilderStatus(msg) {
+            // Show connection status in builder UI
+            let statusEl = document.getElementById('builderMpStatus');
+            if (!statusEl) {
+                statusEl = document.createElement('div');
+                statusEl.id = 'builderMpStatus';
+                statusEl.style.cssText = 'position:fixed;top:10px;right:10px;background:#0a0;color:#fff;padding:8px 12px;border-radius:4px;font-family:monospace;font-size:12px;z-index:9999;';
+                document.body.appendChild(statusEl);
+            }
+            statusEl.textContent = 'CO-OP: ' + msg;
+            statusEl.style.background = msg.includes('Disconnected') ? '#a00' : '#0a0';
+        }
+
         // Adventure mode - load project, open test, hide UI
         let launchAsAdventure = false;
         let multiplayerSettings = null; // Will be set from prompt
@@ -8552,10 +8696,23 @@
         // Craft mode - just load into editor
         async function startCraft() {
             if (!pendingSaveData) return;
+
+            // Get multiplayer settings from craft prompt
+            const playerName = document.getElementById('craftPlayerName').value.trim() || 'Builder';
+            const roomCode = document.getElementById('craftRoomCode').value.trim();
+
+            // Hide prompts
+            document.getElementById('craftMultiplayerPrompt').style.display = 'none';
+
             await loadProject(pendingSaveData);
             pendingSaveData = null;
             document.getElementById('modeSelect').style.display = 'none';
             document.getElementById('mainMenu').style.display = 'block';
+
+            // Connect to builder multiplayer if room code provided
+            if (roomCode) {
+                connectBuilderMultiplayer(playerName, roomCode);
+            }
         }
 
         async function loadProject(projectData) {
