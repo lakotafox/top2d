@@ -1650,8 +1650,9 @@
             document.getElementById('currentViewDisplay').textContent = mode === 'fp' ? 'First Person' : 'Third Person';
 
             // Update visibility based on mode
-            if (playerBody) playerBody.visible = playerBodyVisible && mode === 'tp';
-            if (collisionBox) collisionBox.visible = collisionVisible && mode === 'tp';
+            // Hide blue debug boxes in third person - the hooded adventurer IS the player body now
+            if (playerBody) playerBody.visible = false;
+            if (collisionBox) collisionBox.visible = false;
             // Show arms only in first person, third person model only in third person
             if (fpsHands) fpsHands.visible = handsVisible && mode === 'fp';
             if (thirdPersonModel) thirdPersonModel.visible = mode === 'tp';
@@ -6182,8 +6183,9 @@
                 if (thirdPersonModel && isThirdPerson) {
                     // Position model at player feet
                     thirdPersonModel.position.set(playerPos.x, playerPos.y - eyeHeight, playerPos.z);
-                    // Rotate model to face movement direction (based on yaw)
-                    thirdPersonModel.rotation.y = -yaw + Math.PI;
+                    // Rotate model so their back faces the camera (character faces direction of movement)
+                    // Camera is at angle yaw behind player, so character faces opposite direction
+                    thirdPersonModel.rotation.y = yaw;
 
                     // Update animation based on movement
                     let targetAnim = null;
