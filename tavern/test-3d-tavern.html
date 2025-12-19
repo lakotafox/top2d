@@ -4786,8 +4786,9 @@
             canvas.height = 64;
             const ctx = canvas.getContext('2d');
 
-            // Semi-transparent background
-            ctx.fillStyle = 'rgba(10,8,5,0.85)';
+            // Clear and fill background
+            ctx.clearRect(0, 0, 512, 64);
+            ctx.fillStyle = 'rgba(10,8,5,0.92)';
             ctx.fillRect(0, 0, 512, 64);
 
             // Text
@@ -4825,7 +4826,9 @@
 
             const { canvas, ctx, texture } = mesh.userData.texData;
 
-            ctx.fillStyle = 'rgba(10,8,5,0.85)';
+            // Clear canvas completely before drawing new text
+            ctx.clearRect(0, 0, 512, 64);
+            ctx.fillStyle = 'rgba(10,8,5,0.92)';
             ctx.fillRect(0, 0, 512, 64);
 
             ctx.fillStyle = color;
