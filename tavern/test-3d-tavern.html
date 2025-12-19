@@ -6274,10 +6274,10 @@
                         playerPos.y + thirdPersonHeight,
                         playerPos.z + camDirZ + sideZ
                     );
-                    // Look at player with Y offset
-                    camera.lookAt(playerPos.x, playerPos.y + thirdPersonLookOffset, playerPos.z);
-                    // Apply pitch adjustment (rotate camera up/down)
-                    camera.rotateX(thirdPersonPitch * Math.PI / 180);
+                    // Look at player with Y offset, adjusted by pitch
+                    // Pitch adjusts the vertical look target based on distance
+                    const pitchOffset = Math.tan(thirdPersonPitch * Math.PI / 180) * thirdPersonDistance;
+                    camera.lookAt(playerPos.x, playerPos.y + thirdPersonLookOffset + pitchOffset, playerPos.z);
                 }
             }
 
