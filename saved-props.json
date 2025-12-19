@@ -1,11 +1,3 @@
-{
-  "props": [
-    {
-      "name": "bush_break",
-      "action": "break",
-      "file": "assets/tiles_grass.png",
-      "note": "Use prop-editor.html to define exact frame coordinates"
-    }
-  ],
-  "instructions": "Open prop-editor.html to define props with frames and hitboxes. Open tile-categorizer.html to categorize terrain tiles."
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:ec8262e13b0333d012547aff874725cca6ff036c2b2090a015d2f35eb3ccc6c5
+size 338

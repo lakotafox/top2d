@@ -1,0 +1,2306 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Mothership Test</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        body {
+            background: #111;
+            overflow: hidden;
+            font-family: monospace;
+        }
+        canvas { display: block; }
+        #info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 5px;
+            max-width: 280px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            z-index: 100;
+        }
+        #info::-webkit-scrollbar { width: 6px; }
+        #info::-webkit-scrollbar-track { background: #222; }
+        #info::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+        #info::-webkit-scrollbar-thumb:hover { background: #777; }
+        #info h2 { color: #4af; margin-bottom: 10px; }
+        #info p { margin: 5px 0; color: #aaa; font-size: 12px; }
+        #info .controls { margin-top: 15px; border-top: 1px solid #444; padding-top: 10px; }
+        #info label { display: block; margin: 8px 0 4px 0; color: #888; }
+        #info input[type="range"] { width: 100%; }
+        #info .value { color: #4f8; float: right; }
+        #info button {
+            margin-top: 8px;
+            padding: 8px 15px;
+            background: #4a7c59;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        #info button:hover { background: #5a9c69; }
+        #info button.active { background: #c44; }
+        #info button.spawn-btn { background: #c84; }
+        #info button.spawn-btn:hover { background: #ea6; }
+        #info .position-display {
+            background: #1a1a2e;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 11px;
+        }
+        #info .position-display div { margin: 3px 0; }
+        #info .position-display span { color: #4f8; }
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            z-index: 200;
+        }
+        #loading .progress {
+            width: 300px;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+        #loading .bar {
+            height: 100%;
+            background: #4af;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        #crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+            z-index: 50;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.5);
+        }
+        #crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 9px;
+            top: 0;
+        }
+        #crosshair::after {
+            width: 20px;
+            height: 2px;
+            left: 0;
+            top: 9px;
+        }
+        #modeIndicator {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: #4af;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        #spawnMarker {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #0f0;
+            font-size: 48px;
+            pointer-events: none;
+            z-index: 60;
+            text-shadow: 0 0 10px #0f0;
+            display: none;
+        }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="loading">
+        Loading Mothership Model...
+        <div class="progress"><div class="bar" id="loadBar"></div></div>
+        <div id="loadPercent">0%</div>
+    </div>
+
+    <div id="crosshair" style="display:none;"></div>
+    <div id="spawnMarker">+</div>
+
+    <div id="info" style="display:none;">
+        <h2>3D Tavern Test</h2>
+
+        <!-- CONTROLS/INFO SECTION (Collapsible) -->
+        <div style="border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px;">
+            <label onclick="toggleControlsSection()" style="color:#4af; cursor:pointer; font-size:12px;"><span id="controlsArrow" style="margin-right:5px;">-</span>Controls/Info</label>
+            <div id="controlsContent">
+                <p style="color:#f84; margin:8px 0 4px 0; font-size:11px;"><b>H</b> - Hide/Show UI</p>
+                <p style="font-size:11px; margin:2px 0;"><b>Click canvas</b> - Enter look mode</p>
+                <p style="font-size:11px; margin:2px 0;"><b>ESC</b> - Exit look mode</p>
+                <p style="font-size:11px; margin:2px 0;"><b>WASD</b> - Move | <b>Space</b> - Jump | <b>Shift</b> - Run</p>
+
+                <div class="position-display" style="margin-top:8px;">
+                    <div>Position: <span id="posDisplay">0, 0, 0</span></div>
+                    <div>Height (Y): <span id="heightDisplay">1.6</span></div>
+                    <div>Looking: <span id="lookDisplay">0, 0</span></div>
+                    <div>Ground: <span id="groundedDisplay" style="color:#f44;">NOT GROUNDED</span></div>
+                </div>
+
+                <div class="controls" style="margin-top:8px;">
+                    <label>Move Speed: <span class="value" id="speedVal">5</span></label>
+                    <input type="range" id="speedSlider" min="1" max="20" step="0.5" value="5">
+
+                    <label>Look Sensitivity: <span class="value" id="sensVal">2</span></label>
+                    <input type="range" id="sensSlider" min="0.5" max="5" step="0.1" value="2">
+
+                    <button class="spawn-btn" id="setSpawnBtn" onclick="toggleSetSpawn()">Set Spawn Point</button>
+                    <div id="spawnInfo" style="color:#888; font-size:11px; margin-top:5px;">
+                        Spawn: <span id="spawnDisplay">Not set</span>
+                    </div>
+
+                    <button onclick="goToSpawn()">Go To Spawn</button>
+                    <button onclick="resetCamera()">Reset Camera</button>
+                    <button onclick="copySpawnData()">Copy Spawn Data</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PLAYER BODY/CAMERA SECTION (Collapsible) -->
+        <div style="border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px;">
+            <label onclick="togglePlayerCameraSection()" style="color:#4af; cursor:pointer; font-size:12px;"><span id="playerCameraArrow" style="margin-right:5px;">+</span>Player Body/Camera</label>
+            <div id="playerCameraContent" style="display:none;">
+                <!-- View Toggle -->
+                <div style="display:flex; gap:3px; margin-top:8px;">
+                    <button id="viewFP" onclick="setViewMode('fp')" style="flex:1; padding:6px; background:#4a4; font-size:11px;">First Person</button>
+                    <button id="viewTP" onclick="setViewMode('tp')" style="flex:1; padding:6px; background:#555; font-size:11px;">Third Person</button>
+                </div>
+
+                <!-- Player Body -->
+                <div style="margin-top:10px; background:#1a2a3a; border-radius:4px; padding:8px;">
+                    <label style="color:#888; font-size:11px;">Player Body</label>
+                    <div style="margin-top:6px;">
+                        <label style="color:#666; font-size:10px;">Width: <span id="playerWidthVal">0.5</span></label>
+                        <input type="range" id="playerWidth" min="0.2" max="2.0" step="0.1" value="0.5" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Depth: <span id="playerDepthVal">0.8</span></label>
+                        <input type="range" id="playerDepth" min="0.2" max="2.0" step="0.1" value="0.8" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Height: <span id="playerHeightVal">1.4</span></label>
+                        <input type="range" id="playerHeight" min="0.5" max="3.0" step="0.1" value="1.4" style="width:100%;">
+                    </div>
+                    <div style="margin-top:6px; display:flex; gap:5px;">
+                        <button id="toggleBodyBtn" onclick="togglePlayerBody()" style="flex:1; padding:5px; font-size:10px; background:#555;">Hide Body</button>
+                        <button id="toggleCollBtn" onclick="toggleCollisionVis()" style="flex:1; padding:5px; font-size:10px; background:#555;">Hide Coll</button>
+                    </div>
+                </div>
+
+                <!-- Collision Box Settings (ACTUAL COLLISION) -->
+                <div style="margin-top:8px; background:#2a1a3a; padding:8px; border-radius:4px;">
+                    <label style="color:#f84; font-size:11px;">Collision Box (ACTUAL)</label>
+                    <div style="margin-top:6px;">
+                        <label style="color:#666; font-size:10px;">Width: <span id="collWidthVal">0.6</span></label>
+                        <input type="range" id="collWidthSlider2" min="0.2" max="2.0" step="0.1" value="0.6" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Depth: <span id="collDepthVal2">0.4</span></label>
+                        <input type="range" id="collDepthSlider2" min="0.2" max="2.0" step="0.1" value="0.4" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Height: <span id="collHeightVal">3</span></label>
+                        <input type="range" id="collHeight" min="0.5" max="5.0" step="0.1" value="3" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Offset Y: <span id="collOffsetVal">-1</span></label>
+                        <input type="range" id="collOffset" min="-2.0" max="1.0" step="0.05" value="-1" style="width:100%;">
+                    </div>
+                </div>
+
+                <!-- FPS Hands Position -->
+                <div style="margin-top:8px; background:#1a3a2a; padding:8px; border-radius:4px;">
+                    <label style="color:#8f8; font-size:11px;">FPS Hands Position</label>
+                    <div style="margin-top:6px;">
+                        <label style="color:#666; font-size:10px;">X: <span id="handsXVal">0</span></label>
+                        <input type="range" id="handsXSlider" min="-1" max="1" step="0.05" value="0" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Y: <span id="handsYVal">-0.5</span></label>
+                        <input type="range" id="handsYSlider" min="-1.5" max="0.5" step="0.05" value="-0.5" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Z: <span id="handsZVal">-0.3</span></label>
+                        <input type="range" id="handsZSlider" min="-1" max="0.5" step="0.05" value="-0.3" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Scale: <span id="handsScaleVal">1.0</span></label>
+                        <input type="range" id="handsScaleSlider" min="0.3" max="2" step="0.1" value="1.0" style="width:100%;">
+                    </div>
+                    <button id="toggleHandsBtn" onclick="toggleHandsVisible()" style="width:100%; margin-top:6px; padding:5px; font-size:10px; background:#555;">Hide Hands</button>
+                </div>
+
+                <!-- Camera Marker -->
+                <div style="margin-top:8px;">
+                    <button id="toggleCamMarkerBtn" onclick="toggleCameraMarker()" style="width:100%; padding:5px; font-size:10px; background:#555;">Show Camera Marker</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- COLLISION SECTION (Collapsible) -->
+        <div>
+            <label onclick="toggleCollisionSection()" style="color:#0f0; cursor:pointer; font-size:12px;"><span id="collisionArrow" style="margin-right:5px;">+</span>Collision</label>
+            <div id="collisionContent" style="display:none;">
+                <button id="collPlaceModeBtn" onclick="startCollisionPlacement()" style="width:100%; margin-top:8px; padding:8px; background:#383; font-size:12px;">Place Collision Box</button>
+                <button id="toggleBucketCollBtn" onclick="toggleBucketCollisionVis()" style="width:100%; margin-top:5px; padding:5px; font-size:10px; background:#a84;">Show Collision Boxes</button>
+                <button id="testModeBtn" onclick="toggleTestMode()" style="width:100%; margin-top:5px; background:#4a4;">Collision: ON</button>
+                <div style="font-size:10px; color:#888; margin-top:5px;">
+                    View: <span id="currentViewDisplay">First Person</span> | Collisions: <span id="collisionCount">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modeIndicator">Click to enable mouse look</div>
+
+    <!-- Collision Placement Panel (separate from main UI) -->
+    <div id="collisionPlacementPanel" style="display:none; position:fixed; top:10px; left:10px; background:rgba(0,30,0,0.95); padding:15px; border-radius:8px; border:2px solid #0f0; max-width:280px; z-index:150;">
+        <h3 style="color:#0f0; margin:0 0 12px 0; font-size:14px;">⬛ Collision Box Placement</h3>
+
+        <!-- Preview Mode UI (before clicking to place) -->
+        <div id="previewModeUI">
+            <div style="color:#8f8; font-size:12px; text-align:center; padding:12px; background:#1a3a1a; border-radius:4px; margin-bottom:12px;">
+                Look at a surface<br>then <b>CLICK</b> to place box
+            </div>
+
+            <!-- Shape Presets -->
+            <label style="color:#888; font-size:11px;">Shape Presets:</label>
+            <div style="display:flex; gap:4px; margin-top:5px; flex-wrap:wrap;">
+                <button onclick="setCollShape('box')" class="collShapeBtn" data-shape="box" style="flex:1; padding:6px; font-size:10px; background:#4a4; border:none; color:white; border-radius:3px; cursor:pointer;">Box</button>
+                <button onclick="setCollShape('tallBox')" class="collShapeBtn" data-shape="tallBox" style="flex:1; padding:6px; font-size:10px; background:#555; border:none; color:white; border-radius:3px; cursor:pointer;">Tall</button>
+                <button onclick="setCollShape('wideBox')" class="collShapeBtn" data-shape="wideBox" style="flex:1; padding:6px; font-size:10px; background:#555; border:none; color:white; border-radius:3px; cursor:pointer;">Wide</button>
+                <button onclick="setCollShape('wall')" class="collShapeBtn" data-shape="wall" style="flex:1; padding:6px; font-size:10px; background:#555; border:none; color:white; border-radius:3px; cursor:pointer;">Wall</button>
+                <button onclick="setCollShape('cylinder')" class="collShapeBtn" data-shape="cylinder" style="flex:1; padding:6px; font-size:10px; background:#558; border:none; color:white; border-radius:3px; cursor:pointer;">Cylinder</button>
+            </div>
+
+            <!-- Initial Size (before placing) -->
+            <div style="margin-top:12px; background:#001a00; padding:10px; border-radius:5px;">
+                <label style="color:#0f0; font-size:11px; font-weight:bold;">Initial Size</label>
+                <div style="margin-top:8px;">
+                    <label style="color:#aaa; font-size:10px;">Width: <span id="initWidthVal" style="color:#0f0;">1.0</span></label>
+                    <input type="range" id="initWidthSlider" min="0.2" max="10" step="0.1" value="1.0" style="width:100%; margin-top:3px;">
+                </div>
+                <div style="margin-top:6px;">
+                    <label style="color:#aaa; font-size:10px;">Height: <span id="initHeightVal" style="color:#0f0;">1.0</span></label>
+                    <input type="range" id="initHeightSlider" min="0.2" max="10" step="0.1" value="1.0" style="width:100%; margin-top:3px;">
+                </div>
+                <div style="margin-top:6px;">
+                    <label style="color:#aaa; font-size:10px;">Depth: <span id="initDepthVal" style="color:#0f0;">1.0</span></label>
+                    <input type="range" id="initDepthSlider" min="0.2" max="10" step="0.1" value="1.0" style="width:100%; margin-top:3px;">
+                </div>
+            </div>
+        </div>
+
+        <!-- Adjust Mode UI (after placing, before confirming) -->
+        <div id="adjustModeUI" style="display:none;">
+            <div style="color:#ff8; font-size:12px; text-align:center; padding:12px; background:#3a3a1a; border-radius:4px; margin-bottom:12px;">
+                Adjust size & position<br>then click <b>SET</b> to confirm
+            </div>
+
+            <!-- Adjust Size -->
+            <div style="background:#001a00; padding:10px; border-radius:5px;">
+                <label style="color:#0f0; font-size:11px; font-weight:bold;">Size</label>
+                <div style="margin-top:8px;">
+                    <label style="color:#aaa; font-size:10px;">Width: <span id="adjustWidthVal" style="color:#0f0;">1.0</span></label>
+                    <input type="range" id="adjustWidthSlider" min="0.2" max="10" step="0.1" value="1.0" style="width:100%; margin-top:3px;">
+                </div>
+                <div style="margin-top:6px;">
+                    <label style="color:#aaa; font-size:10px;">Height: <span id="adjustHeightVal" style="color:#0f0;">1.0</span></label>
+                    <input type="range" id="adjustHeightSlider" min="0.2" max="10" step="0.1" value="1.0" style="width:100%; margin-top:3px;">
+                </div>
+                <div style="margin-top:6px;">
+                    <label style="color:#aaa; font-size:10px;">Depth: <span id="adjustDepthVal" style="color:#0f0;">1.0</span></label>
+                    <input type="range" id="adjustDepthSlider" min="0.2" max="10" step="0.1" value="1.0" style="width:100%; margin-top:3px;">
+                </div>
+            </div>
+
+            <!-- Adjust Position -->
+            <div style="margin-top:10px; background:#001a00; padding:10px; border-radius:5px;">
+                <label style="color:#0f0; font-size:11px; font-weight:bold;">Position Offset</label>
+                <div style="margin-top:8px;">
+                    <label style="color:#aaa; font-size:10px;">X: <span id="adjustOffsetXVal" style="color:#0f0;">0.0</span></label>
+                    <input type="range" id="adjustOffsetXSlider" min="-5" max="5" step="0.1" value="0" style="width:100%; margin-top:3px;">
+                </div>
+                <div style="margin-top:6px;">
+                    <label style="color:#aaa; font-size:10px;">Y: <span id="adjustOffsetYVal" style="color:#0f0;">0.0</span></label>
+                    <input type="range" id="adjustOffsetYSlider" min="-5" max="5" step="0.1" value="0" style="width:100%; margin-top:3px;">
+                </div>
+                <div style="margin-top:6px;">
+                    <label style="color:#aaa; font-size:10px;">Z: <span id="adjustOffsetZVal" style="color:#0f0;">0.0</span></label>
+                    <input type="range" id="adjustOffsetZSlider" min="-5" max="5" step="0.1" value="0" style="width:100%; margin-top:3px;">
+                </div>
+            </div>
+
+            <!-- Rotation -->
+            <div style="margin-top:10px; background:#1a1a00; padding:10px; border-radius:5px;">
+                <label style="color:#ff0; font-size:11px; font-weight:bold;">Rotation</label>
+                <div style="margin-top:8px;">
+                    <label style="color:#aaa; font-size:10px;">X (Pitch): <span id="adjustRotationXVal" style="color:#ff0;">0</span></label>
+                    <input type="range" id="adjustRotationXSlider" min="0" max="360" step="15" value="0" style="width:100%; margin-top:3px;">
+                </div>
+                <div style="margin-top:6px;">
+                    <label style="color:#aaa; font-size:10px;">Y (Yaw): <span id="adjustRotationYVal" style="color:#ff0;">0</span></label>
+                    <input type="range" id="adjustRotationYSlider" min="0" max="360" step="15" value="0" style="width:100%; margin-top:3px;">
+                </div>
+                <div style="margin-top:6px;">
+                    <label style="color:#aaa; font-size:10px;">Z (Roll): <span id="adjustRotationZVal" style="color:#ff0;">0</span></label>
+                    <input type="range" id="adjustRotationZSlider" min="0" max="360" step="15" value="0" style="width:100%; margin-top:3px;">
+                </div>
+            </div>
+
+            <!-- Camera button -->
+            <button id="adjustCameraBtn" onclick="enterAdjustCameraMode()" style="width:100%; margin-top:10px; padding:10px; background:#48a; border:none; color:white; border-radius:4px; cursor:pointer; font-size:12px;">Adjust Camera</button>
+
+            <!-- Confirm/Cancel buttons -->
+            <div style="margin-top:12px; display:flex; gap:8px;">
+                <button onclick="confirmPlacement()" style="flex:2; padding:12px; background:#4a4; border:none; color:white; border-radius:4px; cursor:pointer; font-size:14px; font-weight:bold;">✓ SET</button>
+                <button onclick="cancelPlacement()" style="flex:1; padding:12px; background:#a44; border:none; color:white; border-radius:4px; cursor:pointer; font-size:12px;">✕ Cancel</button>
+            </div>
+        </div>
+
+        <button onclick="exitCollisionPlacement()" style="width:100%; margin-top:12px; padding:10px; background:#c44; border:none; color:white; border-radius:3px; cursor:pointer; font-size:12px;">✕ Exit Placement Mode</button>
+
+        <p style="color:#666; font-size:9px; margin-top:10px; text-align:center;">Boxes placed: <span id="placedBoxCount">0</span></p>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // Settings
+        let moveSpeed = 5;
+        let lookSensitivity = 2;
+
+        // Spawn point
+        let spawnPoint = null;
+        let settingSpawn = false;
+
+        // Raycaster and model
+        const raycaster = new THREE.Raycaster();
+        let loadedModel = null; // Reference to the loaded tavern model
+        let undoHistory = []; // Stack of actions for undo
+
+        // Collision system
+        let viewMode = 'fp'; // 'fp' = first person, 'tp' = third person
+        let testMode = true; // Collision enabled by default
+        let playerBodyVisible = true;
+        let collisionVisible = true;
+        let handsVisible = true;
+        let playerBody = null; // The player rectangle mesh
+        let collisionBox = null; // The collision box mesh
+        let thirdPersonDistance = 5; // Distance behind player in TP view
+        let collisionBoxes = []; // Manual collision boxes in the world
+
+        // Player Body dimensions (VISUAL ONLY)
+        let playerWidth = 0.5;
+        let playerDepth = 0.8;
+        let playerHeight = 1.4;
+
+        // Collision Box dimensions (ACTUAL COLLISION)
+        let collWidth = 0.6;
+        let collDepth = 0.4;
+        let collHeight = 3;
+        let collOffset = -1; // Y offset from camera
+
+        // Physics
+        let velocityY = 0;
+        const gravity = -20; // Units per second squared
+        const maxFallSpeed = -30;
+        const groundCheckDistance = 0.2; // How far below feet to check for ground
+
+        // First Person Hands
+        let fpsHands = null;
+        let fpsHandsMixer = null;
+        let fpsHandsAnimations = {};
+        let currentHandsAnim = 'idle';
+        let eyeHeight = 1.6; // Camera height above feet (updated when player height changes)
+        const maxSlopeAngle = 45; // Maximum walkable slope in degrees
+        let isGrounded = false;
+
+        // Update eye height when player height changes
+        function updateEyeHeight() {
+            // Eye is near the top of the player body (about 90% of height)
+            eyeHeight = playerHeight * 0.9;
+        }
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+
+        // Camera - near plane at 0.05 to reduce clipping into objects
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
+        camera.position.set(17.261, 5.684, 23.341);
+
+        // Default spawn rotation
+        let yaw = 7.93;
+        let pitch = -0.33;
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1;
+        document.body.appendChild(renderer.domElement);
+
+        // Mouse look variables
+        let isLooking = false;
+        const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+        // Apply initial rotation
+        euler.set(pitch, yaw, 0);
+        camera.quaternion.setFromEuler(euler);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 5);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // Warm point lights (tavern feel)
+        const warmLight1 = new THREE.PointLight(0xffaa55, 2, 15);
+        warmLight1.position.set(0, 3, 0);
+        scene.add(warmLight1);
+
+        const warmLight2 = new THREE.PointLight(0xff8844, 1.5, 10);
+        warmLight2.position.set(-3, 2, -2);
+        scene.add(warmLight2);
+
+        // Spawn point marker (3D sphere)
+        const spawnMarkerGeom = new THREE.SphereGeometry(0.2, 16, 16);
+        const spawnMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.7 });
+        const spawnMarker3D = new THREE.Mesh(spawnMarkerGeom, spawnMarkerMat);
+        spawnMarker3D.visible = false;
+        scene.add(spawnMarker3D);
+
+        // Spawn direction arrow
+        const arrowHelper = new THREE.ArrowHelper(
+            new THREE.Vector3(0, 0, -1),
+            new THREE.Vector3(0, 0, 0),
+            1,
+            0x00ff00
+        );
+        arrowHelper.visible = false;
+        scene.add(arrowHelper);
+
+        // Create player body (rectangle)
+        function createPlayerBody() {
+            // Remove old body if exists
+            if (playerBody) scene.remove(playerBody);
+            if (collisionBox) scene.remove(collisionBox);
+
+            // Player body (full height rectangle)
+            const bodyGeom = new THREE.BoxGeometry(playerWidth, playerHeight, playerDepth);
+            const bodyMat = new THREE.MeshBasicMaterial({
+                color: 0x00aaff,
+                transparent: true,
+                opacity: 0.3,
+                wireframe: false
+            });
+            playerBody = new THREE.Mesh(bodyGeom, bodyMat);
+            playerBody.visible = playerBodyVisible && viewMode === 'tp';
+            scene.add(playerBody);
+
+            // Collision box (uses COLLISION dimensions, not player body)
+            const collGeom = new THREE.BoxGeometry(collWidth, collHeight, collDepth);
+            const collMat = new THREE.MeshBasicMaterial({
+                color: 0xff4444,
+                transparent: true,
+                opacity: 0.4,
+                wireframe: true
+            });
+            collisionBox = new THREE.Mesh(collGeom, collMat);
+            collisionBox.visible = collisionVisible && viewMode === 'tp';
+            scene.add(collisionBox);
+
+            updatePlayerBodyPosition();
+        }
+
+        function updatePlayerBodyPosition() {
+            if (!playerBody || !collisionBox) return;
+
+            // Position collision box based on COLLISION BOX settings
+            // Collision box center is at camera.y + collOffset
+            collisionBox.position.copy(camera.position);
+            collisionBox.position.y += collOffset;
+
+            // Player body: anchor at feet (bottom of collision box) and extend UPWARD
+            // This way increasing height extends the top, not the bottom
+            const feetY = camera.position.y + collOffset - collHeight / 2;
+            playerBody.position.set(
+                camera.position.x,
+                feetY + playerHeight / 2,  // Center of body above feet
+                camera.position.z
+            );
+
+            // Rotate body to face camera direction (yaw only)
+            playerBody.rotation.y = yaw;
+            collisionBox.rotation.y = yaw;
+        }
+
+        // Update Player Body size (VISUAL ONLY)
+        function updatePlayerBodySize() {
+            if (!playerBody) return;
+
+            // Update body geometry
+            playerBody.geometry.dispose();
+            playerBody.geometry = new THREE.BoxGeometry(playerWidth, playerHeight, playerDepth);
+
+            updatePlayerBodyPosition();
+        }
+
+        // Update Collision Box size (ACTUAL COLLISION)
+        function updateCollisionBoxSize() {
+            if (!collisionBox) return;
+
+            // Update collision box geometry with collision dimensions
+            collisionBox.geometry.dispose();
+            collisionBox.geometry = new THREE.BoxGeometry(collWidth, collHeight, collDepth);
+
+            updatePlayerBodyPosition();
+        }
+
+        // Create initial player body
+        createPlayerBody();
+        updateEyeHeight();
+
+        // Store initial camera position (default spawn)
+        let initialCameraPos = new THREE.Vector3(0.158, 3.079, -3.104);
+        let initialYaw = 3.122;
+        let initialPitch = -0.164;
+
+        // Load the tavern model
+        const loader = new GLTFLoader();
+
+        loader.load(
+            'mothership_assets3d/Spaceship 03 - Control Room Concept.glb',
+            function(gltf) {
+                const model = gltf.scene;
+
+                // Get model bounds
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+
+                // Center model horizontally but keep on ground
+                model.position.x = -center.x;
+                model.position.z = -center.z;
+                model.position.y = -box.min.y; // Put floor at y=0
+
+                // Scale if too big
+                const maxDim = Math.max(size.x, size.y, size.z);
+                if (maxDim > 100) {
+                    const scale = 20 / maxDim;
+                    model.scale.setScalar(scale);
+                }
+
+                // Enable shadows
+                model.traverse(function(child) {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+
+                scene.add(model);
+                loadedModel = model; // Store reference for collision
+
+                // Cache collision meshes immediately
+                cacheCollisionMeshes();
+
+                // Load first person hands
+                loader.load('mothership_assets3d/fp_arms_low_poly.glb', function(handsGltf) {
+                    fpsHands = handsGltf.scene;
+
+                    // Scale and position hands relative to camera
+                    fpsHands.scale.setScalar(1.0);
+                    fpsHands.position.set(0, -0.5, -0.3); // Adjust to look natural
+                    fpsHands.rotation.set(0, Math.PI, 0); // Face forward
+
+                    // Add hands as child of camera so they move with view
+                    camera.add(fpsHands);
+                    scene.add(camera); // Camera must be in scene for children to render
+
+                    // Set up animation mixer
+                    fpsHandsMixer = new THREE.AnimationMixer(fpsHands);
+
+                    // Store animations by name
+                    handsGltf.animations.forEach(clip => {
+                        const name = clip.name.toLowerCase();
+                        fpsHandsAnimations[name] = fpsHandsMixer.clipAction(clip);
+                        console.log('[HANDS] Animation found:', clip.name);
+                    });
+
+                    // Start with idle animation
+                    if (fpsHandsAnimations['idle']) {
+                        fpsHandsAnimations['idle'].play();
+                        currentHandsAnim = 'idle';
+                    } else {
+                        // Try first animation if 'idle' not found
+                        const firstAnim = Object.keys(fpsHandsAnimations)[0];
+                        if (firstAnim) {
+                            fpsHandsAnimations[firstAnim].play();
+                            currentHandsAnim = firstAnim;
+                        }
+                    }
+
+                    console.log('[HANDS] First person hands loaded!', fpsHandsAnimations);
+                });
+
+                // Hide loading, show info
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('info').style.display = 'block';
+
+                console.log('Tavern loaded!', 'Size:', size);
+            },
+            function(progress) {
+                if (progress.total > 0) {
+                    const percent = Math.round((progress.loaded / progress.total) * 100);
+                    document.getElementById('loadBar').style.width = percent + '%';
+                    document.getElementById('loadPercent').textContent = percent + '%';
+                }
+            },
+            function(error) {
+                console.error('Error loading tavern:', error);
+                document.getElementById('loading').innerHTML =
+                    '<div style="color:#f66;">Error loading model!</div>' +
+                    '<div style="color:#888;font-size:14px;margin-top:10px;">' + error.message + '</div>';
+            }
+        );
+
+        // Pointer lock for mouse look
+        renderer.domElement.addEventListener('click', () => {
+            if (settingSpawn) {
+                // Set spawn point at current position
+                spawnPoint = {
+                    position: camera.position.clone(),
+                    yaw: yaw,
+                    pitch: pitch
+                };
+
+                // Update 3D marker
+                spawnMarker3D.position.copy(spawnPoint.position);
+                spawnMarker3D.visible = true;
+
+                // Update arrow direction
+                const dir = new THREE.Vector3(0, 0, -1);
+                dir.applyEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+                arrowHelper.position.copy(spawnPoint.position);
+                arrowHelper.setDirection(dir);
+                arrowHelper.visible = true;
+
+                // Update UI
+                const pos = spawnPoint.position;
+                document.getElementById('spawnDisplay').textContent =
+                    `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`;
+
+                // Exit spawn setting mode
+                settingSpawn = false;
+                document.getElementById('setSpawnBtn').classList.remove('active');
+                document.getElementById('setSpawnBtn').textContent = 'Set Spawn Point';
+                document.getElementById('spawnMarker').style.display = 'none';
+                document.getElementById('modeIndicator').textContent = 'Spawn point set! Click to look around';
+
+                return;
+            }
+
+            if (!isLooking && !collisionPlaceMode) {
+                renderer.domElement.requestPointerLock();
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            isLooking = document.pointerLockElement === renderer.domElement;
+            document.getElementById('crosshair').style.display = isLooking ? 'block' : 'none';
+
+            if (collisionPlaceMode) {
+                if (placementPhase === 'preview') {
+                    document.getElementById('modeIndicator').textContent = isLooking
+                        ? 'PLACEMENT MODE - Look at surface, click to place'
+                        : 'Click canvas to enable look mode';
+                    document.getElementById('modeIndicator').style.background = 'rgba(0,100,0,0.8)';
+                    document.getElementById('modeIndicator').style.color = '#0f0';
+                } else {
+                    document.getElementById('modeIndicator').textContent = 'ADJUST MODE - Use sliders, then click SET';
+                    document.getElementById('modeIndicator').style.background = 'rgba(100,100,0,0.8)';
+                    document.getElementById('modeIndicator').style.color = '#ff0';
+                }
+            } else if (settingSpawn) {
+                document.getElementById('modeIndicator').textContent = 'Move to spawn location, then click to set';
+                document.getElementById('spawnMarker').style.display = 'block';
+            } else {
+                document.getElementById('modeIndicator').textContent = isLooking
+                    ? 'Mouse look enabled (ESC to exit)'
+                    : 'Click to enable mouse look';
+            }
+        });
+
+        // Mouse movement for looking
+        let isDraggingOrbit = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        document.addEventListener('mousemove', (e) => {
+            // Orbit camera in adjust phase - only when camera mode is active
+            if (collisionPlaceMode && placementPhase === 'adjust' && adjustCameraMode) {
+                const deltaX = e.clientX - lastMouseX;
+                const deltaY = e.clientY - lastMouseY;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+
+                // Orbit with any mouse movement
+                if (Math.abs(deltaX) > 0 || Math.abs(deltaY) > 0) {
+                    orbitAngle += deltaX * 0.01;
+                    orbitHeight -= deltaY * 0.03;
+                    orbitHeight = Math.max(0.5, Math.min(10, orbitHeight)); // Clamp height
+                }
+                return;
+            }
+
+            if (!isLooking) return;
+
+            const sensitivity = lookSensitivity * 0.001;
+            yaw -= e.movementX * sensitivity;
+            pitch -= e.movementY * sensitivity;
+
+            // Clamp pitch to prevent flipping
+            pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
+
+            euler.set(pitch, yaw, 0);
+            camera.quaternion.setFromEuler(euler);
+        });
+
+        // Mouse down/up for orbit dragging in adjust mode
+        document.addEventListener('mousedown', (e) => {
+            console.log('[DEBUG] mousedown - collisionPlaceMode:', collisionPlaceMode, 'placementPhase:', placementPhase, 'target:', e.target.tagName);
+            if (collisionPlaceMode && placementPhase === 'adjust' && e.button === 0) {
+                // Check if click is on the canvas, not on UI elements
+                if (e.target.tagName === 'CANVAS') {
+                    isDraggingOrbit = true;
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+                    console.log('[ORBIT] Started dragging');
+                    e.preventDefault();
+                }
+            }
+        });
+        document.addEventListener('mouseup', () => {
+            if (isDraggingOrbit) {
+                console.log('[ORBIT] Stopped dragging');
+            }
+            isDraggingOrbit = false;
+        });
+
+        // Scroll wheel for zoom in adjust camera mode (Shift + scroll)
+        document.addEventListener('wheel', (e) => {
+            if (collisionPlaceMode && placementPhase === 'adjust' && adjustCameraMode && e.shiftKey) {
+                e.preventDefault();
+                orbitDistance += e.deltaY * 0.01;
+                orbitDistance = Math.max(2, Math.min(20, orbitDistance)); // Clamp zoom
+            }
+        }, { passive: false });
+
+        // Keyboard input
+        const keys = {};
+        let uiVisible = true;
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key === 'Escape') {
+                if (collisionPlaceMode) {
+                    // If in camera mode, exit to slider mode instead of exiting placement
+                    if (placementPhase === 'adjust' && adjustCameraMode) {
+                        exitAdjustCameraMode();
+                        return;
+                    }
+                    exitCollisionPlacement();
+                    return;
+                }
+                if (settingSpawn) {
+                    settingSpawn = false;
+                    document.getElementById('setSpawnBtn').classList.remove('active');
+                    document.getElementById('setSpawnBtn').textContent = 'Set Spawn Point';
+                    document.getElementById('spawnMarker').style.display = 'none';
+                }
+                if (isLooking) {
+                    document.exitPointerLock();
+                }
+            }
+            // H to toggle UI
+            if (e.key.toLowerCase() === 'h') {
+                uiVisible = !uiVisible;
+                document.getElementById('info').style.display = uiVisible ? 'block' : 'none';
+                document.getElementById('modeIndicator').style.display = uiVisible ? 'block' : 'none';
+            }
+            // Collision placement controls (arrow keys adjust size)
+            if (collisionPlaceMode && isLooking) {
+                const step = e.shiftKey ? 0.5 : 0.1;
+                if (placementPhase === 'preview') {
+                    // Adjust initial size in preview mode
+                    if (e.key === 'ArrowLeft') {
+                        initWidth = Math.max(0.2, initWidth - step);
+                        updateInitSliders();
+                        updatePreviewSize();
+                    }
+                    if (e.key === 'ArrowRight') {
+                        initWidth = Math.min(10, initWidth + step);
+                        updateInitSliders();
+                        updatePreviewSize();
+                    }
+                    if (e.key === 'ArrowUp') {
+                        initHeight = Math.min(10, initHeight + step);
+                        updateInitSliders();
+                        updatePreviewSize();
+                    }
+                    if (e.key === 'ArrowDown') {
+                        initHeight = Math.max(0.2, initHeight - step);
+                        updateInitSliders();
+                        updatePreviewSize();
+                    }
+                } else if (placementPhase === 'adjust') {
+                    // Adjust size in adjust mode
+                    if (e.key === 'ArrowLeft') {
+                        adjustWidth = Math.max(0.2, adjustWidth - step);
+                        updateAdjustSliders();
+                        updateAdjustPreview();
+                    }
+                    if (e.key === 'ArrowRight') {
+                        adjustWidth = Math.min(10, adjustWidth + step);
+                        updateAdjustSliders();
+                        updateAdjustPreview();
+                    }
+                    if (e.key === 'ArrowUp') {
+                        adjustHeight = Math.min(10, adjustHeight + step);
+                        updateAdjustSliders();
+                        updateAdjustPreview();
+                    }
+                    if (e.key === 'ArrowDown') {
+                        adjustHeight = Math.max(0.2, adjustHeight - step);
+                        updateAdjustSliders();
+                        updateAdjustPreview();
+                    }
+                    // Enter to confirm placement
+                    if (e.key === 'Enter') {
+                        confirmPlacement();
+                    }
+                }
+            }
+        });
+        document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+
+        // Slider controls
+        document.getElementById('speedSlider').addEventListener('input', (e) => {
+            moveSpeed = parseFloat(e.target.value);
+            document.getElementById('speedVal').textContent = moveSpeed;
+        });
+
+        document.getElementById('sensSlider').addEventListener('input', (e) => {
+            lookSensitivity = parseFloat(e.target.value);
+            document.getElementById('sensVal').textContent = lookSensitivity;
+        });
+
+        // Toggle spawn setting mode
+        window.toggleSetSpawn = function() {
+            settingSpawn = !settingSpawn;
+            const btn = document.getElementById('setSpawnBtn');
+
+            if (settingSpawn) {
+                btn.classList.add('active');
+                btn.textContent = 'Click in 3D to Set Spawn';
+                document.getElementById('spawnMarker').style.display = 'block';
+                document.getElementById('modeIndicator').textContent = 'Move to spawn location, then click to set (ESC to cancel)';
+            } else {
+                btn.classList.remove('active');
+                btn.textContent = 'Set Spawn Point';
+                document.getElementById('spawnMarker').style.display = 'none';
+            }
+        };
+
+        // Go to spawn point
+        window.goToSpawn = function() {
+            if (!spawnPoint) {
+                alert('No spawn point set!');
+                return;
+            }
+            camera.position.copy(spawnPoint.position);
+            yaw = spawnPoint.yaw;
+            pitch = spawnPoint.pitch;
+            euler.set(pitch, yaw, 0);
+            camera.quaternion.setFromEuler(euler);
+        };
+
+        // Reset camera
+        window.resetCamera = function() {
+            camera.position.copy(initialCameraPos);
+            yaw = initialYaw;
+            pitch = initialPitch;
+            euler.set(pitch, yaw, 0);
+            camera.quaternion.setFromEuler(euler);
+        };
+
+        // Copy spawn data as JSON
+        window.copySpawnData = function() {
+            if (!spawnPoint) {
+                alert('No spawn point set!');
+                return;
+            }
+            const data = {
+                position: {
+                    x: parseFloat(spawnPoint.position.x.toFixed(3)),
+                    y: parseFloat(spawnPoint.position.y.toFixed(3)),
+                    z: parseFloat(spawnPoint.position.z.toFixed(3))
+                },
+                rotation: {
+                    yaw: parseFloat(spawnPoint.yaw.toFixed(3)),
+                    pitch: parseFloat(spawnPoint.pitch.toFixed(3))
+                }
+            };
+            navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+            alert('Spawn data copied to clipboard!');
+        };
+
+        window.undoLastAction = function() {
+            if (undoHistory.length === 0) return;
+
+            const action = undoHistory.pop();
+
+            if (action.type === 'placeCollision') {
+                // Remove placed collision box
+                if (action.collisionIndex !== undefined && action.collisionIndex >= 0) {
+                    if (bucketCollisionBoxes[action.collisionIndex]) {
+                        bucketCollisionBoxes[action.collisionIndex] = null;
+                    }
+                    removeCollisionVisual(action.collisionIndex);
+                }
+                console.log(`[UNDO] Removed placed collision, remaining: ${bucketCollisionBoxes.filter(b => b).length}`);
+            }
+        };
+
+        // Player body slider updates
+        document.getElementById('playerWidth').addEventListener('input', (e) => {
+            playerWidth = parseFloat(e.target.value);
+            document.getElementById('playerWidthVal').textContent = e.target.value;
+            updatePlayerBodySize();
+        });
+        document.getElementById('playerDepth').addEventListener('input', (e) => {
+            playerDepth = parseFloat(e.target.value);
+            document.getElementById('playerDepthVal').textContent = e.target.value;
+            updatePlayerBodySize();
+        });
+        document.getElementById('playerHeight').addEventListener('input', (e) => {
+            playerHeight = parseFloat(e.target.value);
+            document.getElementById('playerHeightVal').textContent = e.target.value;
+            updatePlayerBodySize();
+            updateEyeHeight();
+        });
+        // Collision Box sliders (ACTUAL COLLISION)
+        document.getElementById('collWidthSlider2').addEventListener('input', (e) => {
+            collWidth = parseFloat(e.target.value);
+            document.getElementById('collWidthVal').textContent = e.target.value;
+            updateCollisionBoxSize();
+        });
+        document.getElementById('collDepthSlider2').addEventListener('input', (e) => {
+            collDepth = parseFloat(e.target.value);
+            document.getElementById('collDepthVal2').textContent = e.target.value;
+            updateCollisionBoxSize();
+        });
+        document.getElementById('collHeight').addEventListener('input', (e) => {
+            collHeight = parseFloat(e.target.value);
+            document.getElementById('collHeightVal').textContent = e.target.value;
+            updateCollisionBoxSize();
+        });
+        document.getElementById('collOffset').addEventListener('input', (e) => {
+            collOffset = parseFloat(e.target.value);
+            document.getElementById('collOffsetVal').textContent = e.target.value;
+            updatePlayerBodyPosition(); // Update position since offset changed
+        });
+
+        // View mode functions
+        window.setViewMode = function(mode) {
+            viewMode = mode;
+            document.getElementById('viewFP').style.background = mode === 'fp' ? '#4a4' : '#555';
+            document.getElementById('viewTP').style.background = mode === 'tp' ? '#4a4' : '#555';
+            document.getElementById('currentViewDisplay').textContent = mode === 'fp' ? 'First Person' : 'Third Person';
+
+            // Update visibility based on mode
+            if (playerBody) playerBody.visible = playerBodyVisible && mode === 'tp';
+            if (collisionBox) collisionBox.visible = collisionVisible && mode === 'tp';
+            // Show hands only in first person (if enabled)
+            if (fpsHands) fpsHands.visible = handsVisible && mode === 'fp';
+        };
+
+        // Visibility toggles
+        window.togglePlayerBody = function() {
+            playerBodyVisible = !playerBodyVisible;
+            const btn = document.getElementById('toggleBodyBtn');
+            btn.textContent = playerBodyVisible ? 'Hide Body' : 'Show Body';
+            btn.style.background = playerBodyVisible ? '#555' : '#333';
+            if (playerBody) playerBody.visible = playerBodyVisible && viewMode === 'tp';
+        };
+
+        window.toggleCollisionVis = function() {
+            collisionVisible = !collisionVisible;
+            const btn = document.getElementById('toggleCollBtn');
+            btn.textContent = collisionVisible ? 'Hide Coll' : 'Show Coll';
+            btn.style.background = collisionVisible ? '#555' : '#333';
+            if (collisionBox) collisionBox.visible = collisionVisible && viewMode === 'tp';
+            // Also toggle manual collision boxes
+            collisionBoxes.forEach(box => box.visible = collisionVisible);
+        };
+
+        // Collapsible sections
+        let controlsSectionOpen = true;
+        let playerCameraSectionOpen = false;
+        let collisionSectionOpen = false;
+
+        window.toggleControlsSection = function() {
+            controlsSectionOpen = !controlsSectionOpen;
+            document.getElementById('controlsContent').style.display = controlsSectionOpen ? 'block' : 'none';
+            document.getElementById('controlsArrow').textContent = controlsSectionOpen ? '-' : '+';
+        };
+
+        window.togglePlayerCameraSection = function() {
+            playerCameraSectionOpen = !playerCameraSectionOpen;
+            document.getElementById('playerCameraContent').style.display = playerCameraSectionOpen ? 'block' : 'none';
+            document.getElementById('playerCameraArrow').textContent = playerCameraSectionOpen ? '-' : '+';
+        };
+
+        window.toggleCollisionSection = function() {
+            collisionSectionOpen = !collisionSectionOpen;
+            document.getElementById('collisionContent').style.display = collisionSectionOpen ? 'block' : 'none';
+            document.getElementById('collisionArrow').textContent = collisionSectionOpen ? '-' : '+';
+        };
+
+        // Camera marker (white box at camera position)
+        let cameraMarker = null;
+        let cameraMarkerVisible = false;
+
+        window.toggleCameraMarker = function() {
+            cameraMarkerVisible = !cameraMarkerVisible;
+            const btn = document.getElementById('toggleCamMarkerBtn');
+            btn.textContent = cameraMarkerVisible ? 'Hide Camera Marker' : 'Show Camera Marker';
+            btn.style.background = cameraMarkerVisible ? '#4a4' : '#555';
+
+            if (cameraMarkerVisible && !cameraMarker) {
+                const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+                const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+                cameraMarker = new THREE.Mesh(geo, mat);
+                scene.add(cameraMarker);
+            }
+            if (cameraMarker) cameraMarker.visible = cameraMarkerVisible;
+        };
+
+        // FPS Hands visibility toggle
+        window.toggleHandsVisible = function() {
+            handsVisible = !handsVisible;
+            const btn = document.getElementById('toggleHandsBtn');
+            btn.textContent = handsVisible ? 'Hide Hands' : 'Show Hands';
+            btn.style.background = handsVisible ? '#555' : '#333';
+            if (fpsHands) fpsHands.visible = handsVisible && viewMode === 'fp';
+        };
+
+        // FPS Hands sliders
+        document.getElementById('handsXSlider').addEventListener('input', function() {
+            document.getElementById('handsXVal').textContent = this.value;
+            if (fpsHands) fpsHands.position.x = parseFloat(this.value);
+        });
+        document.getElementById('handsYSlider').addEventListener('input', function() {
+            document.getElementById('handsYVal').textContent = this.value;
+            if (fpsHands) fpsHands.position.y = parseFloat(this.value);
+        });
+        document.getElementById('handsZSlider').addEventListener('input', function() {
+            document.getElementById('handsZVal').textContent = this.value;
+            if (fpsHands) fpsHands.position.z = parseFloat(this.value);
+        });
+        document.getElementById('handsScaleSlider').addEventListener('input', function() {
+            document.getElementById('handsScaleVal').textContent = this.value;
+            if (fpsHands) fpsHands.scale.setScalar(parseFloat(this.value));
+        });
+
+        // Test mode - enable collision detection
+        window.toggleTestMode = function() {
+            testMode = !testMode;
+            const btn = document.getElementById('testModeBtn');
+            if (testMode) {
+                btn.style.background = '#4a4';
+                btn.textContent = 'Collision: ON';
+            } else {
+                btn.style.background = '#a44';
+                btn.textContent = 'Collision: OFF';
+            }
+        };
+
+        // Raycast Collision System (enabled by default)
+        let useRaycastCollision = true;
+        let collisionMeshes = []; // Cached meshes to collide with
+
+        function cacheCollisionMeshes() {
+            collisionMeshes = [];
+            if (loadedModel) {
+                loadedModel.traverse((child) => {
+                    if (child.isMesh) {
+                        collisionMeshes.push(child);
+                    }
+                });
+                console.log(`[RAYCAST] Cached ${collisionMeshes.length} meshes for collision`);
+            }
+        }
+
+        // Helper to get world normal from a raycast hit
+        function getWorldNormal(hit) {
+            if (!hit.face) return null;
+            const normal = hit.face.normal.clone();
+            // Transform normal to world space
+            const normalMatrix = new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld);
+            normal.applyMatrix3(normalMatrix).normalize();
+            return normal;
+        }
+
+        // Check if a surface is walkable based on slope angle
+        function isWalkableSurface(hit) {
+            const worldNormal = getWorldNormal(hit);
+            if (!worldNormal) return false;
+            // Calculate angle from vertical (0 = flat floor, 90 = wall)
+            const angle = Math.acos(worldNormal.y) * (180 / Math.PI);
+            return angle <= maxSlopeAngle;
+        }
+
+        // Ground detection - cast ray downward to find ground
+        function checkGround(position) {
+            if (!loadedModel || collisionMeshes.length === 0) {
+                return { grounded: false, groundY: null, normal: null };
+            }
+
+            // Calculate feet position based on COLLISION BOX settings (not player body)
+            // Collision box bottom is at: camera.y + collOffset - collHeight/2
+            const feetY = position.y + collOffset - collHeight / 2;
+            const rayOrigin = new THREE.Vector3(position.x, feetY + 0.1, position.z); // Start slightly above feet
+            const rayDir = new THREE.Vector3(0, -1, 0);
+
+            raycaster.set(rayOrigin, rayDir);
+            raycaster.far = groundCheckDistance + 0.2; // Check a bit below feet
+
+            const hits = raycaster.intersectObjects(collisionMeshes, false);
+
+            if (hits.length > 0) {
+                const hit = hits[0];
+                const worldNormal = getWorldNormal(hit);
+
+                // Check if surface is walkable (not too steep)
+                if (worldNormal && isWalkableSurface(hit)) {
+                    const groundY = hit.point.y;
+                    const feetToGround = feetY - groundY;
+
+                    // If we're close enough to the ground, we're grounded
+                    if (feetToGround < groundCheckDistance && feetToGround > -0.5) {
+                        return {
+                            grounded: true,
+                            groundY: groundY,
+                            normal: worldNormal,
+                            distance: feetToGround
+                        };
+                    }
+                }
+            }
+
+            return { grounded: false, groundY: null, normal: null };
+        }
+
+        // Apply physics (gravity, ground snapping)
+        function applyPhysics(delta) {
+            if (!loadedModel || collisionMeshes.length === 0) return;
+
+            const groundInfo = checkGround(camera.position);
+
+            // Camera height above ground based on COLLISION BOX
+            // When feet touch ground, camera is at: groundY + collHeight/2 - collOffset
+            const cameraAboveGround = collHeight / 2 - collOffset;
+
+            if (groundInfo.grounded && velocityY <= 0) {
+                // On ground and not jumping up
+                isGrounded = true;
+                velocityY = 0;
+
+                // Snap to ground (camera at correct height above ground based on player settings)
+                const targetY = groundInfo.groundY + cameraAboveGround;
+                const diff = targetY - camera.position.y;
+
+                // Smooth snap for small differences, instant for large
+                if (Math.abs(diff) < 0.5) {
+                    camera.position.y += diff * 10 * delta; // Smooth
+                } else {
+                    camera.position.y = targetY; // Instant
+                }
+            } else if (groundInfo.grounded && velocityY > 0) {
+                // On ground but jumping up - apply upward velocity
+                isGrounded = false;
+                camera.position.y += velocityY * delta;
+                velocityY += gravity * delta;
+            } else {
+                // In air - apply gravity
+                isGrounded = false;
+                velocityY += gravity * delta;
+                velocityY = Math.max(velocityY, maxFallSpeed); // Clamp fall speed
+
+                const newY = camera.position.y + velocityY * delta;
+
+                // Check if we're about to hit ground
+                const predictedGroundInfo = checkGround(new THREE.Vector3(
+                    camera.position.x,
+                    newY,
+                    camera.position.z
+                ));
+
+                if (predictedGroundInfo.grounded && velocityY < 0) {
+                    // Land on ground
+                    camera.position.y = predictedGroundInfo.groundY + cameraAboveGround;
+                    velocityY = 0;
+                    isGrounded = true;
+                } else {
+                    camera.position.y = newY;
+                }
+            }
+        }
+
+        function wouldCollideRaycast(currentPos, newPos) {
+            if (!loadedModel || collisionMeshes.length === 0) return false;
+
+            const moveDir = new THREE.Vector3().subVectors(newPos, currentPos);
+            const moveDistance = moveDir.length();
+            if (moveDistance < 0.001) return false;
+
+            // Only check horizontal collisions
+            const horizontalDir = new THREE.Vector3(moveDir.x, 0, moveDir.z);
+            const horizDist = horizontalDir.length();
+            if (horizDist < 0.001) return false; // Pure vertical movement, allow
+            horizontalDir.normalize();
+
+            // Check distance - player radius plus small buffer
+            const playerRadius = Math.max(playerWidth, playerDepth) / 2 + 0.15;
+            const checkDistance = horizDist + playerRadius;
+
+            // Only 2 ray heights - waist and chest (avoid feet which hit floors)
+            const rayHeights = [
+                -eyeHeight * 0.5,  // Waist level
+                -eyeHeight * 0.2,  // Chest level
+            ];
+
+            // Check a single ray and return true if blocked
+            const checkRay = (origin, direction) => {
+                raycaster.set(origin, direction);
+                raycaster.far = checkDistance;
+                const hits = raycaster.intersectObjects(collisionMeshes, false);
+                if (hits.length > 0) {
+                    const hit = hits[0];
+                    // Get world normal to check if it's a wall (not floor)
+                    const worldNormal = getWorldNormal(hit);
+                    if (worldNormal) {
+                        // Only block if surface is mostly vertical (wall)
+                        // Normal Y close to 0 means vertical surface
+                        if (Math.abs(worldNormal.y) < 0.7 && hit.distance < checkDistance) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+
+            for (const heightOffset of rayHeights) {
+                const baseY = currentPos.y + heightOffset;
+                const origin = new THREE.Vector3(currentPos.x, baseY, currentPos.z);
+
+                // Just check center ray - simpler and less jittery
+                if (checkRay(origin, horizontalDir)) return true;
+            }
+
+            return false;
+        }
+
+        // Collision detection
+        // Check if moving to position would cause collision
+        let lastCollisionLog = 0;
+        let lastBoxCountLog = 0;
+        const COLLISION_SKIN = 0.1; // Extra buffer to prevent phasing
+
+        // Create player bounding box at a position
+        function getPlayerBoxAt(position) {
+            const box = new THREE.Box3();
+            const halfWidth = collWidth / 2 + COLLISION_SKIN;
+            const halfDepth = collDepth / 2 + COLLISION_SKIN;
+            const collY = position.y + collOffset;
+
+            box.min.set(
+                position.x - halfWidth,
+                collY - collHeight / 2,
+                position.z - halfDepth
+            );
+            box.max.set(
+                position.x + halfWidth,
+                collY + collHeight / 2,
+                position.z + halfDepth
+            );
+            return box;
+        }
+
+        function wouldCollide(newPosition, oldPosition = null) {
+            // Log box count occasionally
+            const now = performance.now();
+            if (now - lastBoxCountLog > 5000 && bucketCollisionBoxes.length > 0) {
+                console.log(`[COLLISION] Checking against ${bucketCollisionBoxes.length} collision boxes`);
+                lastBoxCountLog = now;
+            }
+
+            if (bucketCollisionBoxes.length === 0) return false;
+
+            const shouldLog = now - lastCollisionLog > 500;
+
+            // Check at the new position
+            const tempBox = getPlayerBoxAt(newPosition);
+
+            // Check against manually placed collision boxes
+            for (let i = 0; i < bucketCollisionBoxes.length; i++) {
+                const entry = bucketCollisionBoxes[i];
+                if (!entry || !entry.box) continue;
+                if (tempBox.intersectsBox(entry.box)) {
+                    if (shouldLog) {
+                        console.log(`[COLLISION] Blocked by collision box #${i}`, {
+                            worldBox: { min: entry.box.min.clone(), max: entry.box.max.clone() },
+                            playerBox: { min: tempBox.min.clone(), max: tempBox.max.clone() },
+                            playerPos: newPosition.clone()
+                        });
+                        lastCollisionLog = now;
+                    }
+                    return true;
+                }
+            }
+
+            // Swept collision check - test points along the path to prevent tunneling
+            if (oldPosition) {
+                const distance = newPosition.distanceTo(oldPosition);
+                if (distance > 0.1) {
+                    const steps = Math.ceil(distance / 0.1); // Check every 0.1 units
+                    const dir = new THREE.Vector3().subVectors(newPosition, oldPosition).normalize();
+
+                    for (let s = 1; s < steps; s++) {
+                        const t = s / steps;
+                        const checkPos = new THREE.Vector3().lerpVectors(oldPosition, newPosition, t);
+                        const checkBox = getPlayerBoxAt(checkPos);
+
+                        for (let i = 0; i < bucketCollisionBoxes.length; i++) {
+                            const entry = bucketCollisionBoxes[i];
+                            if (!entry || !entry.box) continue;
+                            if (checkBox.intersectsBox(entry.box)) {
+                                if (shouldLog) {
+                                    console.log(`[COLLISION] Swept collision at step ${s}/${steps} with box #${i}`);
+                                    lastCollisionLog = now;
+                                }
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        function checkCollisions() {
+            if (!collisionBox) return false;
+
+            const playerBB = new THREE.Box3().setFromObject(collisionBox);
+            let collisionCount = 0;
+
+            // Check against manually placed collision boxes
+            for (const entry of bucketCollisionBoxes) {
+                if (!entry || !entry.box) continue;
+                if (playerBB.intersectsBox(entry.box)) {
+                    collisionCount++;
+                }
+            }
+
+            document.getElementById('collisionCount').textContent = collisionCount;
+            return collisionCount > 0;
+        }
+        // Store collision boxes (placed manually)
+        const bucketCollisionBoxes = [];
+        // Visual wireframes for collision boxes
+        const bucketCollisionVisuals = [];
+        let bucketCollisionVisualsVisible = false;
+
+        // Toggle collision box visualization
+        window.toggleBucketCollisionVis = function() {
+            bucketCollisionVisualsVisible = !bucketCollisionVisualsVisible;
+            const btn = document.getElementById('toggleBucketCollBtn');
+            btn.textContent = bucketCollisionVisualsVisible ? 'Hide Collision Boxes' : 'Show Collision Boxes';
+            btn.style.background = bucketCollisionVisualsVisible ? '#4a4' : '#a84';
+
+            // Update visibility of all visual boxes
+            bucketCollisionVisuals.forEach(vis => {
+                if (vis) vis.visible = bucketCollisionVisualsVisible;
+            });
+        };
+
+        // Collision Placement Mode - NEW WORKFLOW
+        let collisionPlaceMode = false;
+        let placementPhase = 'preview'; // 'preview' or 'adjust'
+        let adjustCameraMode = false; // true = orbit camera, false = use sliders
+        let collPlacePreview = null; // Preview mesh (follows raycast in preview mode, fixed in adjust mode)
+        let collPlaceBasePosition = new THREE.Vector3(); // World position of placed box
+        let pendingCollisionBox = null; // The box being adjusted before confirmation
+
+        // Orbit camera for adjust mode
+        let orbitAngle = 0;
+        let orbitDistance = 5;
+        let orbitHeight = 2;
+        let savedCameraPos = new THREE.Vector3();
+        let savedYaw = 0;
+        let savedPitch = 0;
+
+        // Initial size (used when placing)
+        let initWidth = 1.0;
+        let initHeight = 1.0;
+        let initDepth = 1.0;
+        let initShape = 'box'; // 'box' or 'cylinder'
+
+        // Adjust values (used after placing)
+        let adjustWidth = 1.0;
+        let adjustHeight = 1.0;
+        let adjustDepth = 1.0;
+        let adjustOffsetX = 0;
+        let adjustOffsetY = 0;
+        let adjustOffsetZ = 0;
+        let adjustRotationX = 0; // Rotation in degrees (pitch)
+        let adjustRotationY = 0; // Rotation in degrees (yaw)
+        let adjustRotationZ = 0; // Rotation in degrees (roll)
+        let adjustShape = 'box';
+
+        // Shape presets
+        const collShapePresets = {
+            box: { w: 1.0, h: 1.0, d: 1.0, shape: 'box' },
+            tallBox: { w: 0.5, h: 2.0, d: 0.5, shape: 'box' },
+            wideBox: { w: 2.0, h: 0.5, d: 2.0, shape: 'box' },
+            wall: { w: 3.0, h: 2.5, d: 0.3, shape: 'box' },
+            cylinder: { w: 1.0, h: 2.0, d: 1.0, shape: 'cylinder' }
+        };
+
+        // Start collision placement mode
+        window.startCollisionPlacement = function() {
+            collisionPlaceMode = true;
+            placementPhase = 'preview';
+
+            const btn = document.getElementById('collPlaceModeBtn');
+            const mainUI = document.getElementById('info');
+            const placementPanel = document.getElementById('collisionPlacementPanel');
+
+            btn.style.background = '#c44';
+            btn.textContent = '✕ Exit Placement Mode';
+            mainUI.style.display = 'none';
+            placementPanel.style.display = 'block';
+
+            // Show preview mode UI
+            document.getElementById('previewModeUI').style.display = 'block';
+            document.getElementById('adjustModeUI').style.display = 'none';
+
+            // Show collision boxes
+            if (!bucketCollisionVisualsVisible) {
+                toggleBucketCollisionVis();
+            }
+
+            // Create preview that follows raycast
+            createPreviewBox();
+
+            document.getElementById('modeIndicator').textContent = 'PLACEMENT MODE - Look at surface, click to place';
+            document.getElementById('modeIndicator').style.background = 'rgba(0,100,0,0.8)';
+            document.getElementById('modeIndicator').style.color = '#0f0';
+
+            // Request pointer lock
+            renderer.domElement.requestPointerLock();
+
+            console.log('[PLACEMENT] Started placement mode');
+        };
+
+        // Exit collision placement mode
+        window.exitCollisionPlacement = function() {
+            collisionPlaceMode = false;
+            placementPhase = 'preview';
+
+            const btn = document.getElementById('collPlaceModeBtn');
+            const mainUI = document.getElementById('info');
+            const placementPanel = document.getElementById('collisionPlacementPanel');
+
+            btn.style.background = '#383';
+            btn.textContent = '⬛ Place Collision Box';
+            mainUI.style.display = 'block';
+            placementPanel.style.display = 'none';
+
+            removePreviewBox();
+            pendingCollisionBox = null;
+
+            document.getElementById('modeIndicator').textContent = 'Click to enable mouse look';
+            document.getElementById('modeIndicator').style.background = 'rgba(0,0,0,0.7)';
+            document.getElementById('modeIndicator').style.color = '#4af';
+
+            console.log('[PLACEMENT] Exited placement mode');
+        };
+
+        // Click to place box (in preview phase)
+        function placeBoxAtPosition(position) {
+            if (placementPhase !== 'preview') return;
+
+            // Save current camera position for later
+            savedCameraPos.copy(camera.position);
+            savedYaw = yaw;
+            savedPitch = pitch;
+
+            // Save position
+            collPlaceBasePosition.copy(position);
+
+            // Copy initial sizes to adjust
+            adjustWidth = initWidth;
+            adjustHeight = initHeight;
+            adjustDepth = initDepth;
+            adjustShape = initShape;
+            adjustOffsetX = 0;
+            adjustOffsetY = 0;
+            adjustOffsetZ = 0;
+            adjustRotationX = 0;
+            adjustRotationY = 0;
+            adjustRotationZ = 0;
+
+            console.log('[PLACEMENT] placeBoxAtPosition - init->adjust:', {
+                initWidth, initHeight, initDepth, initShape,
+                adjustWidth, adjustHeight, adjustDepth,
+                basePos: position.clone()
+            });
+
+            // Switch to adjust phase (starts in slider mode, not camera mode)
+            placementPhase = 'adjust';
+            adjustCameraMode = false;
+
+            // Exit pointer lock - free the mouse for sliders
+            document.exitPointerLock();
+
+            // Set up orbit camera around the placed box
+            orbitAngle = 0;
+            orbitDistance = Math.max(adjustWidth, adjustDepth, adjustHeight) * 3 + 2;
+
+            // Update UI
+            document.getElementById('previewModeUI').style.display = 'none';
+            document.getElementById('adjustModeUI').style.display = 'block';
+
+            // Update adjust sliders
+            updateAdjustSliders();
+
+            // Change preview color to yellow (being adjusted)
+            if (collPlacePreview) {
+                collPlacePreview.material.color.setHex(0xffff00);
+                collPlacePreview.material.opacity = 0.5;
+            }
+
+            document.getElementById('modeIndicator').textContent = 'Use sliders to adjust, click "Adjust Camera" to orbit';
+            document.getElementById('modeIndicator').style.background = 'rgba(100,100,0,0.8)';
+            document.getElementById('modeIndicator').style.color = '#ff0';
+
+            console.log('[PLACEMENT] Box placed - slider mode (click Adjust Camera to orbit)');
+        }
+
+        // Enter camera orbit mode in adjust phase
+        window.enterAdjustCameraMode = function() {
+            if (placementPhase !== 'adjust') return;
+            adjustCameraMode = true;
+            document.getElementById('modeIndicator').textContent = 'CAMERA MODE - Move mouse to orbit, ESC for sliders';
+            document.getElementById('modeIndicator').style.background = 'rgba(0,80,120,0.8)';
+            document.getElementById('modeIndicator').style.color = '#4af';
+            console.log('[PLACEMENT] Entered camera orbit mode');
+        };
+
+        // Exit camera mode back to sliders
+        function exitAdjustCameraMode() {
+            adjustCameraMode = false;
+            document.getElementById('modeIndicator').textContent = 'Use sliders to adjust, click "Adjust Camera" to orbit';
+            document.getElementById('modeIndicator').style.background = 'rgba(100,100,0,0.8)';
+            document.getElementById('modeIndicator').style.color = '#ff0';
+            console.log('[PLACEMENT] Exited camera mode - back to sliders');
+        }
+
+        // Confirm placement (SET button)
+        window.confirmPlacement = function() {
+            if (placementPhase !== 'adjust') return;
+
+            // Log the values being used
+            console.log('[PLACEMENT] Creating box with:', {
+                basePos: collPlaceBasePosition.clone(),
+                adjustWidth, adjustHeight, adjustDepth,
+                adjustOffsetX, adjustOffsetY, adjustOffsetZ,
+                adjustRotationX, adjustRotationY, adjustRotationZ, adjustShape
+            });
+
+            // Create final collision box
+            // Position: base position + offsets, with center at half height above base
+            const finalPos = new THREE.Vector3(
+                collPlaceBasePosition.x + adjustOffsetX,
+                collPlaceBasePosition.y + adjustOffsetY + adjustHeight / 2,
+                collPlaceBasePosition.z + adjustOffsetZ
+            );
+
+            // For rotated boxes, we need to create an oriented bounding box
+            // For now, store rotation and use axis-aligned box (approximate)
+            const rotRad = adjustRotationY * Math.PI / 180;
+            const cosR = Math.abs(Math.cos(rotRad));
+            const sinR = Math.abs(Math.sin(rotRad));
+
+            // Rotated bounding dimensions (axis-aligned approximation)
+            const rotWidth = adjustWidth * cosR + adjustDepth * sinR;
+            const rotDepth = adjustWidth * sinR + adjustDepth * cosR;
+
+            const newBox = new THREE.Box3();
+            newBox.min.set(
+                finalPos.x - rotWidth / 2,
+                finalPos.y - adjustHeight / 2,
+                finalPos.z - rotDepth / 2
+            );
+            newBox.max.set(
+                finalPos.x + rotWidth / 2,
+                finalPos.y + adjustHeight / 2,
+                finalPos.z + rotDepth / 2
+            );
+
+            console.log('[PLACEMENT] Box3 created:', {
+                min: newBox.min.clone(),
+                max: newBox.max.clone(),
+                size: newBox.getSize(new THREE.Vector3()),
+                rotation: adjustRotationY
+            });
+
+            // Add to collision boxes (store shape info for visual)
+            const collisionIndex = bucketCollisionBoxes.length;
+            bucketCollisionBoxes.push({
+                box: newBox,
+                shape: adjustShape,
+                rotationX: adjustRotationX,
+                rotationY: adjustRotationY,
+                rotationZ: adjustRotationZ,
+                originalSize: { w: adjustWidth, h: adjustHeight, d: adjustDepth }
+            });
+
+            // Create visual (force visible)
+            const visual = createCollisionVisual(newBox, true, adjustShape, adjustRotationX, adjustRotationY, adjustRotationZ, adjustWidth, adjustHeight, adjustDepth, finalPos);
+            bucketCollisionVisuals[collisionIndex] = visual;
+
+            // Update counter
+            document.getElementById('placedBoxCount').textContent = bucketCollisionBoxes.length;
+
+            console.log('[PLACEMENT] Confirmed box #' + collisionIndex + ', total boxes:', bucketCollisionBoxes.length);
+
+            // Restore camera position
+            camera.position.copy(savedCameraPos);
+            yaw = savedYaw;
+            pitch = savedPitch;
+            euler.set(pitch, yaw, 0);
+            camera.quaternion.setFromEuler(euler);
+
+            // Go back to preview phase for next box
+            placementPhase = 'preview';
+            adjustCameraMode = false;
+            document.getElementById('previewModeUI').style.display = 'block';
+            document.getElementById('adjustModeUI').style.display = 'none';
+
+            // Reset preview color
+            if (collPlacePreview) {
+                collPlacePreview.material.color.setHex(0x00ff00);
+                collPlacePreview.material.opacity = 0.5;
+            }
+
+            // Request pointer lock to return to FP controls
+            renderer.domElement.requestPointerLock();
+
+            document.getElementById('modeIndicator').textContent = 'PLACEMENT MODE - Place next box';
+            document.getElementById('modeIndicator').style.background = 'rgba(0,100,0,0.8)';
+            document.getElementById('modeIndicator').style.color = '#0f0';
+        };
+
+        // Cancel placement (go back to preview)
+        window.cancelPlacement = function() {
+            if (placementPhase !== 'adjust') return;
+
+            // Restore camera position
+            camera.position.copy(savedCameraPos);
+            yaw = savedYaw;
+            pitch = savedPitch;
+            euler.set(pitch, yaw, 0);
+            camera.quaternion.setFromEuler(euler);
+
+            placementPhase = 'preview';
+            adjustCameraMode = false;
+            document.getElementById('previewModeUI').style.display = 'block';
+            document.getElementById('adjustModeUI').style.display = 'none';
+
+            // Reset preview color and shape
+            if (collPlacePreview) {
+                collPlacePreview.material.color.setHex(0x00ff00);
+                collPlacePreview.material.opacity = 0.5;
+            }
+
+            // Request pointer lock to return to FP controls
+            renderer.domElement.requestPointerLock();
+
+            document.getElementById('modeIndicator').textContent = 'PLACEMENT MODE - Look at surface, click to place';
+            document.getElementById('modeIndicator').style.background = 'rgba(0,100,0,0.8)';
+            document.getElementById('modeIndicator').style.color = '#0f0';
+
+            console.log('[PLACEMENT] Cancelled - back to preview');
+        };
+
+        // Shape preset
+        window.setCollShape = function(shape) {
+            const preset = collShapePresets[shape];
+            if (preset) {
+                initWidth = preset.w;
+                initHeight = preset.h;
+                initDepth = preset.d;
+                initShape = preset.shape || 'box';
+                updateInitSliders();
+                // Recreate preview with new shape
+                if (collPlacePreview) {
+                    const pos = collPlacePreview.position.clone();
+                    createPreviewBox();
+                    collPlacePreview.position.copy(pos);
+                }
+            }
+            document.querySelectorAll('.collShapeBtn').forEach(b => {
+                b.style.background = b.dataset.shape === shape ? '#4a4' : '#555';
+            });
+        };
+
+        function updateInitSliders() {
+            document.getElementById('initWidthSlider').value = initWidth;
+            document.getElementById('initWidthVal').textContent = initWidth.toFixed(1);
+            document.getElementById('initHeightSlider').value = initHeight;
+            document.getElementById('initHeightVal').textContent = initHeight.toFixed(1);
+            document.getElementById('initDepthSlider').value = initDepth;
+            document.getElementById('initDepthVal').textContent = initDepth.toFixed(1);
+        }
+
+        function updateAdjustSliders() {
+            document.getElementById('adjustWidthSlider').value = adjustWidth;
+            document.getElementById('adjustWidthVal').textContent = adjustWidth.toFixed(1);
+            document.getElementById('adjustHeightSlider').value = adjustHeight;
+            document.getElementById('adjustHeightVal').textContent = adjustHeight.toFixed(1);
+            document.getElementById('adjustDepthSlider').value = adjustDepth;
+            document.getElementById('adjustDepthVal').textContent = adjustDepth.toFixed(1);
+            document.getElementById('adjustOffsetXSlider').value = adjustOffsetX;
+            document.getElementById('adjustOffsetXVal').textContent = adjustOffsetX.toFixed(1);
+            document.getElementById('adjustOffsetYSlider').value = adjustOffsetY;
+            document.getElementById('adjustOffsetYVal').textContent = adjustOffsetY.toFixed(1);
+            document.getElementById('adjustOffsetZSlider').value = adjustOffsetZ;
+            document.getElementById('adjustOffsetZVal').textContent = adjustOffsetZ.toFixed(1);
+            document.getElementById('adjustRotationXSlider').value = adjustRotationX;
+            document.getElementById('adjustRotationXVal').textContent = adjustRotationX;
+            document.getElementById('adjustRotationYSlider').value = adjustRotationY;
+            document.getElementById('adjustRotationYVal').textContent = adjustRotationY;
+            document.getElementById('adjustRotationZSlider').value = adjustRotationZ;
+            document.getElementById('adjustRotationZVal').textContent = adjustRotationZ;
+        }
+
+        // Create the preview box
+        function createPreviewBox() {
+            removePreviewBox();
+
+            console.log('[PREVIEW] Creating with init size:', initWidth, initHeight, initDepth, 'shape:', initShape);
+
+            let geometry;
+            const previewColor = initShape === 'cylinder' ? 0x00ffff : 0x00ff00;
+            if (initShape === 'cylinder') {
+                geometry = new THREE.CylinderGeometry(initWidth / 2, initWidth / 2, initHeight, 16);
+            } else {
+                geometry = new THREE.BoxGeometry(initWidth, initHeight, initDepth);
+            }
+            const material = new THREE.MeshBasicMaterial({
+                color: previewColor,
+                transparent: true,
+                opacity: 0.5,
+                side: THREE.DoubleSide,
+                depthTest: false
+            });
+            collPlacePreview = new THREE.Mesh(geometry, material);
+
+            const edges = new THREE.EdgesGeometry(geometry);
+            const edgeMaterial = new THREE.LineBasicMaterial({ color: previewColor, linewidth: 2 });
+            const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
+            collPlacePreview.add(edgeLines);
+
+            collPlacePreview.renderOrder = 999;
+            scene.add(collPlacePreview);
+
+            console.log('[PREVIEW] Created preview', initShape);
+        }
+
+        // Update preview size (in preview phase)
+        function updatePreviewSize() {
+            if (!collPlacePreview) return;
+            // Recreate with new size
+            const pos = collPlacePreview.position.clone();
+            createPreviewBox();
+            collPlacePreview.position.copy(pos);
+        }
+
+        // Update preview for adjust mode
+        function updateAdjustPreview() {
+            if (!collPlacePreview) return;
+
+            // Recreate geometry based on shape
+            collPlacePreview.geometry.dispose();
+            if (adjustShape === 'cylinder') {
+                collPlacePreview.geometry = new THREE.CylinderGeometry(adjustWidth / 2, adjustWidth / 2, adjustHeight, 16);
+                collPlacePreview.material.color.setHex(0xffff00);
+            } else {
+                collPlacePreview.geometry = new THREE.BoxGeometry(adjustWidth, adjustHeight, adjustDepth);
+                collPlacePreview.material.color.setHex(0xffff00);
+            }
+
+            // Update edges
+            collPlacePreview.children.forEach(c => {
+                if (c.type === 'LineSegments') {
+                    collPlacePreview.remove(c);
+                }
+            });
+            const edges = new THREE.EdgesGeometry(collPlacePreview.geometry);
+            const edgeMaterial = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 2 });
+            const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
+            collPlacePreview.add(edgeLines);
+
+            // Update position
+            collPlacePreview.position.set(
+                collPlaceBasePosition.x + adjustOffsetX,
+                collPlaceBasePosition.y + adjustHeight / 2 + adjustOffsetY,
+                collPlaceBasePosition.z + adjustOffsetZ
+            );
+
+            // Apply all rotations (in degrees to radians)
+            collPlacePreview.rotation.set(
+                adjustRotationX * Math.PI / 180,
+                adjustRotationY * Math.PI / 180,
+                adjustRotationZ * Math.PI / 180
+            );
+        }
+
+        function removePreviewBox() {
+            if (collPlacePreview) {
+                scene.remove(collPlacePreview);
+                collPlacePreview = null;
+            }
+        }
+
+        // Update preview position based on phase
+        function updatePreviewPosition() {
+            if (!collPlacePreview) return;
+
+            if (placementPhase === 'preview') {
+                // In preview mode: box sits on surface (raycast hit point)
+                // Position box so its bottom is at the hit point
+                collPlacePreview.position.set(
+                    collPlaceBasePosition.x,
+                    collPlaceBasePosition.y + initHeight / 2,
+                    collPlaceBasePosition.z
+                );
+            } else if (placementPhase === 'adjust') {
+                // In adjust mode: use offsets from base position
+                collPlacePreview.position.set(
+                    collPlaceBasePosition.x + adjustOffsetX,
+                    collPlaceBasePosition.y + adjustHeight / 2 + adjustOffsetY,
+                    collPlaceBasePosition.z + adjustOffsetZ
+                );
+            }
+        }
+
+        // Initial size slider listeners (preview phase)
+        document.getElementById('initWidthSlider').addEventListener('input', (e) => {
+            initWidth = parseFloat(e.target.value);
+            document.getElementById('initWidthVal').textContent = initWidth.toFixed(1);
+            updatePreviewSize();
+        });
+        document.getElementById('initHeightSlider').addEventListener('input', (e) => {
+            initHeight = parseFloat(e.target.value);
+            document.getElementById('initHeightVal').textContent = initHeight.toFixed(1);
+            updatePreviewSize();
+        });
+        document.getElementById('initDepthSlider').addEventListener('input', (e) => {
+            initDepth = parseFloat(e.target.value);
+            document.getElementById('initDepthVal').textContent = initDepth.toFixed(1);
+            updatePreviewSize();
+        });
+
+        // Adjust slider listeners (adjust phase)
+        document.getElementById('adjustWidthSlider').addEventListener('input', (e) => {
+            adjustWidth = parseFloat(e.target.value);
+            document.getElementById('adjustWidthVal').textContent = adjustWidth.toFixed(1);
+            updateAdjustPreview();
+        });
+        document.getElementById('adjustHeightSlider').addEventListener('input', (e) => {
+            adjustHeight = parseFloat(e.target.value);
+            document.getElementById('adjustHeightVal').textContent = adjustHeight.toFixed(1);
+            updateAdjustPreview();
+        });
+        document.getElementById('adjustDepthSlider').addEventListener('input', (e) => {
+            adjustDepth = parseFloat(e.target.value);
+            document.getElementById('adjustDepthVal').textContent = adjustDepth.toFixed(1);
+            updateAdjustPreview();
+        });
+        document.getElementById('adjustOffsetXSlider').addEventListener('input', (e) => {
+            adjustOffsetX = parseFloat(e.target.value);
+            document.getElementById('adjustOffsetXVal').textContent = adjustOffsetX.toFixed(1);
+            updateAdjustPreview();
+        });
+        document.getElementById('adjustOffsetYSlider').addEventListener('input', (e) => {
+            adjustOffsetY = parseFloat(e.target.value);
+            document.getElementById('adjustOffsetYVal').textContent = adjustOffsetY.toFixed(1);
+            updateAdjustPreview();
+        });
+        document.getElementById('adjustOffsetZSlider').addEventListener('input', (e) => {
+            adjustOffsetZ = parseFloat(e.target.value);
+            document.getElementById('adjustOffsetZVal').textContent = adjustOffsetZ.toFixed(1);
+            updateAdjustPreview();
+        });
+        document.getElementById('adjustRotationXSlider').addEventListener('input', (e) => {
+            adjustRotationX = parseFloat(e.target.value);
+            document.getElementById('adjustRotationXVal').textContent = adjustRotationX;
+            updateAdjustPreview();
+        });
+        document.getElementById('adjustRotationYSlider').addEventListener('input', (e) => {
+            adjustRotationY = parseFloat(e.target.value);
+            document.getElementById('adjustRotationYVal').textContent = adjustRotationY;
+            updateAdjustPreview();
+        });
+        document.getElementById('adjustRotationZSlider').addEventListener('input', (e) => {
+            adjustRotationZ = parseFloat(e.target.value);
+            document.getElementById('adjustRotationZVal').textContent = adjustRotationZ;
+            updateAdjustPreview();
+        });
+
+        // Create a visual wireframe box for a collision
+        function createCollisionVisual(box3, forceVisible = false, shape = 'box', rotationX = 0, rotationY = 0, rotationZ = 0, origW = null, origH = null, origD = null, centerPos = null) {
+            const size = box3.getSize(new THREE.Vector3());
+            const center = centerPos || box3.getCenter(new THREE.Vector3());
+
+            console.log('[VISUAL] Creating wireframe at', center, 'size:', size, 'shape:', shape);
+
+            // Validate size
+            if (size.x <= 0 || size.y <= 0 || size.z <= 0) {
+                console.error('[VISUAL] Invalid box size!', size);
+                return null;
+            }
+
+            // Create a group to hold both the solid fill and wireframe
+            const group = new THREE.Group();
+
+            let fillGeometry;
+            if (shape === 'cylinder') {
+                // Cylinder: use width as diameter
+                const radius = (origW || size.x) / 2;
+                const height = origH || size.y;
+                fillGeometry = new THREE.CylinderGeometry(radius, radius, height, 16);
+            } else {
+                // Box: use original dimensions if available (for rotation)
+                const w = origW || size.x;
+                const h = origH || size.y;
+                const d = origD || size.z;
+                fillGeometry = new THREE.BoxGeometry(w, h, d);
+            }
+
+            // Semi-transparent solid fill
+            const fillMaterial = new THREE.MeshBasicMaterial({
+                color: shape === 'cylinder' ? 0x00ffff : 0x00ff00,
+                transparent: true,
+                opacity: 0.15,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
+            group.add(fillMesh);
+
+            // Wireframe edges
+            const edges = new THREE.EdgesGeometry(fillGeometry);
+            const edgeMaterial = new THREE.LineBasicMaterial({
+                color: shape === 'cylinder' ? 0x00ffff : 0x00ff00,
+                linewidth: 2
+            });
+            const wireframe = new THREE.LineSegments(edges, edgeMaterial);
+            group.add(wireframe);
+
+            group.position.copy(center);
+            // Apply all rotations
+            group.rotation.set(
+                rotationX * Math.PI / 180,
+                rotationY * Math.PI / 180,
+                rotationZ * Math.PI / 180
+            );
+            group.visible = forceVisible || bucketCollisionVisualsVisible;
+            scene.add(group);
+
+            // If forceVisible, also update the toggle state
+            if (forceVisible && !bucketCollisionVisualsVisible) {
+                bucketCollisionVisualsVisible = true;
+                document.getElementById('toggleBucketCollBtn').textContent = 'Hide Collision Boxes';
+                document.getElementById('toggleBucketCollBtn').style.background = '#4a4';
+            }
+
+            return group;
+        }
+
+        // Remove a visual collision box
+        function removeCollisionVisual(index) {
+            if (bucketCollisionVisuals[index]) {
+                scene.remove(bucketCollisionVisuals[index]);
+                bucketCollisionVisuals[index] = null;
+            }
+        }
+
+        // Mouse down for collision placement
+        renderer.domElement.addEventListener('mousedown', (e) => {
+            // Collision placement mode - click to place (only in preview phase)
+            if (collisionPlaceMode && e.button === 0 && placementPhase === 'preview') {
+                // If not in pointer lock, request it
+                if (!isLooking) {
+                    renderer.domElement.requestPointerLock();
+                    return;
+                }
+                // Use the current raycast position to place
+                if (collPlaceBasePosition.lengthSq() > 0) {
+                    placeBoxAtPosition(collPlaceBasePosition.clone());
+                } else {
+                    console.log('[PLACE] No position - look at a surface first');
+                }
+                return;
+            }
+        });
+
+        // Animation loop
+        let lastTime = performance.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const delta = (now - lastTime) / 1000;
+            lastTime = now;
+
+            // Skip normal movement and physics when in adjust phase (orbiting around box)
+            const inAdjustPhase = collisionPlaceMode && placementPhase === 'adjust';
+
+            if (!inAdjustPhase) {
+                // Apply physics (gravity + ground detection)
+                applyPhysics(delta);
+
+                // Movement
+                const speed = moveSpeed * delta * (keys['shift'] ? 2.5 : 1);
+                const direction = new THREE.Vector3();
+
+                if (keys['w']) direction.z -= 1;
+                if (keys['s']) direction.z += 1;
+                if (keys['a']) direction.x -= 1;
+                if (keys['d']) direction.x += 1;
+
+                if (direction.length() > 0) {
+                    direction.normalize();
+                    direction.applyQuaternion(camera.quaternion);
+                    direction.y = 0; // Keep movement horizontal
+                    direction.normalize();
+
+                    // Try to move, but check collision first (pass old position for swept check)
+                    const oldPos = camera.position.clone();
+                    const newPos = camera.position.clone().addScaledVector(direction, speed);
+                    // Only check collision if testMode is ON
+                    if (!testMode || !wouldCollide(newPos, oldPos)) {
+                        camera.position.copy(newPos);
+                    }
+                }
+
+                // Jump (Space) - can jump anytime
+                if (keys[' ']) {
+                    velocityY = 8; // Jump velocity
+                    isGrounded = false;
+                    keys[' '] = false; // Prevent continuous jumping while held
+                }
+
+                // Update hands animation based on movement
+                if (fpsHandsMixer) {
+                    const isMoving = keys['w'] || keys['s'] || keys['a'] || keys['d'];
+                    const isRunning = keys['shift'] && isMoving;
+
+                    let targetAnim = 'idle';
+                    if (isRunning) targetAnim = 'run';
+                    else if (isMoving) targetAnim = 'walk';
+
+                    // Switch animation if needed
+                    if (targetAnim !== currentHandsAnim && fpsHandsAnimations[targetAnim]) {
+                        // Fade out current, fade in new
+                        if (fpsHandsAnimations[currentHandsAnim]) {
+                            fpsHandsAnimations[currentHandsAnim].fadeOut(0.2);
+                        }
+                        fpsHandsAnimations[targetAnim].reset().fadeIn(0.2).play();
+                        currentHandsAnim = targetAnim;
+                    }
+
+                    fpsHandsMixer.update(delta);
+                }
+            }
+
+            // Update collision placement preview position
+            if (collisionPlaceMode) {
+                // Make sure preview exists
+                if (!collPlacePreview) {
+                    createPreviewBox();
+                }
+
+                // Only update preview position via raycast in preview phase
+                // In adjust phase, position is controlled by sliders
+                if (placementPhase === 'preview') {
+                    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                    const intersects = raycaster.intersectObjects(scene.children, true);
+
+                    let foundHit = false;
+                    for (const hit of intersects) {
+                        // Skip the preview box and its children
+                        if (hit.object === collPlacePreview) continue;
+                        if (hit.object.parent === collPlacePreview) continue;
+                        if (hit.object === playerBody) continue;
+                        if (hit.object === collisionBox) continue;
+                        if (bucketCollisionVisuals.includes(hit.object)) continue;
+
+                        // Store base position and update preview
+                        collPlaceBasePosition.copy(hit.point);
+                        updatePreviewPosition();
+                        foundHit = true;
+                        break;
+                    }
+
+                    // If no hit, place preview in front of camera
+                    if (!foundHit && collPlacePreview) {
+                        const forward = new THREE.Vector3(0, 0, -5);
+                        forward.applyQuaternion(camera.quaternion);
+                        collPlaceBasePosition.copy(camera.position).add(forward);
+                        updatePreviewPosition();
+                    }
+                } else if (placementPhase === 'adjust') {
+                    // In adjust phase: orbit camera around the placed box
+                    const boxCenter = new THREE.Vector3(
+                        collPlaceBasePosition.x + adjustOffsetX,
+                        collPlaceBasePosition.y + adjustHeight / 2 + adjustOffsetY,
+                        collPlaceBasePosition.z + adjustOffsetZ
+                    );
+
+                    // Update orbit distance based on box size
+                    orbitDistance = Math.max(adjustWidth, adjustDepth, adjustHeight) * 2.5 + 3;
+
+                    // Debug: log once per second
+                    if (Math.floor(now / 1000) !== Math.floor((now - delta * 1000) / 1000)) {
+                        console.log('[ORBIT] Camera orbiting at angle:', orbitAngle.toFixed(2), 'height:', orbitHeight.toFixed(2));
+                    }
+
+                    // Position camera orbiting around the box
+                    camera.position.set(
+                        boxCenter.x + Math.sin(orbitAngle) * orbitDistance,
+                        boxCenter.y + orbitHeight,
+                        boxCenter.z + Math.cos(orbitAngle) * orbitDistance
+                    );
+
+                    // Look at the box center
+                    camera.lookAt(boxCenter);
+                }
+            }
+
+            // Update player body position
+            updatePlayerBodyPosition();
+
+            // Update camera marker position
+            if (cameraMarker && cameraMarkerVisible) {
+                cameraMarker.position.copy(camera.position);
+            }
+
+            // Check collisions in test mode
+            if (testMode) {
+                checkCollisions();
+            }
+
+            // Handle third-person camera
+            let renderCamera = camera;
+            if (viewMode === 'tp') {
+                // Create a temporary camera position behind the player
+                const behindOffset = new THREE.Vector3(0, 1, thirdPersonDistance);
+                behindOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+                const tpCamPos = camera.position.clone().add(behindOffset);
+                tpCamPos.y += 1; // Slightly above
+
+                // Create a temporary camera for third-person view
+                const tpCamera = camera.clone();
+                tpCamera.position.copy(tpCamPos);
+                tpCamera.lookAt(camera.position);
+                renderCamera = tpCamera;
+            }
+
+            // Update position display
+            const pos = camera.position;
+            document.getElementById('posDisplay').textContent =
+                `${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}`;
+            document.getElementById('heightDisplay').textContent = pos.y.toFixed(2);
+            document.getElementById('lookDisplay').textContent =
+                `${(yaw * 180 / Math.PI).toFixed(1)}°, ${(pitch * 180 / Math.PI).toFixed(1)}°`;
+            const groundedEl = document.getElementById('groundedDisplay');
+            if (isGrounded) {
+                groundedEl.textContent = 'GROUNDED';
+                groundedEl.style.color = '#4f8';
+            } else {
+                groundedEl.textContent = 'FALLING';
+                groundedEl.style.color = '#f44';
+            }
+
+            renderer.render(scene, renderCamera);
+        }
+        animate();
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
