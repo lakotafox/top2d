@@ -10597,7 +10597,7 @@
         let mpConnected = false;
         let mpPlayerName = 'Player';
         let mpLastSendTime = 0;
-        const otherPlayers = new Map(); // id -> {x, y, direction, animation, name, frame, frameTimer}
+        const otherPlayers = new Map(); // id -> {x, y, targetX, targetY, direction, animation, name, frame, frameTimer}
 
         // Initialize multiplayer if settings provided
         if (projectData.multiplayer) {
@@ -10655,12 +10655,14 @@
                         data.players.filter(p => p.gameType === 'game2d').forEach(p => {
                             otherPlayers.set(p.id, {
                                 x: p.x, y: p.y,
+                                targetX: p.x, targetY: p.y,
                                 direction: p.direction || 'down',
                                 animation: p.animation || 'idle',
                                 name: p.name || 'Player',
+                                currentMap: p.currentMap || 'main',
                                 frame: 0, frameTimer: 0
                             });
-                            console.log('[MP] Added existing player:', p.name);
+                            console.log('[MP] Added existing player:', p.name, 'on map:', p.currentMap);
                         });
                     }
                     break;
@@ -10669,12 +10671,14 @@
                     if (data.player && data.player.gameType === 'game2d') {
                         otherPlayers.set(data.player.id, {
                             x: data.player.x, y: data.player.y,
+                            targetX: data.player.x, targetY: data.player.y,
                             direction: data.player.direction || 'down',
                             animation: data.player.animation || 'idle',
                             name: data.player.name || 'Player',
+                            currentMap: data.player.currentMap || 'main',
                             frame: 0, frameTimer: 0
                         });
-                        console.log('[MP] Player joined:', data.player.name);
+                        console.log('[MP] Player joined:', data.player.name, 'on map:', data.player.currentMap);
                     }
                     break;
 
@@ -10682,10 +10686,12 @@
                     if (data.player && data.player.gameType === 'game2d') {
                         const other = otherPlayers.get(data.player.id);
                         if (other) {
-                            other.x = data.player.x;
-                            other.y = data.player.y;
+                            // Set target position (will lerp toward it)
+                            other.targetX = data.player.x;
+                            other.targetY = data.player.y;
                             other.direction = data.player.direction || other.direction;
                             other.animation = data.player.animation || other.animation;
+                            other.currentMap = data.player.currentMap || other.currentMap;
                         }
                     }
                     break;
@@ -12133,8 +12139,14 @@
             // Send position update to server
             sendMpUpdate();
 
-            // Update other players' animations
+            // Update other players - smooth lerp + animations
+            const lerpSpeed = 0.15; // Smoothing factor (0.1 = smoother, 0.3 = snappier)
             otherPlayers.forEach((other, id) => {
+                // Lerp position toward target
+                other.x += (other.targetX - other.x) * lerpSpeed;
+                other.y += (other.targetY - other.y) * lerpSpeed;
+
+                // Update animation frame
                 other.frameTimer++;
                 if (other.frameTimer >= animSpeed) {
                     other.frameTimer = 0;
@@ -12933,10 +12945,11 @@
                 });
             });
 
-            // Add other multiplayer players
+            // Add other multiplayer players (only on same map)
             otherPlayers.forEach((other, odId) => {
-                // Only show players on same map (using currentMap from their data)
-                // For now, show all 2D players
+                // Only show players on the same map
+                if (other.currentMap !== currentGameMap) return;
+
                 const otherGridY = Math.floor((other.y + player.height) / (gridSize * TILE_SCALE));
                 entities.push({
                     type: 'otherPlayer',

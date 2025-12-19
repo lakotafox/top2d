@@ -261,11 +261,19 @@
                     <label style="color:#fa8; font-size:11px;">Third Person Camera</label>
                     <div style="margin-top:6px;">
                         <label style="color:#666; font-size:10px;">Distance: <span id="tpDistVal">3</span></label>
-                        <input type="range" id="tpDistSlider" min="1" max="10" step="0.5" value="3" style="width:100%;">
+                        <input type="range" id="tpDistSlider" min="0.5" max="20" step="0.5" value="3" style="width:100%;">
                     </div>
                     <div style="margin-top:4px;">
                         <label style="color:#666; font-size:10px;">Height: <span id="tpHeightVal">1.5</span></label>
-                        <input type="range" id="tpHeightSlider" min="0" max="5" step="0.1" value="1.5" style="width:100%;">
+                        <input type="range" id="tpHeightSlider" min="-3" max="10" step="0.1" value="1.5" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Look Offset Y: <span id="tpLookOffsetVal">0</span></label>
+                        <input type="range" id="tpLookOffsetSlider" min="-3" max="3" step="0.1" value="0" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Side Offset: <span id="tpSideOffsetVal">0</span></label>
+                        <input type="range" id="tpSideOffsetSlider" min="-3" max="3" step="0.1" value="0" style="width:100%;">
                     </div>
                 </div>
                 <!-- FPS Hands Position -->
@@ -893,6 +901,8 @@
         let currentThirdPersonAnim = 'run_forward';
         let isThirdPerson = false; // Toggle with V key
         let thirdPersonHeight = 1.5; // Camera height offset
+        let thirdPersonLookOffset = 0; // Y offset for where camera looks
+        let thirdPersonSideOffset = 0; // Horizontal offset (left/right)
 
         // Update eye height when player height changes
         function updateEyeHeight() {
@@ -1751,6 +1761,14 @@
         document.getElementById('tpHeightSlider').addEventListener('input', function(e) {
             thirdPersonHeight = parseFloat(e.target.value);
             document.getElementById('tpHeightVal').textContent = thirdPersonHeight;
+        });
+        document.getElementById('tpLookOffsetSlider').addEventListener('input', function(e) {
+            thirdPersonLookOffset = parseFloat(e.target.value);
+            document.getElementById('tpLookOffsetVal').textContent = thirdPersonLookOffset;
+        });
+        document.getElementById('tpSideOffsetSlider').addEventListener('input', function(e) {
+            thirdPersonSideOffset = parseFloat(e.target.value);
+            document.getElementById('tpSideOffsetVal').textContent = thirdPersonSideOffset;
         });
 
         // Camera marker (white box at camera position)
@@ -6207,7 +6225,7 @@
                     thirdPersonModel.position.set(playerPos.x, playerPos.y - eyeHeight, playerPos.z);
                     // Rotate model so their back faces the camera (character faces direction of movement)
                     // Camera is at angle yaw behind player, so character faces opposite direction
-                    thirdPersonModel.rotation.y = yaw;
+                    thirdPersonModel.rotation.y = yaw + Math.PI;
 
                     // Update animation based on movement
                     let targetAnim = null;
@@ -6239,13 +6257,16 @@
                     // Camera behind and above player
                     const camDirX = Math.sin(yaw) * thirdPersonDistance;
                     const camDirZ = Math.cos(yaw) * thirdPersonDistance;
+                    // Side offset (perpendicular to camera direction)
+                    const sideX = Math.cos(yaw) * thirdPersonSideOffset;
+                    const sideZ = -Math.sin(yaw) * thirdPersonSideOffset;
                     camera.position.set(
-                        playerPos.x + camDirX,
+                        playerPos.x + camDirX + sideX,
                         playerPos.y + thirdPersonHeight,
-                        playerPos.z + camDirZ
+                        playerPos.z + camDirZ + sideZ
                     );
-                    // Look at player
-                    camera.lookAt(playerPos.x, playerPos.y, playerPos.z);
+                    // Look at player with Y offset
+                    camera.lookAt(playerPos.x, playerPos.y + thirdPersonLookOffset, playerPos.z);
                 }
             }
 
