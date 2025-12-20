@@ -12974,6 +12974,16 @@
                 localStorage.setItem('externalDoorReturn', JSON.stringify(returnInfo));
                 console.log('[EXTERNAL DOOR] Saved return info:', returnInfo);
 
+                // Save multiplayer info for the external world (3D tavern)
+                if (multiplayerSettings && multiplayerSettings.roomCode) {
+                    const mpInfo = {
+                        playerName: multiplayerSettings.playerName,
+                        roomCode: multiplayerSettings.roomCode
+                    };
+                    localStorage.setItem('tavernMultiplayer', JSON.stringify(mpInfo));
+                    console.log('[EXTERNAL DOOR] Saved multiplayer info:', mpInfo);
+                }
+
                 const fadeDuration = trigger.fadeDuration !== undefined ? trigger.fadeDuration : 0.5;
 
                 if (fadeDuration > 0) {

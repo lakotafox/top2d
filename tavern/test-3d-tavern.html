@@ -1307,6 +1307,13 @@
                 return;
             }
 
+            // Return door placement mode - click to place door
+            if (returnDoorPlaceMode) {
+                console.log('[RETURN DOOR] Click detected - placing door');
+                placeReturnDoor();
+                return;
+            }
+
             // Farkle camera setting mode - click to set camera position
             if (farkleCameraMode) {
                 console.log('[FARKLE] Setting camera position');
@@ -1319,7 +1326,7 @@
                 return; // Don't request pointer lock during game
             }
 
-            if (!isLooking && !collisionPlaceMode && !copyMode && !farklePlaceMode) {
+            if (!isLooking && !collisionPlaceMode && !copyMode && !farklePlaceMode && !returnDoorPlaceMode) {
                 renderer.domElement.requestPointerLock();
             }
         });
@@ -1403,6 +1410,10 @@
                     exitFarklePlacement();
                     return;
                 }
+                if (returnDoorPlaceMode) {
+                    exitReturnDoorPlacement();
+                    return;
+                }
                 if (settingSpawn) {
                     settingSpawn = false;
                     document.getElementById('setSpawnBtn').classList.remove('active');
@@ -1434,8 +1445,14 @@
             if (isThirdPerson && e.key === '0') {
                 cancelEmote();
             }
-            // E to interact with Farkle table - show mode selection
+            // E to interact with return door or Farkle table
             if (e.key.toLowerCase() === 'e' && !farkleGameActive) {
+                // Check return door first
+                if (checkNearReturnDoor()) {
+                    useReturnDoor();
+                    return;
+                }
+                // Then check Farkle table
                 const nearTable = checkNearFarkleTable();
                 if (nearTable) {
                     pendingFarkleTableForMode = nearTable;
@@ -2597,7 +2614,23 @@
         let pendingFarkleTable = null; // Table waiting for camera position
         let farkleUIRotateMode = false; // Adjusting UI rotation
         let farkleUIRotation = 0; // UI rotation offset in degrees (0, 90, 180, 270)
+
+        // Return Door Placement
+        let returnDoorPosition = null; // Only one return door
+        let returnDoorPlaceMode = false;
+        let returnDoorPreview = null;
+        let returnDoorMesh = null; // The placed door mesh
         let farkleUIPreview = []; // Preview UI meshes
+
+        // Multiplayer
+        let multiplayerWs = null;
+        let localPlayerId = null;
+        let localPlayerName = 'Player';
+        let multiplayerRoomCode = null;
+        const otherPlayers = new Map(); // id -> {model, mixer, animations, nameTag, position}
+        let lastPositionSendTime = 0;
+        let lastSentPosition = { x: 0, y: 0, z: 0 };
+        let currentMoveDirection = 'down';
 
         // Felt surface adjustable settings
         // Default height: tabletopY (0.95) + tableTopThickness (0.1) + 0.02 = 1.07
@@ -4638,6 +4671,343 @@
             console.log('[FARKLE] Exited placement mode');
         };
 
+        // ========== RETURN DOOR FUNCTIONS ==========
+        window.startReturnDoorPlacement = function() {
+            returnDoorPlaceMode = true;
+            // Create preview cylinder (cyan door marker)
+            const geometry = new THREE.CylinderGeometry(0.5, 0.5, 2, 8);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.5 });
+            returnDoorPreview = new THREE.Mesh(geometry, material);
+            scene.add(returnDoorPreview);
+
+            document.getElementById('modeIndicator').textContent = 'Click to place Return Door';
+            document.getElementById('modeIndicator').style.color = '#0ff';
+            console.log('[RETURN DOOR] Placement mode started');
+        };
+
+        window.placeReturnDoor = function() {
+            if (!returnDoorPreview) return;
+
+            // Remove old door if exists
+            if (returnDoorMesh) {
+                scene.remove(returnDoorMesh);
+            }
+
+            returnDoorPosition = returnDoorPreview.position.clone();
+            scene.remove(returnDoorPreview);
+
+            // Create permanent marker
+            const geometry = new THREE.CylinderGeometry(0.5, 0.5, 2, 8);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.7 });
+            returnDoorMesh = new THREE.Mesh(geometry, material);
+            returnDoorMesh.position.copy(returnDoorPosition);
+            scene.add(returnDoorMesh);
+
+            returnDoorPlaceMode = false;
+            returnDoorPreview = null;
+
+            document.getElementById('modeIndicator').textContent = 'Return Door placed!';
+            document.getElementById('modeIndicator').style.color = '#0f0';
+            setTimeout(() => {
+                document.getElementById('modeIndicator').textContent = 'Click to enable mouse look';
+                document.getElementById('modeIndicator').style.color = '#4af';
+            }, 2000);
+
+            console.log('[RETURN DOOR] Placed at', returnDoorPosition);
+        };
+
+        window.checkNearReturnDoor = function() {
+            if (!returnDoorPosition) return false;
+            const dist = camera.position.distanceTo(returnDoorPosition);
+            return dist < 3; // Within 3 meters
+        };
+
+        window.useReturnDoor = function() {
+            // Navigate back to 2D world
+            console.log('[RETURN DOOR] Returning to 2D world...');
+            window.location.href = '../world-builder.html';
+        };
+
+        window.exitReturnDoorPlacement = function() {
+            returnDoorPlaceMode = false;
+            if (returnDoorPreview) {
+                scene.remove(returnDoorPreview);
+                returnDoorPreview = null;
+            }
+            document.getElementById('modeIndicator').textContent = 'Click to enable mouse look';
+            document.getElementById('modeIndicator').style.color = '#4af';
+        };
+        // ========== END RETURN DOOR FUNCTIONS ==========
+
+        // ========== MULTIPLAYER FUNCTIONS ==========
+        function initMultiplayer() {
+            // Check for multiplayer info from 2D world
+            const mpInfoStr = localStorage.getItem('tavernMultiplayer');
+            if (!mpInfoStr) {
+                console.log('[MULTIPLAYER] No multiplayer info found, running solo');
+                return;
+            }
+
+            try {
+                const mpInfo = JSON.parse(mpInfoStr);
+                localPlayerName = mpInfo.playerName || 'Player';
+                multiplayerRoomCode = mpInfo.roomCode;
+                console.log('[MULTIPLAYER] Found multiplayer info:', mpInfo);
+
+                if (multiplayerRoomCode) {
+                    connectToMultiplayer();
+                }
+            } catch (e) {
+                console.error('[MULTIPLAYER] Failed to parse multiplayer info:', e);
+            }
+        }
+
+        function connectToMultiplayer() {
+            const wsUrl = 'wss://multiplayer.lakotafox.partykit.dev/party/' + multiplayerRoomCode;
+            console.log('[MULTIPLAYER] Connecting to:', wsUrl);
+
+            multiplayerWs = new WebSocket(wsUrl);
+
+            multiplayerWs.onopen = function() {
+                console.log('[MULTIPLAYER] Connected to room:', multiplayerRoomCode);
+                // Send join message
+                multiplayerWs.send(JSON.stringify({
+                    type: 'join',
+                    name: localPlayerName,
+                    x: playerPos.x,
+                    y: playerPos.z, // 3D z = message y
+                    direction: 'down',
+                    animation: 'idle',
+                    gameType: 'tavern3d'
+                }));
+            };
+
+            multiplayerWs.onmessage = function(e) {
+                try {
+                    const data = JSON.parse(e.data);
+                    handleMultiplayerMessage(data);
+                } catch (err) {
+                    console.error('[MULTIPLAYER] Failed to parse message:', err);
+                }
+            };
+
+            multiplayerWs.onerror = function(err) {
+                console.error('[MULTIPLAYER] WebSocket error:', err);
+            };
+
+            multiplayerWs.onclose = function() {
+                console.log('[MULTIPLAYER] Disconnected from server');
+                multiplayerWs = null;
+            };
+        }
+
+        function handleMultiplayerMessage(data) {
+            switch (data.type) {
+                case 'welcome':
+                    console.log('[MULTIPLAYER] Welcome! Players in room:', data.players?.length || 0);
+                    localPlayerId = data.playerId;
+                    // Spawn existing players (filter for tavern3d only)
+                    if (data.players) {
+                        data.players.forEach(p => {
+                            if (p.gameType === 'tavern3d' && p.id !== localPlayerId) {
+                                spawnOtherPlayer(p);
+                            }
+                        });
+                    }
+                    break;
+
+                case 'join':
+                    // New player joined
+                    if (data.player && data.player.gameType === 'tavern3d' && data.player.id !== localPlayerId) {
+                        console.log('[MULTIPLAYER] Player joined:', data.player.name);
+                        spawnOtherPlayer(data.player);
+                    }
+                    break;
+
+                case 'update':
+                    // Player position update
+                    if (data.player && data.player.gameType === 'tavern3d' && data.player.id !== localPlayerId) {
+                        updateOtherPlayer(data.player);
+                    }
+                    break;
+
+                case 'leave':
+                    // Player left
+                    console.log('[MULTIPLAYER] Player left:', data.playerId);
+                    removeOtherPlayer(data.playerId);
+                    break;
+            }
+        }
+
+        function spawnOtherPlayer(playerData) {
+            if (otherPlayers.has(playerData.id)) return; // Already spawned
+
+            console.log('[MULTIPLAYER] Spawning player:', playerData.name, 'at', playerData.x, playerData.y);
+
+            // Create placeholder while loading
+            const playerInfo = {
+                model: null,
+                mixer: null,
+                animations: {},
+                nameTag: createNameTag(playerData.name),
+                position: new THREE.Vector3(playerData.x, 0, playerData.y),
+                direction: playerData.direction || 'down',
+                currentAnim: 'idle'
+            };
+            otherPlayers.set(playerData.id, playerInfo);
+
+            // Load the Hooded Adventurer model
+            const loader = new THREE.GLTFLoader();
+            loader.load('../Hooded Adventurer.glb', function(gltf) {
+                const model = gltf.scene;
+                model.scale.setScalar(1.0);
+                model.position.copy(playerInfo.position);
+                model.visible = true;
+                scene.add(model);
+
+                // Set up animation mixer
+                const mixer = new THREE.AnimationMixer(model);
+                const animations = {};
+
+                gltf.animations.forEach(clip => {
+                    const name = clip.name.toLowerCase();
+                    animations[name] = mixer.clipAction(clip);
+                });
+
+                // Play idle animation
+                if (animations['idle'] || animations['characterarmature|idle']) {
+                    const idleAnim = animations['idle'] || animations['characterarmature|idle'];
+                    idleAnim.play();
+                }
+
+                // Update player info
+                playerInfo.model = model;
+                playerInfo.mixer = mixer;
+                playerInfo.animations = animations;
+
+                console.log('[MULTIPLAYER] Model loaded for:', playerData.name);
+            }, undefined, function(err) {
+                console.error('[MULTIPLAYER] Failed to load model for:', playerData.name, err);
+            });
+        }
+
+        function updateOtherPlayer(playerData) {
+            const other = otherPlayers.get(playerData.id);
+            if (!other) return;
+
+            // Update position
+            other.position.set(playerData.x, 0, playerData.y);
+
+            if (other.model) {
+                other.model.position.copy(other.position);
+
+                // Update rotation based on direction
+                const rotations = {
+                    'down': 0,
+                    'left': Math.PI / 2,
+                    'up': Math.PI,
+                    'right': -Math.PI / 2
+                };
+                other.model.rotation.y = rotations[playerData.direction] || 0;
+                other.direction = playerData.direction;
+            }
+        }
+
+        function removeOtherPlayer(playerId) {
+            const other = otherPlayers.get(playerId);
+            if (!other) return;
+
+            if (other.model) {
+                scene.remove(other.model);
+            }
+            if (other.nameTag) {
+                other.nameTag.remove();
+            }
+            otherPlayers.delete(playerId);
+            console.log('[MULTIPLAYER] Removed player:', playerId);
+        }
+
+        function createNameTag(name) {
+            const div = document.createElement('div');
+            div.className = 'nametag';
+            div.textContent = name;
+            div.style.cssText = 'position:absolute;color:white;font-family:monospace;font-size:14px;text-shadow:1px 1px 2px black, -1px -1px 2px black;pointer-events:none;z-index:50;white-space:nowrap;';
+            document.body.appendChild(div);
+            return div;
+        }
+
+        function updateNameTagPositions() {
+            otherPlayers.forEach((other, id) => {
+                if (!other.model || !other.nameTag) return;
+
+                // Get position above player's head
+                const pos = other.model.position.clone();
+                pos.y += 2.2; // Above head
+
+                // Project to screen
+                pos.project(camera);
+
+                // Check if in front of camera
+                if (pos.z > 1) {
+                    other.nameTag.style.display = 'none';
+                    return;
+                }
+
+                const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+
+                other.nameTag.style.display = 'block';
+                other.nameTag.style.left = x + 'px';
+                other.nameTag.style.top = y + 'px';
+                other.nameTag.style.transform = 'translate(-50%, -50%)';
+            });
+        }
+
+        function sendPositionUpdate() {
+            if (!multiplayerWs || multiplayerWs.readyState !== WebSocket.OPEN) return;
+
+            const now = Date.now();
+            if (now - lastPositionSendTime < 100) return; // Throttle to 10/sec
+
+            // Check if position changed significantly
+            const dx = Math.abs(playerPos.x - lastSentPosition.x);
+            const dz = Math.abs(playerPos.z - lastSentPosition.z);
+            if (dx < 0.01 && dz < 0.01) return; // No significant movement
+
+            lastPositionSendTime = now;
+            lastSentPosition = { x: playerPos.x, y: playerPos.y, z: playerPos.z };
+
+            // Determine direction based on yaw
+            let direction = 'down';
+            const normalizedYaw = ((yaw % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+            if (normalizedYaw < Math.PI / 4 || normalizedYaw >= 7 * Math.PI / 4) {
+                direction = 'down';
+            } else if (normalizedYaw >= Math.PI / 4 && normalizedYaw < 3 * Math.PI / 4) {
+                direction = 'right';
+            } else if (normalizedYaw >= 3 * Math.PI / 4 && normalizedYaw < 5 * Math.PI / 4) {
+                direction = 'up';
+            } else {
+                direction = 'left';
+            }
+
+            multiplayerWs.send(JSON.stringify({
+                type: 'update',
+                x: playerPos.x,
+                y: playerPos.z, // 3D z = message y
+                direction: direction,
+                animation: keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ? 'walk' : 'idle'
+            }));
+        }
+
+        function updateOtherPlayerMixers(delta) {
+            otherPlayers.forEach(other => {
+                if (other.mixer) {
+                    other.mixer.update(delta);
+                }
+            });
+        }
+        // ========== END MULTIPLAYER FUNCTIONS ==========
+
         // Farkle rotation slider
         document.getElementById('farkleRotationSlider').addEventListener('input', (e) => {
             farkleRotationY = parseFloat(e.target.value);
@@ -6384,6 +6754,11 @@
                     thirdPersonMixer.update(delta);
                 }
 
+                // Update multiplayer
+                updateOtherPlayerMixers(delta);
+                sendPositionUpdate();
+                updateNameTagPositions();
+
                 // Third person camera - locked to model, orbit slider is offset from behind
                 if (isThirdPerson) {
                     // Orbit offset in radians (0 = directly behind model)
@@ -6456,6 +6831,20 @@
                 document.getElementById('farklePrompt').style.display = nearTable ? 'block' : 'none';
             } else {
                 document.getElementById('farklePrompt').style.display = 'none';
+            }
+
+            // Update return door preview position
+            if (returnDoorPlaceMode && returnDoorPreview) {
+                returnDoorPreview.position.copy(playerPos);
+                returnDoorPreview.position.y = 1; // Half height
+            }
+
+            // Show/hide return door prompt
+            if (!returnDoorPlaceMode && !farkleGameActive) {
+                const nearDoor = checkNearReturnDoor();
+                document.getElementById('returnDoorPrompt').style.display = nearDoor ? 'block' : 'none';
+            } else {
+                document.getElementById('returnDoorPrompt').style.display = 'none';
             }
 
             // Update player body position
@@ -6552,6 +6941,9 @@
 
         // Load saved tables on startup
         loadSavedFarkleTables();
+
+        // Initialize multiplayer (reads from localStorage)
+        initMultiplayer();
 
         animate();
 
