@@ -214,6 +214,10 @@
                 <p style="font-size:11px; margin:2px 0;"><b>Click canvas</b> - Enter look mode</p>
                 <p style="font-size:11px; margin:2px 0;"><b>ESC</b> - Exit look mode</p>
                 <p style="font-size:11px; margin:2px 0;"><b>WASD</b> - Move | <b>Space</b> - Jump | <b>Shift</b> - Run</p>
+                <p style="font-size:11px; margin:2px 0;"><b>V</b> - Toggle First/Third Person</p>
+                <p style="color:#fa8; margin:8px 0 4px 0; font-size:11px;"><b>Emotes (Third Person):</b></p>
+                <p style="font-size:11px; margin:2px 0;"><b>1-9</b> - Play emote | <b>0</b> - Cancel emote</p>
+                <div id="emoteList" style="font-size:10px; color:#888; margin-top:4px;"></div>
                 <div class="controls" style="margin-top:8px;">
                     <label>Move Speed: <span class="value" id="speedVal">5</span></label>
                     <input type="range" id="speedSlider" min="1" max="20" step="0.5" value="5">
@@ -335,7 +339,26 @@
                     <button id="viewFP" onclick="setViewMode('fp')" style="flex:1; padding:6px; background:#4a4; font-size:11px;">First Person</button>
                     <button id="viewTP" onclick="setViewMode('tp')" style="flex:1; padding:6px; background:#555; font-size:11px;">Third Person</button>
                 </div>
-                <button id="setTPCamBtn" onclick="toggleTPCamSetting()" style="width:100%; margin-top:6px; padding:8px; background:#a64; font-size:11px;">Set 3rd Person Camera</button>
+                <!-- Third Person Camera Sliders -->
+                <div style="margin-top:8px; background:#3a2a1a; padding:8px; border-radius:4px;">
+                    <label style="color:#fa8; font-size:11px;">Third Person Camera</label>
+                    <div style="margin-top:6px;">
+                        <label style="color:#666; font-size:10px;">Orbit Angle: <span id="tpAngleVal">0</span>°</label>
+                        <input type="range" id="tpAngleSlider" min="-180" max="180" step="5" value="0" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Distance: <span id="tpDistVal">1.5</span></label>
+                        <input type="range" id="tpDistSlider" min="1" max="15" step="0.5" value="1.5" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Height: <span id="tpHeightVal">1.75</span></label>
+                        <input type="range" id="tpHeightSlider" min="0" max="8" step="0.25" value="1.75" style="width:100%;">
+                    </div>
+                    <div style="margin-top:4px;">
+                        <label style="color:#666; font-size:10px;">Look Height: <span id="tpLookVal">1</span></label>
+                        <input type="range" id="tpLookSlider" min="0" max="3" step="0.1" value="1" style="width:100%;">
+                    </div>
+                </div>
 
                 <!-- Player Body Dimensions -->
                 <div style="margin-top:10px; background:#1a2a3a; border-radius:4px; padding:8px;">
@@ -880,7 +903,12 @@
         let thirdPersonAnimations = {};
         let currentThirdPersonAnim = 'run_forward';
         let isThirdPerson = false; // Toggle with V key
+        let emoteAnimations = []; // Non-movement animations for emotes (keys 1-9)
+        let currentEmote = null; // Currently playing emote
         let tpCamLookHeight = 1; // Where to look on player (Y offset)
+        let tpCamDistance = 1.5; // Distance behind player
+        let tpCamHeight = 1.75; // Height above player
+        let tpCamAngle = 0; // Fixed orbit angle (degrees, 0 = behind player)
         let tpCamSettingMode = false; // God mode for setting camera position
         let tpCamOffset = new THREE.Vector3(0, 3, 6); // Saved camera offset from player
 
@@ -1151,19 +1179,25 @@
                     // Set up animation mixer
                     thirdPersonMixer = new THREE.AnimationMixer(thirdPersonModel);
 
-                    // Map animations
+                    // Map animations - movement animations
                     const animMap = {
                         'characterarmature|run': 'run_forward',
                         'characterarmature|run_back': 'run_back',
                         'characterarmature|run_left': 'run_left',
                         'characterarmature|run_right': 'run_right'
                     };
+                    const movementAnims = ['run_forward', 'run_back', 'run_left', 'run_right'];
 
                     gltf.animations.forEach(clip => {
                         const rawName = clip.name.toLowerCase();
                         const mappedName = animMap[rawName] || rawName;
                         thirdPersonAnimations[mappedName] = thirdPersonMixer.clipAction(clip);
                         console.log('[3RD PERSON] Animation:', clip.name, '->', mappedName);
+
+                        // If not a movement animation, it's an emote
+                        if (!movementAnims.includes(mappedName)) {
+                            emoteAnimations.push(mappedName);
+                        }
                     });
 
                     // Start with forward run
@@ -1173,6 +1207,19 @@
                     }
 
                     console.log('[3RD PERSON] Hooded Adventurer loaded!', Object.keys(thirdPersonAnimations));
+                    console.log('[EMOTES] Available emotes:', emoteAnimations);
+
+                    // Populate emote list in Help UI
+                    const emoteListEl = document.getElementById('emoteList');
+                    if (emoteListEl && emoteAnimations.length > 0) {
+                        let html = '';
+                        emoteAnimations.slice(0, 9).forEach((emote, i) => {
+                            html += `<span style="color:#4af;">${i + 1}</span>: ${emote}<br>`;
+                        });
+                        emoteListEl.innerHTML = html;
+                    } else if (emoteListEl) {
+                        emoteListEl.innerHTML = '<span style="color:#666;">No emotes found</span>';
+                    }
                 });
 
                 // Hide loading (UI starts hidden, press H to show)
@@ -1303,13 +1350,17 @@
 
             const sensitivity = lookSensitivity * 0.001;
             yaw -= e.movementX * sensitivity;
-            pitch -= e.movementY * sensitivity;
 
-            // Clamp pitch to prevent flipping
-            pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
-
-            euler.set(pitch, yaw, 0);
-            camera.quaternion.setFromEuler(euler);
+            // In first person: control camera pitch
+            // In third person: mouse only rotates player (yaw), camera stays locked behind
+            if (!isThirdPerson) {
+                pitch -= e.movementY * sensitivity;
+                // Clamp pitch to prevent flipping
+                pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
+                euler.set(pitch, yaw, 0);
+                camera.quaternion.setFromEuler(euler);
+            }
+            // Third person camera is handled in the animation loop
         });
 
         // Keyboard input
@@ -1365,6 +1416,17 @@
             // V to toggle first/third person view
             if (e.key.toLowerCase() === 'v') {
                 setViewMode(viewMode === 'fp' ? 'tp' : 'fp');
+            }
+            // Number keys 1-9 for emotes (third person only)
+            if (isThirdPerson && e.key >= '1' && e.key <= '9') {
+                const emoteIndex = parseInt(e.key) - 1;
+                if (emoteIndex < emoteAnimations.length) {
+                    playEmote(emoteAnimations[emoteIndex]);
+                }
+            }
+            // 0 to cancel emote
+            if (isThirdPerson && e.key === '0') {
+                cancelEmote();
             }
             // E to interact with Farkle table - show mode selection
             if (e.key.toLowerCase() === 'e' && !farkleGameActive) {
@@ -1661,6 +1723,36 @@
             console.log('[VIEW] Switched to', mode === 'tp' ? 'third person' : 'first person');
         };
 
+        // Emote functions
+        window.playEmote = function(emoteName) {
+            if (!thirdPersonAnimations[emoteName]) return;
+
+            // Stop current animation
+            if (currentEmote && thirdPersonAnimations[currentEmote]) {
+                thirdPersonAnimations[currentEmote].fadeOut(0.3);
+            }
+            if (thirdPersonAnimations[currentThirdPersonAnim]) {
+                thirdPersonAnimations[currentThirdPersonAnim].fadeOut(0.3);
+            }
+
+            // Play emote
+            currentEmote = emoteName;
+            thirdPersonAnimations[emoteName].reset().fadeIn(0.3).play();
+            console.log('[EMOTE] Playing:', emoteName);
+        };
+
+        window.cancelEmote = function() {
+            if (currentEmote && thirdPersonAnimations[currentEmote]) {
+                thirdPersonAnimations[currentEmote].fadeOut(0.3);
+            }
+            currentEmote = null;
+            // Resume movement animation
+            if (thirdPersonAnimations[currentThirdPersonAnim]) {
+                thirdPersonAnimations[currentThirdPersonAnim].reset().fadeIn(0.3).play();
+            }
+            console.log('[EMOTE] Cancelled');
+        };
+
         // Third person camera setting mode
         window.toggleTPCamSetting = function() {
             if (!isThirdPerson) {
@@ -1758,6 +1850,24 @@
         document.getElementById('camZSlider').addEventListener('input', function() {
             camOffsetZ = parseFloat(this.value);
             document.getElementById('camZVal').textContent = camOffsetZ.toFixed(2);
+        });
+
+        // Third person camera sliders
+        document.getElementById('tpAngleSlider').addEventListener('input', function() {
+            tpCamAngle = parseFloat(this.value);
+            document.getElementById('tpAngleVal').textContent = tpCamAngle;
+        });
+        document.getElementById('tpDistSlider').addEventListener('input', function() {
+            tpCamDistance = parseFloat(this.value);
+            document.getElementById('tpDistVal').textContent = tpCamDistance;
+        });
+        document.getElementById('tpHeightSlider').addEventListener('input', function() {
+            tpCamHeight = parseFloat(this.value);
+            document.getElementById('tpHeightVal').textContent = tpCamHeight;
+        });
+        document.getElementById('tpLookSlider').addEventListener('input', function() {
+            tpCamLookHeight = parseFloat(this.value);
+            document.getElementById('tpLookVal').textContent = tpCamLookHeight;
         });
 
         // Camera marker (white box at camera position)
@@ -6154,12 +6264,34 @@
 
                 if (direction.length() > 0) {
                     direction.normalize();
-                    direction.applyQuaternion(camera.quaternion);
 
-                    // In fly mode, allow full 3D movement; otherwise keep horizontal
-                    if (!flyMode) {
-                        direction.y = 0;
-                        direction.normalize();
+                    // In third person, movement is based on camera view direction
+                    // In first person, movement is based on camera direction
+                    if (isThirdPerson) {
+                        // Get camera's forward direction (where it's looking)
+                        const camForward = new THREE.Vector3(0, 0, -1);
+                        camForward.applyQuaternion(camera.quaternion);
+                        camForward.y = 0;
+                        camForward.normalize();
+
+                        // Get camera's right direction
+                        const camRight = new THREE.Vector3(1, 0, 0);
+                        camRight.applyQuaternion(camera.quaternion);
+                        camRight.y = 0;
+                        camRight.normalize();
+
+                        // Combine based on WASD input
+                        const move = new THREE.Vector3();
+                        move.addScaledVector(camForward, -direction.z); // W/S (forward/back)
+                        move.addScaledVector(camRight, direction.x);    // A/D (left/right)
+                        direction.copy(move);
+                    } else {
+                        direction.applyQuaternion(camera.quaternion);
+                        // In fly mode, allow full 3D movement; otherwise keep horizontal
+                        if (!flyMode) {
+                            direction.y = 0;
+                            direction.normalize();
+                        }
                     }
 
                     // Try to move, but check collision first (pass old position for swept check)
@@ -6168,12 +6300,15 @@
                     // Skip collision check in fly mode or if testMode is off
                     if (skipCollision || !testMode || !wouldCollide(newPos, oldPos)) {
                         playerPos.copy(newPos);
-                        // Camera follows player with offsets
-                        camera.position.set(
-                            playerPos.x + camOffsetX,
-                            playerPos.y + camOffsetY,
-                            playerPos.z + camOffsetZ
-                        );
+                        // First person: camera follows player with offsets
+                        // Third person: camera is positioned later in the loop
+                        if (!isThirdPerson) {
+                            camera.position.set(
+                                playerPos.x + camOffsetX,
+                                playerPos.y + camOffsetY,
+                                playerPos.z + camOffsetZ
+                            );
+                        }
                     }
                 }
 
@@ -6216,23 +6351,25 @@
                     // Camera is at angle yaw behind player, so character faces opposite direction
                     thirdPersonModel.rotation.y = yaw + Math.PI;
 
-                    // Update animation based on movement
-                    let targetAnim = null;
-                    if (keys['w']) targetAnim = 'run_forward';
-                    else if (keys['s']) targetAnim = 'run_back';
-                    else if (keys['a']) targetAnim = 'run_left';
-                    else if (keys['d']) targetAnim = 'run_right';
+                    // Update animation based on movement (skip if emote is playing)
+                    if (!currentEmote) {
+                        let targetAnim = null;
+                        if (keys['w']) targetAnim = 'run_forward';
+                        else if (keys['s']) targetAnim = 'run_back';
+                        else if (keys['a']) targetAnim = 'run_left';
+                        else if (keys['d']) targetAnim = 'run_right';
 
-                    if (targetAnim && targetAnim !== currentThirdPersonAnim && thirdPersonAnimations[targetAnim]) {
-                        if (thirdPersonAnimations[currentThirdPersonAnim]) {
-                            thirdPersonAnimations[currentThirdPersonAnim].fadeOut(0.2);
+                        if (targetAnim && targetAnim !== currentThirdPersonAnim && thirdPersonAnimations[targetAnim]) {
+                            if (thirdPersonAnimations[currentThirdPersonAnim]) {
+                                thirdPersonAnimations[currentThirdPersonAnim].fadeOut(0.2);
+                            }
+                            thirdPersonAnimations[targetAnim].reset().fadeIn(0.2).play();
+                            currentThirdPersonAnim = targetAnim;
+                        } else if (!targetAnim && thirdPersonAnimations[currentThirdPersonAnim]) {
+                            thirdPersonAnimations[currentThirdPersonAnim].paused = true;
+                        } else if (targetAnim && thirdPersonAnimations[currentThirdPersonAnim]) {
+                            thirdPersonAnimations[currentThirdPersonAnim].paused = false;
                         }
-                        thirdPersonAnimations[targetAnim].reset().fadeIn(0.2).play();
-                        currentThirdPersonAnim = targetAnim;
-                    } else if (!targetAnim && thirdPersonAnimations[currentThirdPersonAnim]) {
-                        thirdPersonAnimations[currentThirdPersonAnim].paused = true;
-                    } else if (targetAnim && thirdPersonAnimations[currentThirdPersonAnim]) {
-                        thirdPersonAnimations[currentThirdPersonAnim].paused = false;
                     }
                 }
 
@@ -6241,22 +6378,19 @@
                     thirdPersonMixer.update(delta);
                 }
 
-                // Third person camera
+                // Third person camera - locked to model, orbit slider is offset from behind
                 if (isThirdPerson) {
-                    if (tpCamSettingMode) {
-                        // Setting mode: free fly, just look at player
-                        camera.lookAt(playerPos.x, playerPos.y + tpCamLookHeight, playerPos.z);
-                    } else {
-                        // Normal mode: position camera using saved offset (rotated by yaw)
-                        const rotatedX = tpCamOffset.x * Math.cos(yaw) - tpCamOffset.z * Math.sin(yaw);
-                        const rotatedZ = tpCamOffset.x * Math.sin(yaw) + tpCamOffset.z * Math.cos(yaw);
-                        camera.position.set(
-                            playerPos.x + rotatedX,
-                            playerPos.y + tpCamOffset.y,
-                            playerPos.z + rotatedZ
-                        );
-                        camera.lookAt(playerPos.x, playerPos.y + tpCamLookHeight, playerPos.z);
-                    }
+                    // Orbit offset in radians (0 = directly behind model)
+                    const orbitOffset = tpCamAngle * Math.PI / 180;
+                    // Camera is behind where model faces: model faces yaw+PI, so camera at yaw
+                    const camAngle = yaw + orbitOffset;
+                    // Position camera behind player (rotates with model)
+                    camera.position.set(
+                        playerPos.x + Math.sin(camAngle) * tpCamDistance,
+                        playerPos.y - eyeHeight + tpCamHeight,
+                        playerPos.z + Math.cos(camAngle) * tpCamDistance
+                    );
+                    camera.lookAt(playerPos.x, playerPos.y - eyeHeight + tpCamLookHeight, playerPos.z);
                 }
             }
 
@@ -6348,7 +6482,7 @@
                 groundedEl.style.color = '#f44';
             }
 
-            renderer.render(scene, renderCamera);
+            renderer.render(scene, camera);
         }
 
         // ============================================

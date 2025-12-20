@@ -5213,6 +5213,34 @@
                     mapCtx.fillText('from ' + trigger.mapName, sx + tileSize / 2, sy + tileSize / 2 + 6);
                 });
 
+                // Draw RETURN spawn points for external doors (cyan boxes - where you return from 3D)
+                const externalReturns = placedTriggers.filter(t =>
+                    t.doorType === 'external' &&
+                    t.mapName === currentMapName &&
+                    t.returnX !== null && t.returnY !== null
+                );
+                externalReturns.forEach(trigger => {
+                    const sx = trigger.returnX * tileSize;
+                    const sy = trigger.returnY * tileSize;
+                    const doorNum = trigger.doorNumber || 1;
+
+                    // Cyan return box
+                    mapCtx.fillStyle = 'rgba(0, 255, 255, 0.3)';
+                    mapCtx.fillRect(sx, sy, tileSize, tileSize);
+                    mapCtx.strokeStyle = '#0ff';
+                    mapCtx.lineWidth = 2;
+                    mapCtx.strokeRect(sx, sy, tileSize, tileSize);
+
+                    // Label: "Door X RETURN"
+                    mapCtx.fillStyle = '#0ff';
+                    mapCtx.font = 'bold 10px monospace';
+                    mapCtx.textAlign = 'center';
+                    mapCtx.textBaseline = 'middle';
+                    mapCtx.fillText('Door ' + doorNum, sx + tileSize / 2, sy + tileSize / 2 - 5);
+                    mapCtx.font = '8px monospace';
+                    mapCtx.fillText('RETURN', sx + tileSize / 2, sy + tileSize / 2 + 6);
+                });
+
                 // Draw camera bounds (yellow/orange border)
                 if (cameraBounds) {
                     const bx = cameraBounds.x * tileSize;
@@ -5499,25 +5527,49 @@
                     const py = (gPlayer.y / 4) * zoom;
 
                     // Draw player sprite (64x64 frames, same as game)
+                    // Sprite layout: 1024x512, 16 cols x 8 rows = 64x64 each
                     const frameSize = 64;
-                    const drawSize = tileSize * 1.5; // Slightly smaller than game scale
+                    const drawSize = tileSize * 1.5;
 
-                    // Get idle frame column based on direction
-                    const idleCols = { down: 0, up: 3, right: 6, left: 6 };
-                    const col = idleCols[gPlayer.direction] || 0;
-                    const flipX = gPlayer.direction === 'left';
+                    // Animation frames (matching game's drawPlayer)
+                    // Idle frames: Row 0 - down[0,1,2], up[3,4,5], right[6,7,8], left=right flipped
+                    // Walk frames: down Row0[9,10,11,12], up Row0[13,14,15], right Row1[1,2,3,4], left=right flipped
+                    let row = 0;
+                    let col = 0;
+                    let flipX = gPlayer.direction === 'left';
+                    const frame = gPlayer.frame || 0;
+
+                    if (gPlayer.animation === 'walk') {
+                        // Walking animation
+                        if (gPlayer.direction === 'down') {
+                            row = 0; col = 9 + (frame % 4);
+                        } else if (gPlayer.direction === 'up') {
+                            row = 0; col = 13 + (frame % 3);
+                        } else { // right or left
+                            row = 1; col = 1 + (frame % 4);
+                        }
+                    } else {
+                        // Idle animation
+                        if (gPlayer.direction === 'down') {
+                            col = 0;
+                        } else if (gPlayer.direction === 'up') {
+                            col = 3;
+                        } else { // right or left
+                            col = 6;
+                        }
+                    }
 
                     if (playerSpriteImg && playerSpriteImg.complete) {
                         mapCtx.save();
                         if (flipX) {
-                            mapCtx.translate(px + drawSize / 2, py - drawSize / 2);
+                            mapCtx.translate(px, py - drawSize / 2);
                             mapCtx.scale(-1, 1);
                             mapCtx.drawImage(playerSpriteImg,
-                                col * frameSize, 0, frameSize, frameSize,
+                                col * frameSize, row * frameSize, frameSize, frameSize,
                                 -drawSize / 2, 0, drawSize, drawSize);
                         } else {
                             mapCtx.drawImage(playerSpriteImg,
-                                col * frameSize, 0, frameSize, frameSize,
+                                col * frameSize, row * frameSize, frameSize, frameSize,
                                 px - drawSize / 2, py - drawSize / 2, drawSize, drawSize);
                         }
                         mapCtx.restore();
@@ -8629,7 +8681,8 @@
         let builderRoomCode = null;
 
         // Track game players visible in builder
-        let gamePlayersInBuilder = new Map(); // id -> {x, y, name, direction, currentMap}
+        let gamePlayersInBuilder = new Map(); // id -> {x, y, name, direction, currentMap, animation, frame, lastFrameTime}
+        let gamePlayerAnimInterval = null; // Animation loop for game players in builder
         let builderGameSocket = null; // socket to game server to see testers
 
         function connectBuilderMultiplayer(name, roomCode) {
@@ -8712,20 +8765,29 @@
                     if (data.type === 'welcome' && data.players) {
                         data.players.forEach(p => {
                             if (p.gameType === 'game2d') {
+                                p.frame = 0;
+                                p.lastFrameTime = Date.now();
                                 gamePlayersInBuilder.set(p.id, p);
                             }
                         });
+                        startGamePlayerAnimLoop();
                         renderMap();
                     } else if (data.type === 'join' && data.player && data.player.gameType === 'game2d') {
                         console.log('[BUILDER] Game player joined:', data.player.name);
+                        data.player.frame = 0;
+                        data.player.lastFrameTime = Date.now();
                         gamePlayersInBuilder.set(data.player.id, data.player);
+                        startGamePlayerAnimLoop();
                         renderMap();
                     } else if (data.type === 'update' && data.player && data.player.gameType === 'game2d') {
+                        const existing = gamePlayersInBuilder.get(data.player.id);
+                        data.player.frame = existing ? existing.frame : 0;
+                        data.player.lastFrameTime = existing ? existing.lastFrameTime : Date.now();
                         gamePlayersInBuilder.set(data.player.id, data.player);
-                        // Don't call renderMap on every update - it's already running
                     } else if (data.type === 'leave' && data.playerId) {
                         console.log('[BUILDER] Game player left');
                         gamePlayersInBuilder.delete(data.playerId);
+                        if (gamePlayersInBuilder.size === 0) stopGamePlayerAnimLoop();
                         renderMap();
                     }
                 } catch (e) {}
@@ -8734,7 +8796,41 @@
             builderGameSocket.onclose = () => {
                 console.log('[BUILDER GAME] Disconnected from game server');
                 gamePlayersInBuilder.clear();
+                stopGamePlayerAnimLoop();
             };
+        }
+
+        // Animation loop for game players shown in builder
+        function startGamePlayerAnimLoop() {
+            if (gamePlayerAnimInterval) return; // Already running
+            gamePlayerAnimInterval = setInterval(() => {
+                if (gamePlayersInBuilder.size === 0) {
+                    stopGamePlayerAnimLoop();
+                    return;
+                }
+                const now = Date.now();
+                let needsRender = false;
+                gamePlayersInBuilder.forEach(p => {
+                    // Advance frame every 150ms for walking players
+                    if (p.animation === 'walk' && now - p.lastFrameTime > 150) {
+                        p.frame = (p.frame + 1) % 4;
+                        p.lastFrameTime = now;
+                        needsRender = true;
+                    } else if (p.animation !== 'walk') {
+                        // Reset to idle frame
+                        if (p.frame !== 0) needsRender = true;
+                        p.frame = 0;
+                    }
+                });
+                if (needsRender) renderMap();
+            }, 100);
+        }
+
+        function stopGamePlayerAnimLoop() {
+            if (gamePlayerAnimInterval) {
+                clearInterval(gamePlayerAnimInterval);
+                gamePlayerAnimInterval = null;
+            }
         }
 
         function handleBuilderMessage(data) {
@@ -9612,11 +9708,13 @@
                 const doorNum = t.doorNumber || 1;
                 const doorType = t.doorType || 'walkover';
                 const isExternal = doorType === 'external';
-                const spawnSet = isExternal || (t.targetX != null && t.targetY != null);
-                const spawnText = isExternal ? 'external' : (spawnSet ? `(${t.targetX}, ${t.targetY})` : '<span style="color:#f80;">SET SPAWN!</span>');
+                const spawnSet = isExternal ? (t.returnX != null && t.returnY != null) : (t.targetX != null && t.targetY != null);
+                const spawnText = isExternal
+                    ? (spawnSet ? `return:(${t.returnX}, ${t.returnY})` : '<span style="color:#f80;">SET RETURN!</span>')
+                    : (spawnSet ? `(${t.targetX}, ${t.targetY})` : '<span style="color:#f80;">SET SPAWN!</span>');
                 const typeIcon = isExternal ? '🌐' : (doorType === 'interact' ? '🔘' : '🚶');
                 const destination = isExternal ? t.externalUrl : t.targetMap;
-                const borderColor = isExternal ? '#0cc' : (spawnSet ? '#f4f' : '#f80');
+                const borderColor = spawnSet ? (isExternal ? '#0cc' : '#f4f') : '#f80';
                 return `<div style="background:#333; padding:8px; margin-bottom:4px; border-radius:3px; border-left:3px solid ${borderColor};">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span>${typeIcon} <b>Door ${doorNum}</b> → ${destination}</span>
@@ -9954,7 +10052,9 @@
                     type: 'door',
                     doorType: 'external',
                     externalUrl: externalUrl,
-                    fadeDuration: parseFloat(document.getElementById('doorFadeDuration').value)
+                    fadeDuration: parseFloat(document.getElementById('doorFadeDuration').value),
+                    returnX: null,  // Return spawn point (set by clicking on map)
+                    returnY: null
                 };
                 pendingTriggerWidth = 1;
                 pendingTriggerHeight = 1;
@@ -9968,6 +10068,13 @@
                 updateTriggerList();
                 updateDoorNumberDropdown();
                 closeDoorMapModal();
+
+                // Now set return spawn point (stay on same map)
+                pendingTriggerForSpawn = trigger;
+                pendingTriggerForSpawn.isExternalReturn = true; // Flag for special handling
+                spawnSourceMap = currentMapName;
+                settingSpawnPoint = true;
+                setMode('trigger');
                 renderMap();
                 return;
             }
@@ -10103,15 +10210,25 @@
         function setSpawnPointAt(x, y) {
             // Update the pending trigger directly
             if (pendingTriggerForSpawn) {
-                pendingTriggerForSpawn.targetX = x;
-                pendingTriggerForSpawn.targetY = y;
-                console.log('=== SPAWN PLACED ===');
-                console.log('[SPAWN] Door', pendingTriggerForSpawn.doorNumber, 'spawn set at (' + x + ', ' + y + ') on "' + currentMapName + '"');
+                // Check if this is an external door return spawn
+                if (pendingTriggerForSpawn.isExternalReturn) {
+                    pendingTriggerForSpawn.returnX = x;
+                    pendingTriggerForSpawn.returnY = y;
+                    delete pendingTriggerForSpawn.isExternalReturn; // Clean up temp flag
+                    console.log('=== EXTERNAL RETURN SPAWN PLACED ===');
+                    console.log('[SPAWN] Door', pendingTriggerForSpawn.doorNumber, 'RETURN spawn set at (' + x + ', ' + y + ') on "' + currentMapName + '"');
+                } else {
+                    pendingTriggerForSpawn.targetX = x;
+                    pendingTriggerForSpawn.targetY = y;
+                    console.log('=== SPAWN PLACED ===');
+                    console.log('[SPAWN] Door', pendingTriggerForSpawn.doorNumber, 'spawn set at (' + x + ', ' + y + ') on "' + currentMapName + '"');
+                }
             }
 
             // Check if this trigger needs animation setup
             const needsAnim = pendingTriggerForSpawn && pendingTriggerForSpawn.needsAnimSetup;
             const triggerForAnim = pendingTriggerForSpawn;
+            const isExternalDoor = pendingTriggerForSpawn && pendingTriggerForSpawn.doorType === 'external';
             console.log('[DOOR ANIM] In setSpawnPointAt, needsAnim =', needsAnim, 'trigger.needsAnimSetup =', pendingTriggerForSpawn?.needsAnimSetup);
 
             // Exit spawn setting mode
@@ -10120,8 +10237,8 @@
             spawnSourceMap = null;
             pendingTriggerForSpawn = null;
 
-            // Auto-return to source map
-            if (returnMap) {
+            // Auto-return to source map (but not for external doors - we're already on the right map)
+            if (returnMap && !isExternalDoor) {
                 switchToMap(returnMap);
             }
 
@@ -12146,6 +12263,43 @@
 
             console.log('findStartPos called - INITIAL GAME START on map:', currentGameMap);
 
+            // Check if returning from external area (3D world)
+            const returnInfoStr = localStorage.getItem('externalDoorReturn');
+            if (returnInfoStr) {
+                try {
+                    const returnInfo = JSON.parse(returnInfoStr);
+                    // Only use if less than 5 minutes old (in case of stale data)
+                    if (Date.now() - returnInfo.timestamp < 5 * 60 * 1000) {
+                        console.log('[EXTERNAL RETURN] Spawning at door:', returnInfo);
+                        // Clear the return info so we don't use it again
+                        localStorage.removeItem('externalDoorReturn');
+                        // Switch to the return map if different
+                        if (returnInfo.map && returnInfo.map !== currentGameMap) {
+                            currentGameMap = returnInfo.map;
+                            const mapData = mapsData[returnInfo.map];
+                            if (mapData) {
+                                layers = mapData.layers || layers;
+                                tileCollisions = mapData.tileCollisions || {};
+                                collisionMasks = mapData.collisionMasks || {};
+                                mapCols = mapData.mapCols || mapCols;
+                                mapRows = mapData.mapRows || mapRows;
+                            }
+                        }
+                        // Spawn at the door position
+                        player.x = returnInfo.x * tileSize + tileSize / 2;
+                        player.y = returnInfo.y * tileSize + tileSize / 2;
+                        console.log('[EXTERNAL RETURN] Player spawned at:', player.x, player.y);
+                        return;
+                    } else {
+                        console.log('[EXTERNAL RETURN] Return info too old, ignoring');
+                        localStorage.removeItem('externalDoorReturn');
+                    }
+                } catch (e) {
+                    console.error('[EXTERNAL RETURN] Failed to parse return info:', e);
+                    localStorage.removeItem('externalDoorReturn');
+                }
+            }
+
             // Use global playerPreviewPos for initial spawn
             if (projectData.playerPreviewPos && (projectData.playerPreviewPos.x !== undefined)) {
                 const pos = projectData.playerPreviewPos;
@@ -12776,6 +12930,18 @@
             // Handle external doors (navigate to another HTML file)
             if (trigger.doorType === 'external' && trigger.externalUrl) {
                 console.log('[EXTERNAL DOOR] Navigating to:', trigger.externalUrl);
+
+                // Save return coordinates so we can spawn back here
+                // Use returnX/returnY if set, otherwise fall back to door position
+                const returnInfo = {
+                    map: currentGameMap,
+                    x: trigger.returnX !== null ? trigger.returnX : trigger.x,
+                    y: trigger.returnY !== null ? trigger.returnY : trigger.y,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem('externalDoorReturn', JSON.stringify(returnInfo));
+                console.log('[EXTERNAL DOOR] Saved return info:', returnInfo);
+
                 const fadeDuration = trigger.fadeDuration !== undefined ? trigger.fadeDuration : 0.5;
 
                 if (fadeDuration > 0) {
