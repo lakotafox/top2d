@@ -10494,6 +10494,8 @@
 
             // Get current project data
             const projectDataForTest = getProjectData();
+            // Add base URL so external doors can resolve relative paths
+            projectDataForTest.baseUrl = window.location.href.replace(/\/[^\/]*$/, '/');
             if (launchAsAdventure) {
                 projectDataForTest.autoHideUI = true;
             }
@@ -12929,7 +12931,14 @@
 
             // Handle external doors (navigate to another HTML file)
             if (trigger.doorType === 'external' && trigger.externalUrl) {
-                console.log('[EXTERNAL DOOR] Navigating to:', trigger.externalUrl);
+                // Resolve relative URLs using baseUrl from project data
+                let externalUrl = trigger.externalUrl;
+                if (!externalUrl.startsWith('http://') && !externalUrl.startsWith('https://')) {
+                    // Relative URL - prefix with baseUrl
+                    const baseUrl = projectData.baseUrl || '';
+                    externalUrl = baseUrl + externalUrl;
+                }
+                console.log('[EXTERNAL DOOR] Navigating to:', externalUrl);
 
                 // Save return coordinates so we can spawn back here
                 // Use returnX/returnY if set, otherwise fall back to door position
@@ -12949,10 +12958,10 @@
                     transitionPhase = 'fadeOut';
                     transitionAlpha = 0;
                     // Store URL for navigation after fade completes
-                    pendingExternalUrl = trigger.externalUrl;
+                    pendingExternalUrl = externalUrl;
                 } else {
                     // Instant navigation
-                    window.location.href = trigger.externalUrl;
+                    window.location.href = externalUrl;
                 }
                 return;
             }
