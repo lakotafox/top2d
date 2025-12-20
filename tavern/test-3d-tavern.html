@@ -413,6 +413,7 @@
                 <button id="testModeBtn" onclick="toggleTestMode()" style="width:100%; margin-top:5px; background:#4a4;">Collision: ON</button>
                 <button id="copyObjectBtn" onclick="startCopyMode()" style="width:100%; margin-top:5px; padding:8px; background:#a48; font-size:12px;">Copy Object</button>
                 <button id="farkleTableBtn" onclick="startFarklePlacement()" style="width:100%; margin-top:5px; padding:8px; background:#b86; font-size:12px;">Place Farkle Table</button>
+                <button id="returnDoorBtn" onclick="startReturnDoorPlacement()" style="width:100%; margin-top:5px; padding:8px; background:#48a; font-size:12px;">Place Return Door</button>
                 <div style="font-size:10px; color:#888; margin-top:5px;">
                     View: <span id="currentViewDisplay">First Person</span> | Collisions: <span id="collisionCount">0</span>
                 </div>
@@ -818,6 +819,11 @@
     <!-- Farkle Prompt -->
     <div id="farklePrompt" style="display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); padding:10px 20px; border-radius:5px; z-index:100;">
         <span style="color:#ffa;">Press E to play Farkle</span>
+    </div>
+
+    <!-- Return Door Prompt -->
+    <div id="returnDoorPrompt" style="display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); padding:10px 20px; border-radius:5px; z-index:100;">
+        <span style="color:#8ff;">Press E to return to world</span>
     </div>
 
     <!-- Farkle Mode Selection -->

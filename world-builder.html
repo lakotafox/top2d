@@ -1773,6 +1773,18 @@
         let playerSpriteData = null; // Base64 data URL of player sprite
         let playerSpriteImg = null; // Image object for preview
 
+        // Load default player sprite
+        (function loadDefaultPlayerSprite() {
+            const defaultSprite = new Image();
+            defaultSprite.onload = () => {
+                if (!playerSpriteImg) {
+                    playerSpriteImg = defaultSprite;
+                    console.log('Default player sprite loaded');
+                }
+            };
+            defaultSprite.src = 'assets/player_sprite.png';
+        })();
+
         // Copy from map mode
         let copyMode = false;
         let copyStart = null;
@@ -5518,6 +5530,20 @@
 
             // === DRAW GAME PLAYERS (visible to builder when co-op) ===
             if (gamePlayersInBuilder.size > 0) {
+                // Same frame data as game test
+                const idleFrames = {
+                    down: [0, 1, 2],
+                    up: [3, 4, 5],
+                    right: [6, 7, 8],
+                    left: [6, 7, 8]
+                };
+                const walkFrames = {
+                    down: { row: 0, cols: [9, 10, 11, 12] },
+                    up: { row: 0, cols: [13, 14, 15] },
+                    right: { row: 1, cols: [1, 2, 3, 4] },
+                    left: { row: 1, cols: [1, 2, 3, 4] }
+                };
+
                 gamePlayersInBuilder.forEach((gPlayer, id) => {
                     // Only show players on current map
                     if (gPlayer.currentMap !== currentMapName) return;
@@ -5526,59 +5552,56 @@
                     const px = (gPlayer.x / 4) * zoom;
                     const py = (gPlayer.y / 4) * zoom;
 
-                    // Draw player sprite (64x64 frames, same as game)
-                    // Sprite layout: 1024x512, 16 cols x 8 rows = 64x64 each
-                    const frameSize = 64;
+                    const frameWidth = 64;
+                    const frameHeight = 64;
                     const drawSize = tileSize * 1.5;
-
-                    // Animation frames (matching game's drawPlayer)
-                    // Idle frames: Row 0 - down[0,1,2], up[3,4,5], right[6,7,8], left=right flipped
-                    // Walk frames: down Row0[9,10,11,12], up Row0[13,14,15], right Row1[1,2,3,4], left=right flipped
-                    let row = 0;
-                    let col = 0;
-                    let flipX = gPlayer.direction === 'left';
+                    const dir = gPlayer.direction || 'down';
                     const frame = gPlayer.frame || 0;
 
+                    let row = 0;
+                    let col = 0;
+                    let flipX = dir === 'left';
+
                     if (gPlayer.animation === 'walk') {
-                        // Walking animation
-                        if (gPlayer.direction === 'down') {
-                            row = 0; col = 9 + (frame % 4);
-                        } else if (gPlayer.direction === 'up') {
-                            row = 0; col = 13 + (frame % 3);
-                        } else { // right or left
-                            row = 1; col = 1 + (frame % 4);
-                        }
+                        const walk = walkFrames[dir];
+                        row = walk.row;
+                        col = walk.cols[frame % walk.cols.length];
                     } else {
-                        // Idle animation
-                        if (gPlayer.direction === 'down') {
-                            col = 0;
-                        } else if (gPlayer.direction === 'up') {
-                            col = 3;
-                        } else { // right or left
-                            col = 6;
-                        }
+                        row = 0;
+                        col = idleFrames[dir][frame % idleFrames[dir].length];
                     }
 
                     if (playerSpriteImg && playerSpriteImg.complete) {
+                        // Draw shadow
+                        mapCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                        mapCtx.beginPath();
+                        mapCtx.ellipse(px, py + drawSize * 0.4, drawSize * 0.3, drawSize * 0.1, 0, 0, Math.PI * 2);
+                        mapCtx.fill();
+
+                        // Draw sprite
                         mapCtx.save();
                         if (flipX) {
-                            mapCtx.translate(px, py - drawSize / 2);
+                            mapCtx.translate(px + drawSize / 2, py - drawSize / 2);
                             mapCtx.scale(-1, 1);
                             mapCtx.drawImage(playerSpriteImg,
-                                col * frameSize, row * frameSize, frameSize, frameSize,
-                                -drawSize / 2, 0, drawSize, drawSize);
+                                col * frameWidth, row * frameHeight, frameWidth, frameHeight,
+                                0, 0, drawSize, drawSize);
                         } else {
                             mapCtx.drawImage(playerSpriteImg,
-                                col * frameSize, row * frameSize, frameSize, frameSize,
+                                col * frameWidth, row * frameHeight, frameWidth, frameHeight,
                                 px - drawSize / 2, py - drawSize / 2, drawSize, drawSize);
                         }
                         mapCtx.restore();
                     } else {
-                        // Fallback: simple colored circle
+                        // Fallback: simple colored circle with direction indicator
                         mapCtx.fillStyle = 'rgba(0, 255, 255, 0.8)';
                         mapCtx.beginPath();
                         mapCtx.arc(px, py, 12 * zoom, 0, Math.PI * 2);
                         mapCtx.fill();
+                        mapCtx.fillStyle = '#000';
+                        mapCtx.font = '8px monospace';
+                        mapCtx.textAlign = 'center';
+                        mapCtx.fillText(dir[0], px, py + 3);
                     }
 
                     // Draw name above player
