@@ -696,11 +696,6 @@
             <h1>LOAD<br>SAVE</h1>
             <p>- SELECT SOURCE -</p>
             <div style="margin-top:20px;">
-                <button class="retro-btn" onclick="playButtonSound(); loadDemo()">
-                    > DEMO
-                </button>
-            </div>
-            <div>
                 <button class="retro-btn" onclick="playButtonSound(); document.getElementById('projectFileInputWelcome').click(); document.getElementById('saveChoice').style.display='none'; document.getElementById('mainMenu').style.display='block';">
                     > YOUR SAVE
                 </button>
@@ -712,16 +707,20 @@
             </div>
         </div>
         <div class="load-box" id="modeSelect" style="display:none;">
-            <h1>SELECT<br>MODE</h1>
-            <p>- PLAY OR EDIT? -</p>
+            <h1>WHO ARE<br>YOU?</h1>
             <div style="margin-top:20px;">
-                <button class="retro-btn" onclick="showMultiplayerPrompt()">
-                    > ADVENTURE
+                <button class="retro-btn" onclick="playButtonSound(); startBuilder()">
+                    > ADVENTURER
                 </button>
             </div>
             <div>
-                <button class="retro-btn" onclick="showCraftMultiplayerPrompt()">
-                    > CRAFT
+                <button class="retro-btn" onclick="playButtonSound(); startBuilder()">
+                    > CRAFTER
+                </button>
+            </div>
+            <div>
+                <button class="retro-btn" onclick="playButtonSound(); startBuilder()">
+                    > BOTH
                 </button>
             </div>
         </div>
@@ -1782,7 +1781,12 @@
                     console.log('Default player sprite loaded');
                 }
             };
-            defaultSprite.src = 'assets/player_sprite.png';
+            defaultSprite.onerror = () => {
+                console.log('Failed to load default sprite, trying relative path...');
+                defaultSprite.src = 'assets/player_sprite.png';
+            };
+            // Use absolute URL to work in all contexts
+            defaultSprite.src = window.location.origin + '/assets/player_sprite.png';
         })();
 
         // Copy from map mode
@@ -8618,16 +8622,11 @@
             document.getElementById('saveChoice').style.display = 'block';
         }
 
-        // Load demo file
+        // Load save menu HTML
         const saveChoiceOriginalHTML = `
             <h1>LOAD<br>SAVE</h1>
             <p>- SELECT SOURCE -</p>
             <div style="margin-top:20px;">
-                <button class="retro-btn" onclick="playButtonSound(); loadDemo()">
-                    > DEMO
-                </button>
-            </div>
-            <div>
                 <button class="retro-btn" onclick="playButtonSound(); document.getElementById('projectFileInputWelcome').click(); document.getElementById('saveChoice').style.display='none'; document.getElementById('mainMenu').style.display='block';">
                     > YOUR SAVE
                 </button>
@@ -8695,6 +8694,19 @@
         function hideCraftMultiplayerPrompt() {
             document.getElementById('craftMultiplayerPrompt').style.display = 'none';
             document.getElementById('modeSelect').style.display = 'block';
+        }
+
+        // Simple builder start - shows co-op prompt
+        function startBuilder() {
+            if (!pendingSaveData) {
+                console.log('[START] No save data, returning');
+                return;
+            }
+
+            // Hide mode select, show co-op prompt
+            document.getElementById('modeSelect').style.display = 'none';
+            document.getElementById('craftMultiplayerPrompt').style.display = 'block';
+            document.getElementById('craftPlayerName').focus();
         }
 
         // === BUILDER MULTIPLAYER SYSTEM ===
@@ -12975,10 +12987,10 @@
                 console.log('[EXTERNAL DOOR] Saved return info:', returnInfo);
 
                 // Save multiplayer info for the external world (3D tavern)
-                if (multiplayerSettings && multiplayerSettings.roomCode) {
+                if (projectData.multiplayer && projectData.multiplayer.roomCode) {
                     const mpInfo = {
-                        playerName: multiplayerSettings.playerName,
-                        roomCode: multiplayerSettings.roomCode
+                        playerName: projectData.multiplayer.playerName,
+                        roomCode: projectData.multiplayer.roomCode
                     };
                     localStorage.setItem('tavernMultiplayer', JSON.stringify(mpInfo));
                     console.log('[EXTERNAL DOOR] Saved multiplayer info:', mpInfo);

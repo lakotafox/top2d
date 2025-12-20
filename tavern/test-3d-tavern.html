@@ -419,6 +419,20 @@
                 </div>
             </div>
         </div>
+
+        <!-- Multiplayer Section -->
+        <div style="margin-top:10px; padding:10px; background:#1a1a2a; border-radius:6px; border:1px solid #66f;">
+            <div style="color:#aaf; font-size:12px; margin-bottom:8px; font-weight:bold;">Multiplayer</div>
+            <div id="mpStatus" style="color:#888; font-size:10px; margin-bottom:8px;">Not connected</div>
+            <input id="mpNameInput" placeholder="Your Name" value="Player" style="width:100%; padding:5px; margin-bottom:5px; background:#222; border:1px solid #444; color:white; border-radius:3px; font-size:11px;">
+            <input id="mpRoomInput" placeholder="Room Code" style="width:100%; padding:5px; margin-bottom:5px; background:#222; border:1px solid #444; color:white; border-radius:3px; font-size:11px;">
+            <button onclick="manualConnectMultiplayer()" style="width:100%; padding:8px; background:#446; border:none; color:white; border-radius:4px; cursor:pointer; font-size:11px;">Connect</button>
+            <div id="mpPlayerList" style="margin-top:8px; font-size:10px; color:#8f8;"></div>
+            <div style="margin-top:10px; padding-top:8px; border-top:1px solid #446;">
+                <label style="color:#aaf; font-size:10px;">Player Rotation Offset: <span id="mpRotOffsetVal">180</span> deg</label>
+                <input type="range" id="mpRotOffsetSlider" min="0" max="360" value="180" style="width:100%; margin-top:4px;">
+            </div>
+        </div>
     </div>
 
     <div id="modeIndicator">Click to enable mouse look</div>
@@ -826,6 +840,38 @@
         <span style="color:#8ff;">Press E to return to world</span>
     </div>
 
+    <!-- Return Door Placement Panel -->
+    <div id="returnDoorPanel" style="display:none; position:fixed; top:10px; left:10px; background:rgba(0,50,50,0.95); padding:15px; border-radius:8px; border:2px solid #0ff; max-width:280px; z-index:150;">
+        <h3 style="color:#0ff; margin:0 0 10px 0; font-size:14px;">RETURN DOOR</h3>
+        <p style="color:#8cc; font-size:11px; margin:0 0 10px 0;">Look at surface and click to place</p>
+
+        <div style="margin-bottom:10px;">
+            <label style="color:#8cc; font-size:11px;">Width: <span id="rdWidthVal">1.0</span></label>
+            <input type="range" id="rdWidthSlider" min="0.5" max="3" step="0.1" value="1.0" style="width:100%;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="color:#8cc; font-size:11px;">Height: <span id="rdHeightVal">2.2</span></label>
+            <input type="range" id="rdHeightSlider" min="1" max="4" step="0.1" value="2.2" style="width:100%;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="color:#8cc; font-size:11px;">Depth: <span id="rdDepthVal">0.3</span></label>
+            <input type="range" id="rdDepthSlider" min="0.1" max="1" step="0.1" value="0.3" style="width:100%;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="color:#8cc; font-size:11px;">Rotation: <span id="rdRotVal">0</span>°</label>
+            <input type="range" id="rdRotSlider" min="0" max="360" step="15" value="0" style="width:100%;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="color:#8cc; font-size:11px;">Height Offset: <span id="rdYOffsetVal">0</span></label>
+            <input type="range" id="rdYOffsetSlider" min="-2" max="2" step="0.1" value="0" style="width:100%;">
+        </div>
+
+        <div style="display:flex; gap:8px; margin-top:12px;">
+            <button onclick="placeReturnDoor()" style="flex:1; padding:10px; background:#0aa; border:none; color:white; border-radius:4px; cursor:pointer; font-weight:bold;">✓ Place Door</button>
+            <button onclick="exitReturnDoorPlacement()" style="padding:10px 15px; background:#a44; border:none; color:white; border-radius:4px; cursor:pointer;">✕</button>
+        </div>
+    </div>
+
     <!-- Farkle Mode Selection -->
     <div id="farkleModeSelect" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(20,15,10,0.98); padding:30px 40px; border-radius:12px; border:3px solid #b86; z-index:200; text-align:center;">
         <h3 style="color:#ffa; margin:0 0 20px 0; font-size:22px;">FARKLE</h3>
@@ -855,6 +901,7 @@
         // Spawn point
         let spawnPoint = null;
         let settingSpawn = false;
+        let spawnModelClone = null; // Static model at spawn point
 
         // Raycaster and model
         const raycaster = new THREE.Raycaster();
@@ -1176,7 +1223,7 @@
                 });
 
                 // Load third person model (Hooded Adventurer)
-                loader.load('../Hooded Adventurer.glb', function(gltf) {
+                loader.load('Hooded%20Adventurer.glb', function(gltf) {
                     thirdPersonModel = gltf.scene;
                     thirdPersonModel.scale.setScalar(1.0);
                     thirdPersonModel.visible = false; // Hidden by default (first person)
@@ -1277,6 +1324,26 @@
                 arrowHelper.position.copy(spawnPoint.position);
                 arrowHelper.setDirection(dir);
                 arrowHelper.visible = true;
+
+                // Place model clone at spawn point
+                if (spawnModelClone) {
+                    scene.remove(spawnModelClone);
+                }
+                const loader = new GLTFLoader();
+                loader.load('Hooded%20Adventurer.glb', function(gltf) {
+                    spawnModelClone = gltf.scene;
+                    spawnModelClone.scale.setScalar(1.0);
+                    // Position at feet level (same as third person model)
+                    spawnModelClone.position.set(
+                        spawnPoint.position.x,
+                        spawnPoint.position.y - eyeHeight,
+                        spawnPoint.position.z
+                    );
+                    // Rotation same as third person model
+                    spawnModelClone.rotation.y = spawnPoint.yaw + Math.PI;
+                    scene.add(spawnModelClone);
+                    console.log('[SPAWN] Model clone placed at spawn, rotation:', spawnModelClone.rotation.y);
+                });
 
                 // Update UI
                 const pos = spawnPoint.position;
@@ -2630,7 +2697,9 @@
         const otherPlayers = new Map(); // id -> {model, mixer, animations, nameTag, position}
         let lastPositionSendTime = 0;
         let lastSentPosition = { x: 0, y: 0, z: 0 };
+        let lastSentYaw = 0;
         let currentMoveDirection = 'down';
+        let mpRotationOffset = Math.PI; // Same as local third person model (yaw + PI)
 
         // Felt surface adjustable settings
         // Default height: tabletopY (0.95) + tableTopThickness (0.1) + 0.02 = 1.07
@@ -4672,46 +4741,129 @@
         };
 
         // ========== RETURN DOOR FUNCTIONS ==========
+        // Door dimensions (door-shaped: tall and thin)
+        let returnDoorWidth = 1.0;
+        let returnDoorHeight = 2.2;
+        let returnDoorDepth = 0.3;
+        let returnDoorBasePos = new THREE.Vector3();
+
+        function createReturnDoorPreview() {
+            if (returnDoorPreview) {
+                scene.remove(returnDoorPreview);
+            }
+
+            // Create door-shaped box
+            const geometry = new THREE.BoxGeometry(returnDoorWidth, returnDoorHeight, returnDoorDepth);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x00ffff,
+                transparent: true,
+                opacity: 0.6,
+                side: THREE.DoubleSide
+            });
+            returnDoorPreview = new THREE.Mesh(geometry, material);
+
+            // Add cyan edges (thicker, more visible)
+            const edges = new THREE.EdgesGeometry(geometry);
+            const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff });
+            const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
+            returnDoorPreview.add(edgeLines);
+
+            // Start at player position so it's visible immediately
+            returnDoorPreview.position.set(playerPos.x, playerPos.y, playerPos.z);
+
+            scene.add(returnDoorPreview);
+            console.log('[RETURN DOOR] Preview created at', returnDoorPreview.position);
+        }
+
         window.startReturnDoorPlacement = function() {
             returnDoorPlaceMode = true;
-            // Create preview cylinder (cyan door marker)
-            const geometry = new THREE.CylinderGeometry(0.5, 0.5, 2, 8);
-            const material = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.5 });
-            returnDoorPreview = new THREE.Mesh(geometry, material);
-            scene.add(returnDoorPreview);
 
-            document.getElementById('modeIndicator').textContent = 'Click to place Return Door';
+            // Show collision boxes so user can see context
+            if (!bucketCollisionVisualsVisible) {
+                toggleBucketCollisionVis();
+            }
+
+            // Create preview
+            createReturnDoorPreview();
+
+            // Show placement panel
+            document.getElementById('info').style.display = 'none';
+            document.getElementById('returnDoorPanel').style.display = 'block';
+
+            document.getElementById('modeIndicator').textContent = 'RETURN DOOR - Look at surface, click to place';
+            document.getElementById('modeIndicator').style.background = 'rgba(0,100,100,0.8)';
             document.getElementById('modeIndicator').style.color = '#0ff';
+
+            // Request pointer lock
+            renderer.domElement.requestPointerLock();
+
             console.log('[RETURN DOOR] Placement mode started');
         };
 
         window.placeReturnDoor = function() {
             if (!returnDoorPreview) return;
 
-            // Remove old door if exists
+            // Remove old door visual and collision
             if (returnDoorMesh) {
                 scene.remove(returnDoorMesh);
+                // Remove from collision visuals
+                const idx = bucketCollisionVisuals.indexOf(returnDoorMesh);
+                if (idx > -1) bucketCollisionVisuals.splice(idx, 1);
             }
 
             returnDoorPosition = returnDoorPreview.position.clone();
-            scene.remove(returnDoorPreview);
+            const doorRotation = returnDoorPreview.rotation.y;
 
-            // Create permanent marker
-            const geometry = new THREE.CylinderGeometry(0.5, 0.5, 2, 8);
-            const material = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.7 });
+            // Create permanent door mesh
+            const geometry = new THREE.BoxGeometry(returnDoorWidth, returnDoorHeight, returnDoorDepth);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x00ffff,
+                transparent: true,
+                opacity: 0.6,
+                side: THREE.DoubleSide
+            });
             returnDoorMesh = new THREE.Mesh(geometry, material);
+
+            // Add cyan edges
+            const edges = new THREE.EdgesGeometry(geometry);
+            const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 });
+            const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
+            returnDoorMesh.add(edgeLines);
+
             returnDoorMesh.position.copy(returnDoorPosition);
+            returnDoorMesh.rotation.y = doorRotation;
+            returnDoorMesh.visible = true; // Always visible
             scene.add(returnDoorMesh);
 
-            returnDoorPlaceMode = false;
+            // Add to collision visuals for reference (but door stays visible)
+            bucketCollisionVisuals.push(returnDoorMesh);
+
+            // Add collision data (so player can't walk through)
+            // Store door collision for wouldCollide check
+            returnDoorMesh.userData.isReturnDoor = true;
+            returnDoorMesh.userData.width = returnDoorWidth;
+            returnDoorMesh.userData.height = returnDoorHeight;
+            returnDoorMesh.userData.depth = returnDoorDepth;
+
+            // Clean up
+            scene.remove(returnDoorPreview);
             returnDoorPreview = null;
+            returnDoorPlaceMode = false;
+
+            // Hide panel, show main UI
+            document.getElementById('returnDoorPanel').style.display = 'none';
+            document.getElementById('info').style.display = 'block';
 
             document.getElementById('modeIndicator').textContent = 'Return Door placed!';
+            document.getElementById('modeIndicator').style.background = 'rgba(0,0,0,0.7)';
             document.getElementById('modeIndicator').style.color = '#0f0';
             setTimeout(() => {
                 document.getElementById('modeIndicator').textContent = 'Click to enable mouse look';
                 document.getElementById('modeIndicator').style.color = '#4af';
-            }, 2000);
+            }, 1500);
+
+            // Exit pointer lock so user can click again
+            document.exitPointerLock();
 
             console.log('[RETURN DOOR] Placed at', returnDoorPosition);
         };
@@ -4719,11 +4871,10 @@
         window.checkNearReturnDoor = function() {
             if (!returnDoorPosition) return false;
             const dist = camera.position.distanceTo(returnDoorPosition);
-            return dist < 3; // Within 3 meters
+            return dist < 2; // Within 2 meters
         };
 
         window.useReturnDoor = function() {
-            // Navigate back to 2D world
             console.log('[RETURN DOOR] Returning to 2D world...');
             window.location.href = '../world-builder.html';
         };
@@ -4734,8 +4885,26 @@
                 scene.remove(returnDoorPreview);
                 returnDoorPreview = null;
             }
+
+            // Hide panel, show main UI
+            document.getElementById('returnDoorPanel').style.display = 'none';
+            document.getElementById('info').style.display = 'block';
+
             document.getElementById('modeIndicator').textContent = 'Click to enable mouse look';
+            document.getElementById('modeIndicator').style.background = 'rgba(0,0,0,0.7)';
             document.getElementById('modeIndicator').style.color = '#4af';
+
+            document.exitPointerLock();
+        };
+
+        // Update door preview size
+        window.updateReturnDoorSize = function() {
+            if (!returnDoorPreview) return;
+            const pos = returnDoorPreview.position.clone();
+            const rot = returnDoorPreview.rotation.y;
+            createReturnDoorPreview();
+            returnDoorPreview.position.copy(pos);
+            returnDoorPreview.rotation.y = rot;
         };
         // ========== END RETURN DOOR FUNCTIONS ==========
 
@@ -4745,6 +4914,7 @@
             const mpInfoStr = localStorage.getItem('tavernMultiplayer');
             if (!mpInfoStr) {
                 console.log('[MULTIPLAYER] No multiplayer info found, running solo');
+                document.getElementById('mpStatus').textContent = 'Not connected (enter room code)';
                 return;
             }
 
@@ -4754,6 +4924,10 @@
                 multiplayerRoomCode = mpInfo.roomCode;
                 console.log('[MULTIPLAYER] Found multiplayer info:', mpInfo);
 
+                // Pre-fill the UI
+                document.getElementById('mpNameInput').value = localPlayerName;
+                document.getElementById('mpRoomInput').value = multiplayerRoomCode;
+
                 if (multiplayerRoomCode) {
                     connectToMultiplayer();
                 }
@@ -4761,6 +4935,30 @@
                 console.error('[MULTIPLAYER] Failed to parse multiplayer info:', e);
             }
         }
+
+        // Manual connect from UI
+        window.manualConnectMultiplayer = function() {
+            const name = document.getElementById('mpNameInput').value.trim() || 'Player';
+            const room = document.getElementById('mpRoomInput').value.trim();
+
+            if (!room) {
+                document.getElementById('mpStatus').textContent = 'Enter a room code!';
+                document.getElementById('mpStatus').style.color = '#f88';
+                return;
+            }
+
+            // Disconnect existing connection
+            if (multiplayerWs) {
+                multiplayerWs.close();
+            }
+
+            localPlayerName = name;
+            multiplayerRoomCode = room;
+            document.getElementById('mpStatus').textContent = 'Connecting...';
+            document.getElementById('mpStatus').style.color = '#ff8';
+
+            connectToMultiplayer();
+        };
 
         function connectToMultiplayer() {
             const wsUrl = 'wss://multiplayer.lakotafox.partykit.dev/party/' + multiplayerRoomCode;
@@ -4770,6 +4968,9 @@
 
             multiplayerWs.onopen = function() {
                 console.log('[MULTIPLAYER] Connected to room:', multiplayerRoomCode);
+                document.getElementById('mpStatus').textContent = 'Connected to: ' + multiplayerRoomCode;
+                document.getElementById('mpStatus').style.color = '#8f8';
+
                 // Send join message
                 multiplayerWs.send(JSON.stringify({
                     type: 'join',
@@ -4793,12 +4994,31 @@
 
             multiplayerWs.onerror = function(err) {
                 console.error('[MULTIPLAYER] WebSocket error:', err);
+                document.getElementById('mpStatus').textContent = 'Connection error!';
+                document.getElementById('mpStatus').style.color = '#f88';
             };
 
             multiplayerWs.onclose = function() {
                 console.log('[MULTIPLAYER] Disconnected from server');
                 multiplayerWs = null;
+                document.getElementById('mpStatus').textContent = 'Disconnected';
+                document.getElementById('mpStatus').style.color = '#888';
+                document.getElementById('mpPlayerList').innerHTML = '';
             };
+        }
+
+        function updatePlayerListUI() {
+            const list = document.getElementById('mpPlayerList');
+            if (otherPlayers.size === 0) {
+                list.innerHTML = '<div style="color:#888;">No other players in tavern</div>';
+            } else {
+                let html = '<div style="color:#8f8;">Players in tavern:</div>';
+                otherPlayers.forEach((p, id) => {
+                    const name = p.nameTag ? p.nameTag.textContent : 'Unknown';
+                    html += `<div>• ${name}</div>`;
+                });
+                list.innerHTML = html;
+            }
         }
 
         function handleMultiplayerMessage(data) {
@@ -4814,6 +5034,7 @@
                             }
                         });
                     }
+                    updatePlayerListUI();
                     break;
 
                 case 'join':
@@ -4821,6 +5042,7 @@
                     if (data.player && data.player.gameType === 'tavern3d' && data.player.id !== localPlayerId) {
                         console.log('[MULTIPLAYER] Player joined:', data.player.name);
                         spawnOtherPlayer(data.player);
+                        updatePlayerListUI();
                     }
                     break;
 
@@ -4835,6 +5057,7 @@
                     // Player left
                     console.log('[MULTIPLAYER] Player left:', data.playerId);
                     removeOtherPlayer(data.playerId);
+                    updatePlayerListUI();
                     break;
             }
         }
@@ -4844,26 +5067,74 @@
 
             console.log('[MULTIPLAYER] Spawning player:', playerData.name, 'at', playerData.x, playerData.y);
 
+            // Floor height in tavern: playerPos.y (5.143) - eyeHeight (1.6) ≈ 3.5
+            const floorY = 3.5;
+
+            // Create VISIBLE marker immediately (bright colored pillar)
+            const markerGeom = new THREE.CylinderGeometry(0.3, 0.3, 2, 8);
+            const markerMat = new THREE.MeshBasicMaterial({
+                color: 0xff00ff, // Bright magenta
+                transparent: true,
+                opacity: 0.8
+            });
+            const marker = new THREE.Mesh(markerGeom, markerMat);
+            marker.position.set(playerData.x, floorY + 1, playerData.y);
+            scene.add(marker);
+
             // Create placeholder while loading
             const playerInfo = {
                 model: null,
+                marker: marker, // Fallback marker always visible
                 mixer: null,
                 animations: {},
                 nameTag: createNameTag(playerData.name),
-                position: new THREE.Vector3(playerData.x, 0, playerData.y),
+                position: new THREE.Vector3(playerData.x, floorY, playerData.y),
                 direction: playerData.direction || 'down',
-                currentAnim: 'idle'
+                currentAnim: 'idle',
+                floorY: floorY
             };
             otherPlayers.set(playerData.id, playerInfo);
 
-            // Load the Hooded Adventurer model
-            const loader = new THREE.GLTFLoader();
-            loader.load('../Hooded Adventurer.glb', function(gltf) {
+            // Load the Hooded Adventurer model (now in tavern folder)
+            const loader = new GLTFLoader();
+            console.log('[MULTIPLAYER] Loading model from: Hooded%20Adventurer.glb');
+            loader.load('Hooded%20Adventurer.glb', function(gltf) {
+                console.log('[MULTIPLAYER] GLTF loaded successfully!', gltf);
                 const model = gltf.scene;
                 model.scale.setScalar(1.0);
                 model.position.copy(playerInfo.position);
                 model.visible = true;
+
+                // Ensure all child meshes are visible and rendered correctly
+                model.traverse(function(child) {
+                    if (child.isMesh) {
+                        child.visible = true;
+                        child.frustumCulled = false; // Prevent culling issues
+                        if (child.material) {
+                            child.material.side = THREE.DoubleSide;
+                            child.material.needsUpdate = true;
+                        }
+                        console.log('[MULTIPLAYER] Mesh:', child.name, 'visible:', child.visible);
+                    }
+                });
+
+                // Set initial rotation (same formula as spawn model clone)
+                if (playerData.yaw !== undefined) {
+                    model.rotation.y = playerData.yaw + mpRotationOffset;
+                    playerInfo.lastYaw = playerData.yaw;
+                } else {
+                    model.rotation.y = mpRotationOffset; // Default facing
+                }
+
                 scene.add(model);
+
+                console.log('[MULTIPLAYER] Model added to scene at:', model.position.x, model.position.y, model.position.z);
+                console.log('[MULTIPLAYER] Model rotation.y:', model.rotation.y);
+                console.log('[MULTIPLAYER] Model scale:', model.scale.x, model.scale.y, model.scale.z);
+                console.log('[MULTIPLAYER] Model visible:', model.visible);
+
+                // Hide marker now that model is loaded
+                marker.visible = false;
 
                 // Set up animation mixer
                 const mixer = new THREE.AnimationMixer(model);
@@ -4872,12 +5143,14 @@
                 gltf.animations.forEach(clip => {
                     const name = clip.name.toLowerCase();
                     animations[name] = mixer.clipAction(clip);
+                    console.log('[MULTIPLAYER] Animation found:', name);
                 });
 
                 // Play idle animation
                 if (animations['idle'] || animations['characterarmature|idle']) {
                     const idleAnim = animations['idle'] || animations['characterarmature|idle'];
                     idleAnim.play();
+                    console.log('[MULTIPLAYER] Playing idle animation');
                 }
 
                 // Update player info
@@ -4885,9 +5158,13 @@
                 playerInfo.mixer = mixer;
                 playerInfo.animations = animations;
 
-                console.log('[MULTIPLAYER] Model loaded for:', playerData.name);
-            }, undefined, function(err) {
+                console.log('[MULTIPLAYER] Model loaded for:', playerData.name, 'at Y:', playerInfo.position.y);
+            }, function(progress) {
+                console.log('[MULTIPLAYER] Loading progress:', (progress.loaded / progress.total * 100).toFixed(1) + '%');
+            }, function(err) {
                 console.error('[MULTIPLAYER] Failed to load model for:', playerData.name, err);
+                // Keep marker visible as fallback
+                marker.material.color.setHex(0xff0000); // Red to indicate error
             });
         }
 
@@ -4895,20 +5172,34 @@
             const other = otherPlayers.get(playerData.id);
             if (!other) return;
 
+            const floorY = other.floorY || 3.5;
+
             // Update position
-            other.position.set(playerData.x, 0, playerData.y);
+            other.position.set(playerData.x, floorY, playerData.y);
+
+            // Update marker position (always)
+            if (other.marker) {
+                other.marker.position.set(playerData.x, floorY + 1, playerData.y);
+            }
 
             if (other.model) {
                 other.model.position.copy(other.position);
 
-                // Update rotation based on direction
-                const rotations = {
-                    'down': 0,
-                    'left': Math.PI / 2,
-                    'up': Math.PI,
-                    'right': -Math.PI / 2
-                };
-                other.model.rotation.y = rotations[playerData.direction] || 0;
+                // Use yaw directly if available (3D tavern players), otherwise use cardinal direction
+                if (playerData.yaw !== undefined) {
+                    // Model faces same direction as camera (adjustable offset)
+                    other.model.rotation.y = playerData.yaw + mpRotationOffset;
+                    other.lastYaw = playerData.yaw; // Store for slider updates
+                } else {
+                    // Fallback for 2D players using cardinal directions
+                    const rotations = {
+                        'down': Math.PI,
+                        'left': -Math.PI / 2,
+                        'up': 0,
+                        'right': Math.PI / 2
+                    };
+                    other.model.rotation.y = rotations[playerData.direction] || Math.PI;
+                }
                 other.direction = playerData.direction;
             }
         }
@@ -4920,6 +5211,9 @@
             if (other.model) {
                 scene.remove(other.model);
             }
+            if (other.marker) {
+                scene.remove(other.marker);
+            }
             if (other.nameTag) {
                 other.nameTag.remove();
             }
@@ -4930,19 +5224,28 @@
         function createNameTag(name) {
             const div = document.createElement('div');
             div.className = 'nametag';
-            div.textContent = name;
-            div.style.cssText = 'position:absolute;color:white;font-family:monospace;font-size:14px;text-shadow:1px 1px 2px black, -1px -1px 2px black;pointer-events:none;z-index:50;white-space:nowrap;';
+            div.textContent = '👤 ' + name;
+            div.style.cssText = 'position:absolute;color:#ff0;font-family:monospace;font-size:20px;font-weight:bold;text-shadow:2px 2px 4px black, -2px -2px 4px black, 0 0 10px #f0f;pointer-events:none;z-index:50;white-space:nowrap;background:rgba(0,0,0,0.5);padding:4px 8px;border-radius:4px;border:2px solid #f0f;';
             document.body.appendChild(div);
             return div;
         }
 
         function updateNameTagPositions() {
             otherPlayers.forEach((other, id) => {
-                if (!other.model || !other.nameTag) return;
+                if (!other.nameTag) return;
 
-                // Get position above player's head
-                const pos = other.model.position.clone();
-                pos.y += 2.2; // Above head
+                // Get position above player's head (use marker if no model)
+                let pos;
+                if (other.model) {
+                    pos = other.model.position.clone();
+                    pos.y += 2.2;
+                } else if (other.marker) {
+                    pos = other.marker.position.clone();
+                    pos.y += 1.5;
+                } else {
+                    pos = other.position.clone();
+                    pos.y += 2;
+                }
 
                 // Project to screen
                 pos.project(camera);
@@ -4969,13 +5272,15 @@
             const now = Date.now();
             if (now - lastPositionSendTime < 100) return; // Throttle to 10/sec
 
-            // Check if position changed significantly
+            // Check if position or yaw changed significantly
             const dx = Math.abs(playerPos.x - lastSentPosition.x);
             const dz = Math.abs(playerPos.z - lastSentPosition.z);
-            if (dx < 0.01 && dz < 0.01) return; // No significant movement
+            const dyaw = Math.abs(yaw - lastSentYaw);
+            if (dx < 0.01 && dz < 0.01 && dyaw < 0.05) return; // No significant change
 
             lastPositionSendTime = now;
             lastSentPosition = { x: playerPos.x, y: playerPos.y, z: playerPos.z };
+            lastSentYaw = yaw;
 
             // Determine direction based on yaw
             let direction = 'down';
@@ -4995,6 +5300,7 @@
                 x: playerPos.x,
                 y: playerPos.z, // 3D z = message y
                 direction: direction,
+                yaw: yaw, // Send actual yaw for 3D rotation
                 animation: keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ? 'walk' : 'idle'
             }));
         }
@@ -5007,6 +5313,49 @@
             });
         }
         // ========== END MULTIPLAYER FUNCTIONS ==========
+
+        // Multiplayer rotation offset slider
+        document.getElementById('mpRotOffsetSlider').addEventListener('input', (e) => {
+            const degrees = parseFloat(e.target.value);
+            mpRotationOffset = degrees * Math.PI / 180; // Convert to radians
+            document.getElementById('mpRotOffsetVal').textContent = Math.round(degrees);
+            // Update all existing player models immediately
+            otherPlayers.forEach((other, id) => {
+                if (other.model) {
+                    const yaw = other.lastYaw !== undefined ? other.lastYaw : 0;
+                    other.model.rotation.y = yaw + mpRotationOffset;
+                }
+            });
+        });
+
+        // Return Door slider listeners
+        let returnDoorYOffset = 0;
+        document.getElementById('rdWidthSlider').addEventListener('input', (e) => {
+            returnDoorWidth = parseFloat(e.target.value);
+            document.getElementById('rdWidthVal').textContent = returnDoorWidth.toFixed(1);
+            updateReturnDoorSize();
+        });
+        document.getElementById('rdHeightSlider').addEventListener('input', (e) => {
+            returnDoorHeight = parseFloat(e.target.value);
+            document.getElementById('rdHeightVal').textContent = returnDoorHeight.toFixed(1);
+            updateReturnDoorSize();
+        });
+        document.getElementById('rdDepthSlider').addEventListener('input', (e) => {
+            returnDoorDepth = parseFloat(e.target.value);
+            document.getElementById('rdDepthVal').textContent = returnDoorDepth.toFixed(1);
+            updateReturnDoorSize();
+        });
+        document.getElementById('rdRotSlider').addEventListener('input', (e) => {
+            const rot = parseFloat(e.target.value);
+            document.getElementById('rdRotVal').textContent = rot;
+            if (returnDoorPreview) {
+                returnDoorPreview.rotation.y = rot * Math.PI / 180;
+            }
+        });
+        document.getElementById('rdYOffsetSlider').addEventListener('input', (e) => {
+            returnDoorYOffset = parseFloat(e.target.value);
+            document.getElementById('rdYOffsetVal').textContent = returnDoorYOffset.toFixed(1);
+        });
 
         // Farkle rotation slider
         document.getElementById('farkleRotationSlider').addEventListener('input', (e) => {
@@ -6833,10 +7182,24 @@
                 document.getElementById('farklePrompt').style.display = 'none';
             }
 
-            // Update return door preview position
+            // Update return door preview position via raycast
             if (returnDoorPlaceMode && returnDoorPreview) {
-                returnDoorPreview.position.copy(playerPos);
-                returnDoorPreview.position.y = 1; // Half height
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                const intersects = raycaster.intersectObjects(scene.children, true);
+
+                for (const hit of intersects) {
+                    // Skip preview itself and player
+                    if (hit.object === returnDoorPreview) continue;
+                    if (hit.object.parent === returnDoorPreview) continue;
+                    if (hit.object === playerBody) continue;
+                    if (hit.object === collisionBox) continue;
+                    if (bucketCollisionVisuals.includes(hit.object)) continue;
+
+                    // Position door at hit point, adjusted for height
+                    returnDoorPreview.position.copy(hit.point);
+                    returnDoorPreview.position.y = hit.point.y + returnDoorHeight / 2 + returnDoorYOffset;
+                    break;
+                }
             }
 
             // Show/hide return door prompt
