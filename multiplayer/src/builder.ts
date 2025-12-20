@@ -59,21 +59,26 @@ export default class BuilderServer implements Party.Server {
             type: 'builderEdit',
             senderId: sender.id,
             editType: data.editType,
+            edits: data.edits,  // for batch
             layer: data.layer,
             x: data.x,
             y: data.y,
             cell: data.cell,
             mapName: data.mapName,
+            key: data.key,
             sound: data.sound,
             light: data.light,
             prop: data.prop,
             npc: data.npc,
             trigger: data.trigger,
             triggerId: data.triggerId,
+            index: data.index,
+            value: data.value,
+            mask: data.mask,
             collision: data.collision
           }), [sender.id]);
 
-          console.log(`Builder edit: ${data.editType} from ${sender.id}`);
+          console.log(`Builder edit: ${data.editType}${data.edits ? ` (batch of ${data.edits.length})` : ''}`);
           break;
         }
 

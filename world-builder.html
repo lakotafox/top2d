@@ -3875,6 +3875,16 @@
             const x = Math.floor((e.clientX - rect.left) / tileSize);
             const y = Math.floor((e.clientY - rect.top) / tileSize);
 
+            // DEBUG: Ctrl+Shift+Click to mark position (in pixel coords like game uses)
+            if (e.ctrlKey && e.shiftKey) {
+                const pixelX = (e.clientX - rect.left) / zoom;
+                const pixelY = (e.clientY - rect.top) / zoom;
+                window.debugClickPos = { x: Math.round(pixelX), y: Math.round(pixelY) };
+                console.log('[DEBUG] Marked position:', window.debugClickPos, 'tile:', x, y);
+                renderMap();
+                return;
+            }
+
             // Check if in door animation tile selection mode (only on correct map)
             if (selectingAnimTiles && pendingAnimTrigger && doorAnimMapName === currentMapName && e.button === 0) {
                 // Toggle tile selection
@@ -5476,6 +5486,73 @@
                 mapCtx.font = '9px monospace';
                 mapCtx.fillStyle = '#8f8';
                 mapCtx.fillText('(' + playerPreviewPos.x + ',' + playerPreviewPos.y + ')', spawnX + tileSize / 2, spawnY + tileSize / 2 + 7);
+            }
+
+            // === DRAW GAME PLAYERS (visible to builder when co-op) ===
+            if (gamePlayersInBuilder.size > 0) {
+                gamePlayersInBuilder.forEach((gPlayer, id) => {
+                    // Only show players on current map
+                    if (gPlayer.currentMap !== currentMapName) return;
+
+                    // Game coords are 4x builder coords (TILE_SCALE=2 + cameraZoom=2)
+                    const px = (gPlayer.x / 4) * zoom;
+                    const py = (gPlayer.y / 4) * zoom;
+
+                    // Draw player sprite (64x64 frames, same as game)
+                    const frameSize = 64;
+                    const drawSize = tileSize * 1.5; // Slightly smaller than game scale
+
+                    // Get idle frame column based on direction
+                    const idleCols = { down: 0, up: 3, right: 6, left: 6 };
+                    const col = idleCols[gPlayer.direction] || 0;
+                    const flipX = gPlayer.direction === 'left';
+
+                    if (playerSpriteImg && playerSpriteImg.complete) {
+                        mapCtx.save();
+                        if (flipX) {
+                            mapCtx.translate(px + drawSize / 2, py - drawSize / 2);
+                            mapCtx.scale(-1, 1);
+                            mapCtx.drawImage(playerSpriteImg,
+                                col * frameSize, 0, frameSize, frameSize,
+                                -drawSize / 2, 0, drawSize, drawSize);
+                        } else {
+                            mapCtx.drawImage(playerSpriteImg,
+                                col * frameSize, 0, frameSize, frameSize,
+                                px - drawSize / 2, py - drawSize / 2, drawSize, drawSize);
+                        }
+                        mapCtx.restore();
+                    } else {
+                        // Fallback: simple colored circle
+                        mapCtx.fillStyle = 'rgba(0, 255, 255, 0.8)';
+                        mapCtx.beginPath();
+                        mapCtx.arc(px, py, 12 * zoom, 0, Math.PI * 2);
+                        mapCtx.fill();
+                    }
+
+                    // Draw name above player
+                    mapCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    mapCtx.font = 'bold ' + (10 * zoom) + 'px monospace';
+                    mapCtx.textAlign = 'center';
+                    mapCtx.textBaseline = 'bottom';
+                    const nameWidth = mapCtx.measureText(gPlayer.name).width + 8;
+                    mapCtx.fillRect(px - nameWidth / 2, py - drawSize / 2 - 16 * zoom, nameWidth, 14 * zoom);
+                    mapCtx.fillStyle = '#0ff';
+                    mapCtx.fillText(gPlayer.name, px, py - drawSize / 2 - 4 * zoom);
+                });
+            }
+
+            // === DEBUG: Show click coords ===
+            if (window.debugClickPos) {
+                const dx = window.debugClickPos.x * zoom;
+                const dy = window.debugClickPos.y * zoom;
+                mapCtx.fillStyle = '#f0f';
+                mapCtx.beginPath();
+                mapCtx.arc(dx, dy, 8 * zoom, 0, Math.PI * 2);
+                mapCtx.fill();
+                mapCtx.fillStyle = '#fff';
+                mapCtx.font = 'bold 12px monospace';
+                mapCtx.textAlign = 'left';
+                mapCtx.fillText('DEBUG: ' + window.debugClickPos.x + ',' + window.debugClickPos.y, dx + 10, dy);
             }
 
             // Update expand button positions after canvas resize
@@ -8551,6 +8628,10 @@
         let builderPlayerName = 'Builder';
         let builderRoomCode = null;
 
+        // Track game players visible in builder
+        let gamePlayersInBuilder = new Map(); // id -> {x, y, name, direction, currentMap}
+        let builderGameSocket = null; // socket to game server to see testers
+
         function connectBuilderMultiplayer(name, roomCode) {
             console.log('[BUILDER MP DEBUG] connectBuilderMultiplayer called with name:', name, 'roomCode:', roomCode);
 
@@ -8561,7 +8642,7 @@
 
             builderPlayerName = name;
             builderRoomCode = roomCode;
-            const wsUrl = 'wss://multiplayer.lakotafox.partykit.dev/party/builder-' + roomCode;
+            const wsUrl = 'wss://multiplayer.lakotafox.partykit.dev/parties/builder/' + roomCode;
             console.log('[BUILDER MP DEBUG] Connecting to:', wsUrl);
 
             try {
@@ -8596,6 +8677,13 @@
                     console.log('[BUILDER MP DEBUG] WebSocket CLOSED, code:', event.code, 'reason:', event.reason);
                     builderConnected = false;
                     showBuilderStatus('Disconnected');
+                    // Also close game socket and clear players
+                    if (builderGameSocket) {
+                        builderGameSocket.close();
+                        builderGameSocket = null;
+                    }
+                    gamePlayersInBuilder.clear();
+                    renderMap();
                 };
 
                 builderSocket.onerror = (err) => {
@@ -8604,6 +8692,49 @@
             } catch (e) {
                 console.error('[BUILDER MP DEBUG] Connect failed:', e);
             }
+
+            // Also connect to game server to see players testing the game
+            connectToGameServerForBuilder(roomCode);
+        }
+
+        function connectToGameServerForBuilder(roomCode) {
+            const gameWsUrl = 'wss://multiplayer.lakotafox.partykit.dev/party/' + roomCode;
+            console.log('[BUILDER GAME] Connecting to game server:', gameWsUrl);
+            builderGameSocket = new WebSocket(gameWsUrl);
+
+            builderGameSocket.onopen = () => {
+                console.log('[BUILDER GAME] Connected to game server!');
+            };
+
+            builderGameSocket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'welcome' && data.players) {
+                        data.players.forEach(p => {
+                            if (p.gameType === 'game2d') {
+                                gamePlayersInBuilder.set(p.id, p);
+                            }
+                        });
+                        renderMap();
+                    } else if (data.type === 'join' && data.player && data.player.gameType === 'game2d') {
+                        console.log('[BUILDER] Game player joined:', data.player.name);
+                        gamePlayersInBuilder.set(data.player.id, data.player);
+                        renderMap();
+                    } else if (data.type === 'update' && data.player && data.player.gameType === 'game2d') {
+                        gamePlayersInBuilder.set(data.player.id, data.player);
+                        // Don't call renderMap on every update - it's already running
+                    } else if (data.type === 'leave' && data.playerId) {
+                        console.log('[BUILDER] Game player left');
+                        gamePlayersInBuilder.delete(data.playerId);
+                        renderMap();
+                    }
+                } catch (e) {}
+            };
+
+            builderGameSocket.onclose = () => {
+                console.log('[BUILDER GAME] Disconnected from game server');
+                gamePlayersInBuilder.clear();
+            };
         }
 
         function handleBuilderMessage(data) {
@@ -8627,15 +8758,9 @@
             }
 
             // Handle edit messages from other builders
-            console.log('[BUILDER MP DEBUG] Checking for update message...');
-            console.log('[BUILDER MP DEBUG] data.player:', data.player);
-            console.log('[BUILDER MP DEBUG] data.player?.editType:', data.player?.editType);
-
-            if (data.type === 'update' && data.player && data.player.editType) {
-                console.log('[BUILDER MP DEBUG] >>> APPLYING REMOTE EDIT <<<');
-                applyRemoteEdit(data.player);
-            } else {
-                console.log('[BUILDER MP DEBUG] Message not an edit update, ignoring');
+            if (data.type === 'builderEdit' && data.editType) {
+                console.log('[BUILDER MP DEBUG] >>> APPLYING REMOTE EDIT <<<', data.editType);
+                applyRemoteEdit(data);
             }
         }
 
@@ -8653,6 +8778,17 @@
             }
 
             switch (edit.editType) {
+                case 'batch':
+                    // Apply batch of edits
+                    let needsRender = false;
+                    for (const e of edit.edits) {
+                        // Apply each edit without rendering
+                        applyRemoteEditNoRender(e);
+                        if (!e.mapName || e.mapName === currentMapName) needsRender = true;
+                    }
+                    if (needsRender) renderMap();
+                    break;
+
                 case 'tile':
                     // Apply tile placement
                     if (!targetLayers[edit.layer]) targetLayers[edit.layer] = [];
@@ -8749,23 +8885,98 @@
             }
         }
 
-        function broadcastEdit(editData) {
-            console.log('[BUILDER MP DEBUG] broadcastEdit called:', editData);
-            console.log('[BUILDER MP DEBUG] builderConnected:', builderConnected, 'builderSocket:', builderSocket ? 'exists' : 'null');
+        // Version without renderMap calls (for batching)
+        function applyRemoteEditNoRender(edit) {
+            let targetLayers = (edit.mapName && edit.mapName !== currentMapName && maps[edit.mapName])
+                ? maps[edit.mapName].layers : layers;
 
-            if (!builderConnected || !builderSocket) {
-                console.log('[BUILDER MP DEBUG] NOT CONNECTED - broadcast skipped');
-                return;
+            switch (edit.editType) {
+                case 'tile':
+                    if (!targetLayers[edit.layer]) targetLayers[edit.layer] = [];
+                    if (!targetLayers[edit.layer][edit.y]) targetLayers[edit.layer][edit.y] = [];
+                    targetLayers[edit.layer][edit.y][edit.x] = edit.cell;
+                    break;
+                case 'eraseTile':
+                    if (targetLayers[edit.layer] && targetLayers[edit.layer][edit.y]) {
+                        targetLayers[edit.layer][edit.y][edit.x] = null;
+                    }
+                    break;
+                case 'tileSound':
+                    tileSounds[edit.key] = edit.sound;
+                    break;
+                case 'removeTileSound':
+                    delete tileSounds[edit.key];
+                    break;
+                case 'light':
+                    pointLights[edit.key] = edit.light;
+                    break;
+                case 'removeLight':
+                    delete pointLights[edit.key];
+                    break;
+                case 'placeNpc':
+                    placedNpcs.push(edit.npc);
+                    break;
+                case 'removeNpc':
+                    if (edit.index >= 0 && edit.index < placedNpcs.length) {
+                        placedNpcs.splice(edit.index, 1);
+                    }
+                    break;
+                case 'placeTrigger':
+                    placedTriggers.push(edit.trigger);
+                    break;
+                case 'removeTrigger':
+                    if (edit.index >= 0 && edit.index < placedTriggers.length) {
+                        placedTriggers.splice(edit.index, 1);
+                    }
+                    break;
+                case 'collision':
+                    if (edit.value) tileCollisions[edit.key] = true;
+                    else delete tileCollisions[edit.key];
+                    break;
+                case 'collisionMask':
+                    collisionMasks[edit.key] = edit.mask;
+                    break;
             }
+        }
 
-            const message = {
-                type: 'update',
-                ...editData,
-                gameType: 'builder'
-            };
-            console.log('[BUILDER MP DEBUG] Sending message:', JSON.stringify(message));
-            builderSocket.send(JSON.stringify(message));
-            console.log('[BUILDER MP DEBUG] Message sent!');
+        // Batching system for builder edits
+        let editBatch = [];
+        let batchTimeout = null;
+        const BATCH_DELAY = 250; // ms to wait before sending batch (higher = less network traffic)
+
+        function broadcastEdit(editData) {
+            if (!builderConnected || !builderSocket) return;
+
+            // Add to batch
+            editBatch.push(editData);
+
+            // If no pending send, schedule one
+            if (!batchTimeout) {
+                batchTimeout = setTimeout(flushEditBatch, BATCH_DELAY);
+            }
+        }
+
+        function flushEditBatch() {
+            batchTimeout = null;
+            if (editBatch.length === 0 || !builderConnected || !builderSocket) return;
+
+            if (editBatch.length === 1) {
+                // Single edit - send normally
+                builderSocket.send(JSON.stringify({
+                    type: 'update',
+                    ...editBatch[0],
+                    gameType: 'builder'
+                }));
+            } else {
+                // Multiple edits - send as batch
+                builderSocket.send(JSON.stringify({
+                    type: 'update',
+                    editType: 'batch',
+                    edits: editBatch,
+                    gameType: 'builder'
+                }));
+            }
+            editBatch = [];
         }
 
         function showBuilderStatus(msg) {
@@ -10204,7 +10415,15 @@
                     logTestEvent('[Game] ' + e.data.msg, e.data.level || 'info');
                 } else if (e.data.type === 'ready') {
                     logTestEvent('Test game ready, sending data...');
-                    e.source.postMessage({ type: 'project-data', data: projectDataJSON }, '*');
+                    // Include builder room code so test game can auto-join multiplayer
+                    const payload = { type: 'project-data', data: projectDataJSON };
+                    if (builderConnected && builderRoomCode) {
+                        payload.autoMultiplayer = {
+                            roomCode: builderRoomCode,
+                            playerName: builderPlayerName + '-tester'
+                        };
+                    }
+                    e.source.postMessage(payload, '*');
                     // Stream sounds with delay
                     if (soundsToStream.length > 0) {
                         streamSoundsToWindow(e.source, soundsToStream);
@@ -10608,6 +10827,15 @@
             if (e.data.type === 'project-data') {
                 console.log('Received project data');
                 projectData = JSON.parse(e.data.data);
+                // Check for auto-multiplayer from builder co-op
+                if (e.data.autoMultiplayer) {
+                    console.log('Auto-multiplayer enabled:', e.data.autoMultiplayer);
+                    // Set multiplayer config so initGame connects automatically
+                    projectData.multiplayer = {
+                        playerName: e.data.autoMultiplayer.playerName,
+                        roomCode: e.data.autoMultiplayer.roomCode
+                    };
+                }
                 if (window.opener) {
                     window.opener.postMessage({ type: 'log', msg: 'Project data received, size: ' + e.data.data.length }, '*');
                 }
@@ -13049,7 +13277,24 @@
                 }
             }
 
+            // DEBUG: Draw player position marker at player feet
+            ctx.fillStyle = '#f0f';
+            ctx.beginPath();
+            ctx.arc(player.x - camX, player.y - camY, 5, 0, Math.PI * 2);
+            ctx.fill();
+
             ctx.restore();
+
+            // DEBUG HUD: Show player position (drawn after ctx.restore so not affected by zoom)
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(10, 10, 200, 50);
+            ctx.fillStyle = '#0ff';
+            ctx.font = 'bold 14px monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText('PLAYER POS (for builder)', 15, 15);
+            ctx.fillStyle = '#ff0';
+            ctx.fillText('x:' + Math.round(player.x) + ' y:' + Math.round(player.y), 15, 35);
 
             // === LIGHTING OVERLAY (drawn after all game content) ===
             renderLighting();

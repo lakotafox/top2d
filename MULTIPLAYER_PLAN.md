@@ -9,13 +9,19 @@ Both share the **same PartyKit room** but each only renders players in their own
 
 ---
 
-## PartyKit Server (DEPLOYED)
+## PartyKit Servers (DEPLOYED)
 
+### Game Server (player positions)
 **URL:** `wss://multiplayer.lakotafox.partykit.dev/party/ROOM_CODE`
-
 **Server code:** `/multiplayer/src/server.ts`
 
-### Message Protocol
+### Builder Server (edit syncing)
+**URL:** `wss://multiplayer.lakotafox.partykit.dev/parties/builder/ROOM_CODE`
+**Server code:** `/multiplayer/src/builder.ts`
+
+---
+
+## Game Server Message Protocol
 
 ```javascript
 // Connect to room
@@ -69,6 +75,32 @@ interface PlayerState {
 **Only render players where `gameType` matches your world:**
 - 2D game: `if (player.gameType === 'game2d') { ... }`
 - 3D tavern: `if (player.gameType === 'tavern3d') { ... }`
+
+---
+
+## Builder Server Message Protocol
+
+```javascript
+// Connect to builder room
+const ws = new WebSocket(`wss://multiplayer.lakotafox.partykit.dev/parties/builder/${roomCode}`);
+
+// Join
+ws.send(JSON.stringify({ type: 'join', name: 'BuilderName' }));
+
+// Send edit
+ws.send(JSON.stringify({
+  type: 'update',
+  editType: 'tile',  // tile, eraseTile, tileSound, light, animProp, placeNpc, removeNpc, placeTrigger, removeTrigger
+  layer: 0,
+  x: 5, y: 10,
+  cell: { type: 'tile', x: 0, y: 0, rotation: 0, flipped: false, tilesetIndex: 0 },
+  mapName: 'main'
+}));
+
+// Incoming messages:
+// 'welcome', 'join', 'leave' - same as game server
+// 'builderEdit' - { editType, layer, x, y, cell, mapName, ... }
+```
 
 ---
 
