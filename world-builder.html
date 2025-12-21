@@ -9486,50 +9486,16 @@
             pointLights = p.pointLights || {};
             updatePlacedLightsList();
 
-            // Load player sprite
-            playerSpriteData = p.playerSpriteData || null;
-            playerSpriteImg = null;
-            if (playerSpriteData) {
-                console.log('Loading custom player sprite...');
-                playerSpriteImg = new Image();
-                playerSpriteImg.onload = () => {
-                    console.log('Custom player sprite loaded, size:', playerSpriteImg.naturalWidth, 'x', playerSpriteImg.naturalHeight);
-                    updatePlayerSpritePreview();
-                    document.getElementById('playerSpriteInfo').textContent = 'Custom sprite loaded';
-                };
-                playerSpriteImg.onerror = () => {
-                    console.log('Custom sprite failed, falling back to default...');
-                    playerSpriteImg = new Image();
-                    playerSpriteImg.onload = () => console.log('Fallback sprite loaded');
-                    playerSpriteImg.src = window.location.origin + '/assets/player_sprite.png';
-                };
-                playerSpriteImg.src = playerSpriteData;
-            } else {
-                // Load default sprite
-                playerSpriteImg = new Image();
-                playerSpriteImg.onload = () => {
-                    console.log('Default player sprite loaded for builder, size:', playerSpriteImg.naturalWidth, 'x', playerSpriteImg.naturalHeight);
-                };
-                playerSpriteImg.onerror = (e) => {
-                    console.log('Default sprite failed from origin, trying relative path...', e);
-                    const fallbackImg = new Image();
-                    fallbackImg.onload = () => {
-                        playerSpriteImg = fallbackImg;
-                        console.log('Fallback sprite loaded');
-                    };
-                    fallbackImg.src = 'assets/player_sprite.png';
-                };
-                const spriteUrl = window.location.origin + '/assets/player_sprite.png';
-                console.log('Loading default sprite from:', spriteUrl);
-                playerSpriteImg.src = spriteUrl;
-
-                const preview = document.getElementById('playerSpritePreview');
-                if (preview) {
-                    const ctx = preview.getContext('2d');
-                    ctx.clearRect(0, 0, 48, 48);
-                }
-                document.getElementById('playerSpriteInfo').textContent = 'Default sprite';
-            }
+            // Always load default player sprite
+            playerSpriteImg = new Image();
+            playerSpriteImg.onload = () => {
+                console.log('Player sprite loaded, size:', playerSpriteImg.naturalWidth, 'x', playerSpriteImg.naturalHeight);
+            };
+            playerSpriteImg.onerror = () => {
+                // Try relative path as fallback
+                playerSpriteImg.src = 'assets/player_sprite.png';
+            };
+            playerSpriteImg.src = window.location.origin + '/assets/player_sprite.png';
 
             // Load multi-map data
             if (p.maps && Object.keys(p.maps).length > 0) {
