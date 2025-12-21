@@ -2658,6 +2658,7 @@
             }
             // Sync split line on drag end
             if (draggingSplitLine && modifiedSplitKey && tileSplitLines[modifiedSplitKey]) {
+                console.log('[SYNC] Broadcasting splitLine:', modifiedSplitKey);
                 broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, line: tileSplitLines[modifiedSplitKey] });
                 modifiedSplitKey = null;
             }
@@ -2732,6 +2733,7 @@
         collisionTilesetCanvas.addEventListener('touchend', () => {
             // Sync split line on drag end
             if (draggingSplitLine && modifiedSplitKey && tileSplitLines[modifiedSplitKey]) {
+                console.log('[SYNC] Broadcasting splitLine:', modifiedSplitKey);
                 broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, line: tileSplitLines[modifiedSplitKey] });
                 modifiedSplitKey = null;
             }
@@ -2746,6 +2748,7 @@
         collisionTilesetCanvas.addEventListener('touchcancel', () => {
             // Sync split line on drag end
             if (draggingSplitLine && modifiedSplitKey && tileSplitLines[modifiedSplitKey]) {
+                console.log('[SYNC] Broadcasting splitLine:', modifiedSplitKey);
                 broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, line: tileSplitLines[modifiedSplitKey] });
                 modifiedSplitKey = null;
             }
@@ -9479,7 +9482,7 @@
                 case 'placeTrigger':
                     // Add trigger
                     placedTriggers.push(edit.trigger);
-                    updatePlacedTriggerList();
+                    updateTriggerList();
                     renderMap();
                     break;
 
@@ -9487,7 +9490,7 @@
                     // Remove trigger by index
                     if (edit.index >= 0 && edit.index < placedTriggers.length) {
                         placedTriggers.splice(edit.index, 1);
-                        updatePlacedTriggerList();
+                        updateTriggerList();
                         renderMap();
                     }
                     break;
@@ -9496,7 +9499,7 @@
                     // Update existing trigger (spawn point, etc.)
                     if (edit.index >= 0 && edit.index < placedTriggers.length) {
                         placedTriggers[edit.index] = edit.trigger;
-                        updatePlacedTriggerList();
+                        updateTriggerList();
                         renderMap();
                         console.log('[BUILDER MP] Remote trigger updated:', edit.index);
                     }
@@ -9785,6 +9788,7 @@
 
                 case 'splitLine':
                     // Another builder set a split line
+                    console.log('[SYNC] Received splitLine:', edit.key, edit.line);
                     tileSplitLines[edit.key] = edit.line;
                     drawCollisionTileset();
                     break;
