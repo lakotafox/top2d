@@ -4636,9 +4636,14 @@
                 modeIndEl.textContent = 'Click to enable mouse look';
                 modeIndEl.style.color = '#4af';
             }
-            document.exitPointerLock();
+
+            // Safely exit pointer lock
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
 
             console.log('[FARKLE] Table #' + tableIndex + ' placed with UI rotation:', farkleUIRotation);
+            console.log('[FARKLE] Table added to farkleTables, count:', farkleTables.length);
         };
 
         // Cancel UI rotation (removes the pending table)
@@ -6828,8 +6833,22 @@
         // ============================================
         // SAVED FARKLE TABLES - Auto-load on startup
         // ============================================
-        // No pre-saved tables - players place their own
-        const savedFarkleTables = [];
+        // Pre-saved Farkle tables - visible to all players
+        const savedFarkleTables = [
+            {
+                position: new THREE.Vector3(13.575, 2.952, 19.919),
+                rotation: 0,
+                uiRotation: 75,
+                cameraPos: new THREE.Vector3(13.879, 5.141, 21.948),
+                cameraRot: new THREE.Euler(-0.7519, 0.0635, 0.0593),
+                feltSurfaceY: 1.070,
+                config: {
+                    legHeight: 0.95,
+                    feltColor: 0x22dd44,
+                    feltEmissive: 0.8
+                }
+            }
+        ];
 
         // Create a Farkle table from remote player data
         function createRemoteFarkleTable(data) {

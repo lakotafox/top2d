@@ -2868,6 +2868,9 @@
                 tileSplitLines[key][clampedX] = clampedY;
             }
 
+            // Update modifiedSplitKey to ensure it stays in sync
+            modifiedSplitKey = key;
+
             drawCollisionTileset();
         }
 
@@ -3007,6 +3010,9 @@
                 const clampedX = Math.max(0, Math.min(gridSize - 1, localX));
                 tileSplitLines[key][clampedX] = clampedY;
             }
+
+            // Update modifiedSplitKey to ensure it stays in sync
+            modifiedSplitKey = key;
 
             drawCollisionTileset();
         }
