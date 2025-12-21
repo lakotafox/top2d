@@ -1305,8 +1305,6 @@
 
         <div class="map-panel">
             <div class="toolbar" id="mainToolbar">
-                <button onclick="undo()" id="undoBtn" title="Undo (Ctrl+Z)" style="background:#555;">↶ Undo</button>
-                <button onclick="redo()" id="redoBtn" title="Redo (Ctrl+Y)" style="background:#555;">↷ Redo</button>
                 <button onclick="clearMap()">Clear</button>
                 <button onclick="downloadProject()" style="background:#2a7;">Save</button>
                 <button onclick="document.getElementById('projectFileInput').click()" style="background:#555;">Load</button>
@@ -1319,10 +1317,6 @@
                     <button onclick="zoomOut()">-</button>
                     <span id="zoomLevel">2x</span>
                     <button onclick="zoomIn()">+</button>
-                </div>
-                <div class="zoom-controls">
-                    <button id="undoBtn" onclick="undo()" title="Undo">↩</button>
-                    <button id="redoBtn" onclick="redo()" title="Redo">↪</button>
                 </div>
                 <span id="toolHint">Paint | R:rotate | I:flip | E:erase</span>
             </div>
@@ -1738,6 +1732,7 @@
         let collisionZoom = 6;
         let collisionTool = 'paint'; // 'paint' or 'erase'
         let brushSize = 4; // Brush size in pixels
+        let modifiedCollisionKeys = new Set(); // Track modified tiles for sync
 
         // Pixel collision masks per tile
         let collisionMasks = {}; // "x,y" -> 2D array of booleans
@@ -1747,6 +1742,7 @@
         let selectedSplitTile = null; // {x, y, tilesetIndex} - currently selected tile for splitting
         let draggingSplitLine = false; // true when dragging the split line
         let flatLineMode = true; // when true, split lines are always horizontal
+        let modifiedSplitKey = null; // Track current split line being modified for sync
 
         // Panning
         let collisionPanX = 0;
@@ -2334,29 +2330,31 @@
             document.getElementById('collisionStats').textContent = count + ' tiles with collision (tileset ' + currentTilesetIndex + ')';
         }
 
-        function selectAllCollision() {
-            if (!tilesetImg) return;
-            const cols = Math.floor(tilesetImg.naturalWidth / gridSize);
-            const rows = Math.floor(tilesetImg.naturalHeight / gridSize);
+        function selectAllCollision(fromNetwork = false) {
+            if (!tilesetImg && !fromNetwork) return;
+            const cols = fromNetwork ? 100 : Math.floor(tilesetImg.naturalWidth / gridSize);
+            const rows = fromNetwork ? 100 : Math.floor(tilesetImg.naturalHeight / gridSize);
+            const tilesetIdx = fromNetwork ? arguments[1] : currentTilesetIndex;
 
             for (let row = 0; row < rows; row++) {
                 for (let col = 0; col < cols; col++) {
                     const tileX = col * gridSize;
                     const tileY = row * gridSize;
-                    // Include tileset index in key
-                    const key = currentTilesetIndex + ':' + tileX + ',' + tileY;
+                    const key = tilesetIdx + ':' + tileX + ',' + tileY;
                     tileCollisions[key] = true;
                 }
             }
 
+            if (!fromNetwork) {
+                broadcastEdit({ editType: 'selectAllCollision', tilesetIndex: currentTilesetIndex });
+            }
             drawCollisionTileset();
             updateCollisionStats();
         }
 
-        function clearAllCollision() {
-            if (!confirm('Clear all collision for current tileset?')) return;
-            // Only clear collisions for current tileset
-            const keyPrefix = currentTilesetIndex + ':';
+        function clearAllCollision(fromNetwork = false, tilesetIdx = null) {
+            if (!fromNetwork && !confirm('Clear all collision for current tileset?')) return;
+            const keyPrefix = (fromNetwork ? tilesetIdx : currentTilesetIndex) + ':';
             for (let key in tileCollisions) {
                 if (key.startsWith(keyPrefix)) {
                     delete tileCollisions[key];
@@ -2366,6 +2364,9 @@
                 if (key.startsWith(keyPrefix)) {
                     delete collisionMasks[key];
                 }
+            }
+            if (!fromNetwork) {
+                broadcastEdit({ editType: 'clearAllCollision', tilesetIndex: currentTilesetIndex });
             }
             drawCollisionTileset();
             updateCollisionStats();
@@ -2422,7 +2423,16 @@
                 isPanning = false;
                 collisionTilesetCanvas.style.cursor = collisionTool === 'split' ? 'pointer' : 'crosshair';
             }
+            // Sync split line on drag end
+            if (draggingSplitLine && modifiedSplitKey && tileSplitLines[modifiedSplitKey]) {
+                broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, line: tileSplitLines[modifiedSplitKey] });
+                modifiedSplitKey = null;
+            }
             draggingSplitLine = false;
+            // Sync modified collision data
+            if ((brushPainting || brushErasing) && modifiedCollisionKeys.size > 0) {
+                syncModifiedCollisions();
+            }
             brushPainting = false;
             brushErasing = false;
         });
@@ -2432,9 +2442,28 @@
                 isPanning = false;
                 collisionTilesetCanvas.style.cursor = 'crosshair';
             }
+            // Sync modified collision data
+            if ((brushPainting || brushErasing) && modifiedCollisionKeys.size > 0) {
+                syncModifiedCollisions();
+            }
             brushPainting = false;
             brushErasing = false;
         });
+
+        function syncModifiedCollisions() {
+            // Send collision updates to other builders
+            modifiedCollisionKeys.forEach(key => {
+                if (tileCollisions[key]) {
+                    broadcastEdit({ editType: 'collision', key: key, value: true });
+                    if (collisionMasks[key]) {
+                        broadcastEdit({ editType: 'collisionMask', key: key, mask: collisionMasks[key] });
+                    }
+                } else {
+                    broadcastEdit({ editType: 'collision', key: key, value: false });
+                }
+            });
+            modifiedCollisionKeys.clear();
+        }
 
         collisionTilesetCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -2468,13 +2497,29 @@
         }, { passive: false });
 
         collisionTilesetCanvas.addEventListener('touchend', () => {
+            // Sync split line on drag end
+            if (draggingSplitLine && modifiedSplitKey && tileSplitLines[modifiedSplitKey]) {
+                broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, line: tileSplitLines[modifiedSplitKey] });
+                modifiedSplitKey = null;
+            }
             draggingSplitLine = false;
+            if ((brushPainting || brushErasing) && modifiedCollisionKeys.size > 0) {
+                syncModifiedCollisions();
+            }
             brushPainting = false;
             brushErasing = false;
         });
 
         collisionTilesetCanvas.addEventListener('touchcancel', () => {
+            // Sync split line on drag end
+            if (draggingSplitLine && modifiedSplitKey && tileSplitLines[modifiedSplitKey]) {
+                broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, line: tileSplitLines[modifiedSplitKey] });
+                modifiedSplitKey = null;
+            }
             draggingSplitLine = false;
+            if ((brushPainting || brushErasing) && modifiedCollisionKeys.size > 0) {
+                syncModifiedCollisions();
+            }
             brushPainting = false;
             brushErasing = false;
         });
@@ -2509,6 +2554,23 @@
                 }
             }
 
+            // Update tileCollisions
+            let hasCollision = false;
+            for (let y = 0; y < gridSize && !hasCollision; y++) {
+                for (let x = 0; x < gridSize && !hasCollision; x++) {
+                    if (collisionMasks[key][y][x]) hasCollision = true;
+                }
+            }
+            if (hasCollision) {
+                tileCollisions[key] = true;
+            } else {
+                delete tileCollisions[key];
+                delete collisionMasks[key];
+            }
+
+            // Track for sync
+            modifiedCollisionKeys.add(key);
+
             drawCollisionTileset();
             updateCollisionStats();
         }
@@ -2527,6 +2589,7 @@
             draggingSplitLine = true;
 
             const key = currentTilesetIndex + ':' + tileX + ',' + tileY;
+            modifiedSplitKey = key; // Track for sync
             const localY = py - tileY;
             const clampedY = Math.max(0, Math.min(gridSize, localY));
 
@@ -2624,6 +2687,9 @@
                 delete collisionMasks[key];
             }
 
+            // Track for sync on mouseup
+            modifiedCollisionKeys.add(key);
+
             drawCollisionTileset();
             updateCollisionStats();
         }
@@ -2652,6 +2718,7 @@
             draggingSplitLine = true;
 
             const key = currentTilesetIndex + ':' + tileX + ',' + tileY;
+            modifiedSplitKey = key; // Track for sync
 
             // Calculate local Y position within the tile
             const localY = py - tileY;
@@ -2729,6 +2796,7 @@
 
             const key = currentTilesetIndex + ':' + selectedSplitTile.x + ',' + selectedSplitTile.y;
             delete tileSplitLines[key];
+            broadcastEdit({ editType: 'clearSplitLine', key: key });
             selectedSplitTile = null;
 
             drawCollisionTileset();
@@ -2836,7 +2904,7 @@
             return layer;
         }
 
-        function addLayer() {
+        function addLayer(fromNetwork = false) {
             layers.push(createEmptyLayer());
             layerVisibility.push(true);
             layerNames.push('');
@@ -2844,6 +2912,11 @@
             map = layers[currentLayer];
             renderLayerList();
             renderMap();
+
+            // Broadcast to other builders
+            if (!fromNetwork) {
+                broadcastEdit({ editType: 'addLayer', mapName: currentMapName });
+            }
         }
 
         function selectLayer(index) {
@@ -2859,20 +2932,25 @@
             renderMap();
         }
 
-        function deleteLayer(index) {
+        function deleteLayer(index, fromNetwork = false) {
             if (layers.length <= 1) return alert('Need at least one layer');
-            const layerLabel = layerNames[index] ? `"${layerNames[index]}"` : `Layer ${index}`;
-            if (!confirm('Delete ' + layerLabel + '?')) return;
+            if (!fromNetwork) {
+                const layerLabel = layerNames[index] ? `"${layerNames[index]}"` : `Layer ${index}`;
+                if (!confirm('Delete ' + layerLabel + '?')) return;
+            }
             layers.splice(index, 1);
             layerVisibility.splice(index, 1);
             layerNames.splice(index, 1);
             if (currentLayer >= layers.length) currentLayer = layers.length - 1;
             map = layers[currentLayer];
+            if (!fromNetwork) {
+                broadcastEdit({ editType: 'deleteLayer', index: index, mapName: currentMapName });
+            }
             renderLayerList();
             renderMap();
         }
 
-        function moveLayerUp(index) {
+        function moveLayerUp(index, fromNetwork = false) {
             if (index <= 0) return;
             [layers[index], layers[index-1]] = [layers[index-1], layers[index]];
             [layerVisibility[index], layerVisibility[index-1]] = [layerVisibility[index-1], layerVisibility[index]];
@@ -2880,11 +2958,14 @@
             if (currentLayer === index) currentLayer--;
             else if (currentLayer === index - 1) currentLayer++;
             map = layers[currentLayer];
+            if (!fromNetwork) {
+                broadcastEdit({ editType: 'moveLayerUp', index: index, mapName: currentMapName });
+            }
             renderLayerList();
             renderMap();
         }
 
-        function moveLayerDown(index) {
+        function moveLayerDown(index, fromNetwork = false) {
             if (index >= layers.length - 1) return;
             [layers[index], layers[index+1]] = [layers[index+1], layers[index]];
             [layerVisibility[index], layerVisibility[index+1]] = [layerVisibility[index+1], layerVisibility[index]];
@@ -2892,6 +2973,9 @@
             if (currentLayer === index) currentLayer++;
             else if (currentLayer === index + 1) currentLayer--;
             map = layers[currentLayer];
+            if (!fromNetwork) {
+                broadcastEdit({ editType: 'moveLayerDown', index: index, mapName: currentMapName });
+            }
             renderLayerList();
             renderMap();
         }
@@ -2994,11 +3078,16 @@
             }
         }
 
-        function renameLayer(index) {
-            const currentName = layerNames[index] || '';
-            const newName = prompt('Enter nickname for Layer ' + index + ':', currentName);
+        function renameLayer(index, newName = null, fromNetwork = false) {
+            if (!fromNetwork) {
+                const currentName = layerNames[index] || '';
+                newName = prompt('Enter nickname for Layer ' + index + ':', currentName);
+            }
             if (newName !== null) {
-                layerNames[index] = newName.trim();
+                layerNames[index] = newName.trim ? newName.trim() : newName;
+                if (!fromNetwork) {
+                    broadcastEdit({ editType: 'renameLayer', index: index, name: layerNames[index], mapName: currentMapName });
+                }
                 renderLayerList();
             }
         }
@@ -3798,85 +3887,6 @@
             updateSelectedPreview();
         }
 
-        // ===== UNDO/REDO SYSTEM =====
-        let undoStack = [];
-        let redoStack = [];
-        const MAX_UNDO = 50;
-        let currentStrokeChanges = []; // Track changes during a single stroke
-
-        function saveForUndo(x, y, oldValue) {
-            currentStrokeChanges.push({ x, y, layer: currentLayer, oldValue: oldValue ? { ...oldValue } : null });
-        }
-
-        function commitStroke() {
-            if (currentStrokeChanges.length > 0) {
-                // Also save new values for redo
-                const changes = currentStrokeChanges.map(c => ({
-                    ...c,
-                    newValue: layers[c.layer][c.y][c.x] ? { ...layers[c.layer][c.y][c.x] } : null
-                }));
-                undoStack.push(changes);
-                if (undoStack.length > MAX_UNDO) undoStack.shift();
-                redoStack = []; // Clear redo stack on new action
-                currentStrokeChanges = [];
-                updateUndoRedoButtons();
-            }
-        }
-
-        function undo() {
-            if (undoStack.length === 0) return;
-            const changes = undoStack.pop();
-
-            // Apply old values
-            changes.forEach(c => {
-                if (c.y >= 0 && c.y < layers[c.layer].length && c.x >= 0 && c.x < layers[c.layer][c.y].length) {
-                    layers[c.layer][c.y][c.x] = c.oldValue ? { ...c.oldValue } : null;
-                }
-            });
-
-            redoStack.push(changes);
-            map = layers[currentLayer];
-            renderMap();
-            updateUndoRedoButtons();
-        }
-
-        function redo() {
-            if (redoStack.length === 0) return;
-            const changes = redoStack.pop();
-
-            // Apply new values
-            changes.forEach(c => {
-                if (c.y >= 0 && c.y < layers[c.layer].length && c.x >= 0 && c.x < layers[c.layer][c.y].length) {
-                    layers[c.layer][c.y][c.x] = c.newValue ? { ...c.newValue } : null;
-                }
-            });
-
-            undoStack.push(changes);
-            map = layers[currentLayer];
-            renderMap();
-            updateUndoRedoButtons();
-        }
-
-        function updateUndoRedoButtons() {
-            const undoBtn = document.getElementById('undoBtn');
-            const redoBtn = document.getElementById('redoBtn');
-            undoBtn.style.opacity = undoStack.length > 0 ? '1' : '0.5';
-            redoBtn.style.opacity = redoStack.length > 0 ? '1' : '0.5';
-        }
-
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey || e.metaKey) {
-                if (e.key === 'z' && !e.shiftKey) {
-                    e.preventDefault();
-                    undo();
-                } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
-                    e.preventDefault();
-                    redo();
-                }
-            }
-        });
-
         // Map painting
         let painting = false;
         let erasing = false;
@@ -4155,13 +4165,11 @@
             if (draggingSpawnTrigger) {
                 console.log('[DRAG] Stopped dragging spawn for Door', draggingSpawnTrigger.doorNumber,
                     'new position:', draggingSpawnTrigger.targetX, draggingSpawnTrigger.targetY);
-                // Log all triggers to verify update persisted
-                console.log('[DRAG] All triggers after update:', JSON.stringify(placedTriggers.map(t => ({
-                    door: t.doorNumber,
-                    from: t.mapName,
-                    to: t.targetMap,
-                    spawn: [t.targetX, t.targetY]
-                }))));
+                // Sync the trigger update
+                const triggerIndex = placedTriggers.indexOf(draggingSpawnTrigger);
+                if (triggerIndex >= 0) {
+                    broadcastEdit({ editType: 'updateTrigger', index: triggerIndex, trigger: draggingSpawnTrigger });
+                }
                 draggingSpawnTrigger = null;
                 renderMap();
             }
@@ -4194,9 +4202,7 @@
                 // Finish copy selection
                 finishCopyFromMap();
             }
-            if (painting || erasing) {
-                commitStroke(); // Save undo state after stroke is complete
-            }
+            // End painting/erasing stroke
             painting = false;
             erasing = false;
             // Stop waypoint dragging
@@ -4293,9 +4299,6 @@
                 return;
             }
 
-            if (painting || erasing) {
-                commitStroke();
-            }
             painting = false;
             erasing = false;
             hoverMapPos = null;
@@ -4556,7 +4559,6 @@
 
             if (!selectedTileData) {
                 if (erasing && x >= 0 && x < mapCols && y >= 0 && y < mapRows) {
-                    saveForUndo(x, y, map[y][x]); // Save for undo
                     map[y][x] = null;
                     // Broadcast erase to co-op builders
                     broadcastEdit({ editType: 'eraseTile', layer: currentLayer, x: x, y: y, mapName: currentMapName });
@@ -4575,7 +4577,6 @@
                         const mx = x + dx;
                         const my = y + dy;
                         if (mx >= 0 && mx < mapCols && my >= 0 && my < mapRows) {
-                            saveForUndo(mx, my, map[my][mx]); // Save for undo
                             map[my][mx] = null;
                             // Broadcast erase to co-op builders
                             broadcastEdit({ editType: 'eraseTile', layer: currentLayer, x: mx, y: my, mapName: currentMapName });
@@ -4598,7 +4599,6 @@
                             if (mx >= 0 && my >= 0 && mx < mapCols && my < mapRows) {
                                 const srcCell = copiedTiles[dy] && copiedTiles[dy][dx];
                                 if (srcCell) {
-                                    saveForUndo(mx, my, map[my][mx]); // Save for undo
                                     map[my][mx] = { ...srcCell };
                                     // Broadcast tile to co-op builders
                                     broadcastEdit({ editType: 'tile', layer: currentLayer, x: mx, y: my, cell: map[my][mx], mapName: currentMapName });
@@ -4622,8 +4622,6 @@
                                 const srcDx = tileFlippedH ? (selW - 1 - dx) : dx;
                                 const tileX = selectedTileData.x + srcDx * gridSize;
                                 const tileY = selectedTileData.y + dy * gridSize;
-
-                                saveForUndo(mx, my, map[my][mx]); // Save for undo
 
                                 if (selectedTileData.isProp) {
                                     // Paint as prop with propIndex (collision is painted separately in prop panel)
@@ -5650,7 +5648,7 @@
             }
         });
 
-        function clearMap() { if (confirm('Clear entire map?')) { initMap(); mapInitialized = true; renderMap(); } }
+        function clearMap() { if (confirm('Clear entire map?')) { initMap(); mapInitialized = true; broadcastEdit({ editType: 'clearMap', mapName: currentMapName }); renderMap(); } }
 
         // ===== GRAB TOOL =====
         let grabToolActive = false;
@@ -8148,9 +8146,17 @@
 
             if (animPropEditorEditingIndex >= 0) {
                 animatedProps[animPropEditorEditingIndex] = propData;
+                // Sync prop update (exclude non-serializable _spriteImg)
+                const syncProp = { ...propData };
+                delete syncProp._spriteImg;
+                broadcastEdit({ editType: 'updateAnimProp', index: animPropEditorEditingIndex, prop: syncProp });
             } else {
                 animatedProps.push(propData);
                 currentAnimPropIndex = animatedProps.length - 1; // Select the new prop
+                // Sync new prop (exclude non-serializable _spriteImg)
+                const syncProp = { ...propData };
+                delete syncProp._spriteImg;
+                broadcastEdit({ editType: 'addAnimProp', prop: syncProp });
             }
 
             animPropStopPreview();
@@ -8224,9 +8230,11 @@
                 delBtn.onclick = (e) => {
                     e.stopPropagation();
                     if (confirm('Delete "' + prop.name + '"?')) {
-                        animatedProps.splice(i, 1);
-                        placedAnimProps = placedAnimProps.filter(p => p.propIndex !== i);
-                        placedAnimProps.forEach(p => { if (p.propIndex > i) p.propIndex--; });
+                        const deleteIndex = i;
+                        animatedProps.splice(deleteIndex, 1);
+                        placedAnimProps = placedAnimProps.filter(p => p.propIndex !== deleteIndex);
+                        placedAnimProps.forEach(p => { if (p.propIndex > deleteIndex) p.propIndex--; });
+                        broadcastEdit({ editType: 'removeAnimProp', index: deleteIndex });
                         updateAnimPropListDisplay();
                         renderMap();
                     }
@@ -9000,6 +9008,16 @@
                     }
                     break;
 
+                case 'updateTrigger':
+                    // Update existing trigger (spawn point, etc.)
+                    if (edit.index >= 0 && edit.index < placedTriggers.length) {
+                        placedTriggers[edit.index] = edit.trigger;
+                        updatePlacedTriggerList();
+                        renderMap();
+                        console.log('[BUILDER MP] Remote trigger updated:', edit.index);
+                    }
+                    break;
+
                 case 'collision':
                     // Apply collision change
                     if (edit.value) {
@@ -9012,6 +9030,196 @@
                 case 'collisionMask':
                     // Apply collision mask
                     collisionMasks[edit.key] = edit.mask;
+                    break;
+
+                case 'addLayer':
+                    // Add new layer (from another builder)
+                    if (edit.mapName === currentMapName) {
+                        addLayer(true); // true = from network, don't rebroadcast
+                    } else if (maps[edit.mapName]) {
+                        maps[edit.mapName].layers.push(createEmptyLayer());
+                    }
+                    break;
+
+                case 'addMap':
+                    // Another builder created a new map
+                    if (!maps[edit.mapName]) {
+                        createMapData(edit.mapName);
+                        updateMapDropdowns();
+                        console.log('[BUILDER MP] Remote map created:', edit.mapName);
+                    }
+                    break;
+
+                case 'deleteMap':
+                    // Another builder deleted a map
+                    if (maps[edit.mapName]) {
+                        deleteMap(edit.mapName);
+                        updateMapDropdowns();
+                        updateTriggerList();
+                        renderMap();
+                        console.log('[BUILDER MP] Remote map deleted:', edit.mapName);
+                    }
+                    break;
+
+                case 'clearMap':
+                    // Another builder cleared a map
+                    if (edit.mapName === currentMapName) {
+                        initMap();
+                        mapInitialized = true;
+                        renderMap();
+                    } else if (maps[edit.mapName]) {
+                        // Clear the other map's data
+                        maps[edit.mapName].layers = [createEmptyLayer()];
+                        maps[edit.mapName].tileCollisions = {};
+                        maps[edit.mapName].collisionMasks = {};
+                    }
+                    console.log('[BUILDER MP] Remote map cleared:', edit.mapName);
+                    break;
+
+                case 'addAnimProp':
+                    // Another builder added an animated prop
+                    animatedProps.push(edit.prop);
+                    // Load the sprite image
+                    if (edit.prop.spriteData) {
+                        const img = new Image();
+                        img.onload = () => {
+                            animatedProps[animatedProps.length - 1]._spriteImg = img;
+                            updateAnimPropListDisplay();
+                            renderMap();
+                        };
+                        img.src = edit.prop.spriteData;
+                    }
+                    updateAnimPropListDisplay();
+                    console.log('[BUILDER MP] Remote anim prop added:', edit.prop.name);
+                    break;
+
+                case 'removeAnimProp':
+                    // Another builder removed an animated prop
+                    if (edit.index >= 0 && edit.index < animatedProps.length) {
+                        animatedProps.splice(edit.index, 1);
+                        placedAnimProps = placedAnimProps.filter(p => p.propIndex !== edit.index);
+                        placedAnimProps.forEach(p => { if (p.propIndex > edit.index) p.propIndex--; });
+                        updateAnimPropListDisplay();
+                        renderMap();
+                        console.log('[BUILDER MP] Remote anim prop removed:', edit.index);
+                    }
+                    break;
+
+                case 'updateAnimProp':
+                    // Another builder updated an animated prop
+                    if (edit.index >= 0 && edit.index < animatedProps.length) {
+                        animatedProps[edit.index] = edit.prop;
+                        // Load the sprite image
+                        if (edit.prop.spriteData) {
+                            const img = new Image();
+                            img.onload = () => {
+                                animatedProps[edit.index]._spriteImg = img;
+                                updateAnimPropListDisplay();
+                                renderMap();
+                            };
+                            img.src = edit.prop.spriteData;
+                        }
+                        updateAnimPropListDisplay();
+                        console.log('[BUILDER MP] Remote anim prop updated:', edit.index);
+                    }
+                    break;
+
+                case 'deleteLayer':
+                    // Another builder deleted a layer
+                    if (edit.mapName === currentMapName) {
+                        deleteLayer(edit.index, true);
+                    } else if (maps[edit.mapName]) {
+                        maps[edit.mapName].layers.splice(edit.index, 1);
+                        maps[edit.mapName].layerVisibility.splice(edit.index, 1);
+                        maps[edit.mapName].layerNames.splice(edit.index, 1);
+                    }
+                    console.log('[BUILDER MP] Remote layer deleted:', edit.index);
+                    break;
+
+                case 'moveLayerUp':
+                    // Another builder moved a layer up
+                    if (edit.mapName === currentMapName) {
+                        moveLayerUp(edit.index, true);
+                    } else if (maps[edit.mapName] && edit.index > 0) {
+                        const m = maps[edit.mapName];
+                        [m.layers[edit.index], m.layers[edit.index-1]] = [m.layers[edit.index-1], m.layers[edit.index]];
+                        [m.layerVisibility[edit.index], m.layerVisibility[edit.index-1]] = [m.layerVisibility[edit.index-1], m.layerVisibility[edit.index]];
+                        [m.layerNames[edit.index], m.layerNames[edit.index-1]] = [m.layerNames[edit.index-1], m.layerNames[edit.index]];
+                    }
+                    break;
+
+                case 'moveLayerDown':
+                    // Another builder moved a layer down
+                    if (edit.mapName === currentMapName) {
+                        moveLayerDown(edit.index, true);
+                    } else if (maps[edit.mapName] && edit.index < maps[edit.mapName].layers.length - 1) {
+                        const m = maps[edit.mapName];
+                        [m.layers[edit.index], m.layers[edit.index+1]] = [m.layers[edit.index+1], m.layers[edit.index]];
+                        [m.layerVisibility[edit.index], m.layerVisibility[edit.index+1]] = [m.layerVisibility[edit.index+1], m.layerVisibility[edit.index]];
+                        [m.layerNames[edit.index], m.layerNames[edit.index+1]] = [m.layerNames[edit.index+1], m.layerNames[edit.index]];
+                    }
+                    break;
+
+                case 'renameLayer':
+                    // Another builder renamed a layer
+                    if (edit.mapName === currentMapName) {
+                        renameLayer(edit.index, edit.name, true);
+                    } else if (maps[edit.mapName]) {
+                        maps[edit.mapName].layerNames[edit.index] = edit.name;
+                    }
+                    break;
+
+                case 'renameMap':
+                    // Another builder renamed a map
+                    if (maps[edit.oldName]) {
+                        maps[edit.newName] = maps[edit.oldName];
+                        delete maps[edit.oldName];
+                        placedTriggers.forEach(t => {
+                            if (t.mapName === edit.oldName) t.mapName = edit.newName;
+                            if (t.targetMap === edit.oldName) t.targetMap = edit.newName;
+                        });
+                        placedNpcs.forEach(npc => {
+                            if (npc.mapName === edit.oldName) npc.mapName = edit.newName;
+                        });
+                        if (currentMapName === edit.oldName) currentMapName = edit.newName;
+                        if (spawnMapName === edit.oldName) spawnMapName = edit.newName;
+                        updateMapDropdowns();
+                        updateTriggerList();
+                        console.log('[BUILDER MP] Remote map renamed:', edit.oldName, '->', edit.newName);
+                    }
+                    break;
+
+                case 'cameraBounds':
+                    // Another builder set/cleared camera bounds
+                    if (edit.mapName === currentMapName) {
+                        cameraBounds = edit.bounds;
+                        updateCameraBoundsInfo();
+                        renderMap();
+                    } else if (maps[edit.mapName]) {
+                        maps[edit.mapName].cameraBounds = edit.bounds;
+                    }
+                    break;
+
+                case 'selectAllCollision':
+                    // Another builder filled all collision for a tileset
+                    selectAllCollision(true, edit.tilesetIndex);
+                    break;
+
+                case 'clearAllCollision':
+                    // Another builder cleared all collision for a tileset
+                    clearAllCollision(true, edit.tilesetIndex);
+                    break;
+
+                case 'splitLine':
+                    // Another builder set a split line
+                    tileSplitLines[edit.key] = edit.line;
+                    drawCollisionTileset();
+                    break;
+
+                case 'clearSplitLine':
+                    // Another builder cleared a split line
+                    delete tileSplitLines[edit.key];
+                    drawCollisionTileset();
                     break;
             }
         }
@@ -9770,6 +9978,7 @@
 
             // Create new map and switch to it
             createMapData(cleanName);
+            broadcastEdit({ editType: 'addMap', mapName: cleanName });
             currentMapName = cleanName;
             loadMapState(maps[cleanName]);
 
@@ -9794,6 +10003,7 @@
 
             const deletedName = currentMapName;
             deleteMap(deletedName);
+            broadcastEdit({ editType: 'deleteMap', mapName: deletedName });
             updateMapDropdowns();
             updateTriggerList();
             renderMap();
@@ -9855,6 +10065,9 @@
             if (spawnMapName === oldName) {
                 spawnMapName = cleanName;
             }
+
+            // Sync to other builders
+            broadcastEdit({ editType: 'renameMap', oldName: oldName, newName: cleanName });
 
             // Update UI
             updateMapDropdowns();
@@ -10120,6 +10333,7 @@
             // Create target map if it doesn't exist
             if (!maps[cleanMapName]) {
                 createMapData(cleanMapName);
+                broadcastEdit({ editType: 'addMap', mapName: cleanMapName });
                 updateMapDropdowns();
             }
 
@@ -10249,6 +10463,11 @@
                     pendingTriggerForSpawn.targetY = y;
                     console.log('=== SPAWN PLACED ===');
                     console.log('[SPAWN] Door', pendingTriggerForSpawn.doorNumber, 'spawn set at (' + x + ', ' + y + ') on "' + currentMapName + '"');
+                }
+                // Sync the trigger update
+                const triggerIndex = placedTriggers.indexOf(pendingTriggerForSpawn);
+                if (triggerIndex >= 0) {
+                    broadcastEdit({ editType: 'updateTrigger', index: triggerIndex, trigger: pendingTriggerForSpawn });
                 }
             }
 
@@ -10412,13 +10631,16 @@
             renderMap();
         }
 
-        function clearCameraBounds() {
+        function clearCameraBounds(fromNetwork = false) {
             cameraBounds = null;
             cameraBoundsDragStart = null;
             cameraBoundsDragEnd = null;
             settingCameraBounds = false;
             document.getElementById('setCameraBoundsBtn').textContent = 'Set Bounds';
             document.getElementById('setCameraBoundsBtn').style.background = '#484';
+            if (!fromNetwork) {
+                broadcastEdit({ editType: 'cameraBounds', bounds: null, mapName: currentMapName });
+            }
             updateCameraBoundsInfo();
             renderMap();
         }
@@ -10457,6 +10679,7 @@
             }
 
             console.log('Camera bounds expanded:', cameraBounds);
+            broadcastEdit({ editType: 'cameraBounds', bounds: cameraBounds, mapName: currentMapName });
 
             // Stay in bounds mode for more selections
             cameraBoundsDragStart = null;
