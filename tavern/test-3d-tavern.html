@@ -5000,7 +5000,14 @@
                     updatePlayerListUI();
                     break;
 
-                // FARKLE MESSAGE HANDLERS REMOVED - Awaiting rewrite
+                case 'farkle_state':
+                    // Server-authoritative Farkle state update
+                    handleFarkleState(data);
+                    break;
+
+                case 'farkle_error':
+                    console.log('[FARKLE] Error from server:', data.error);
+                    break;
             }
         }
 
@@ -5964,28 +5971,273 @@
         }
 
 
-        // ========== FARKLE GAME LOGIC REMOVED - Awaiting multiplayer rewrite ==========
-        // Stub variables to prevent errors - will be replaced in rewrite
-        let farkleMultiplayer = { active: false, players: [], currentTurnIndex: 0, isMyTurn: false };
-        let farkleRolled = false;
-        let diceSettled = false;
-        let farkleTurnScore = 0;
-        let farkleTotalScore = 0;
-        let farkleNPCScore = 0;
-        let farkleGameMode = 'multiplayer'; // Will be multiplayer-only after rewrite
-        let selectedDieIndex = 0;
-        let pendingFarkleTableForMode = null;
+        // ========== FARKLE MULTIPLAYER CLIENT ==========
+        // Client state (mirrors server-authoritative state)
+        let farkleState = {
+            tableId: null,
+            phase: 'lobby',
+            players: [],
+            currentPlayerIndex: 0,
+            dice: [1,1,1,1,1,1],
+            held: [false,false,false,false,false,false],
+            turnScore: 0,
+            version: 0,
+            hostId: null
+        };
 
-        // Stub functions - will be implemented in rewrite
-        function sendFarkleMessage() { console.log('[FARKLE] sendFarkleMessage - awaiting rewrite'); }
-        function calculateFarkleScore() { return 0; }
-        function bankFarklePoints() { console.log('[FARKLE] bankFarklePoints - awaiting rewrite'); }
-        function passFarkleTurn() { console.log('[FARKLE] passFarkleTurn - awaiting rewrite'); }
+        // Local preview state (for selection before confirm)
+        let farklePreviewHeld = [false,false,false,false,false,false];
+        let farkleGameActive = false;
+
+        // Send Farkle action to server
+        function sendFarkleAction(action, data = {}) {
+            if (!multiplayerWs || multiplayerWs.readyState !== WebSocket.OPEN) {
+                console.log('[FARKLE] Not connected to server');
+                return;
+            }
+            const msg = {
+                type: 'farkle',
+                farkleAction: action,
+                tableId: farkleState.tableId,
+                ...data
+            };
+            console.log('[FARKLE] Sending:', action, data);
+            multiplayerWs.send(JSON.stringify(msg));
+        }
+
+        // Join a Farkle table
+        function joinFarkleTable(tableId) {
+            farkleState.tableId = tableId;
+            sendFarkleAction('join');
+        }
+
+        // Host starts the game
+        function startFarkleGame() {
+            sendFarkleAction('start');
+        }
+
+        // Roll dice (when it's your turn)
+        function rollFarkleDice() {
+            if (!isMyFarkleTurn()) {
+                console.log('[FARKLE] Not your turn');
+                return;
+            }
+            sendFarkleAction('roll');
+        }
+
+        // Confirm held dice selection
+        function confirmFarkleHold() {
+            if (!isMyFarkleTurn()) return;
+            if (farkleState.phase !== 'selecting') return;
+
+            // Send preview selection to server
+            sendFarkleAction('hold', { held: farklePreviewHeld });
+        }
+
+        // Bank points
+        function bankFarklePoints() {
+            if (!isMyFarkleTurn()) return;
+            sendFarkleAction('bank');
+        }
+
+        // Leave the table
+        function leaveFarkleTable() {
+            sendFarkleAction('leave');
+            farkleGameActive = false;
+            farkleState.tableId = null;
+            updateFarkleUI();
+        }
+
+        // Check if it's my turn
+        function isMyFarkleTurn() {
+            if (!farkleState.players.length) return false;
+            const currentPlayer = farkleState.players[farkleState.currentPlayerIndex];
+            return currentPlayer && currentPlayer.id === localPlayerId;
+        }
+
+        // Check if I'm the host
+        function amFarkleHost() {
+            return farkleState.hostId === localPlayerId;
+        }
+
+        // Toggle die selection (local preview)
+        function toggleDieSelection(index) {
+            if (!isMyFarkleTurn()) return;
+            if (farkleState.phase !== 'selecting') return;
+            if (farkleState.held[index]) return; // Can't unselect already-held dice
+
+            farklePreviewHeld[index] = !farklePreviewHeld[index];
+            updateDiceHighlights();
+        }
+
+        // Update dice visual highlights based on held/preview state
+        function updateDiceHighlights() {
+            for (let i = 0; i < farkleDice.length; i++) {
+                const die = farkleDice[i];
+                if (!die || !die.mesh) continue;
+
+                if (farkleState.held[i]) {
+                    // Already held - green
+                    die.mesh.material.forEach(m => m.emissive?.setHex(0x004400));
+                } else if (farklePreviewHeld[i]) {
+                    // Preview selected - yellow
+                    die.mesh.material.forEach(m => m.emissive?.setHex(0x444400));
+                } else {
+                    // Not selected - no highlight
+                    die.mesh.material.forEach(m => m.emissive?.setHex(0x000000));
+                }
+            }
+        }
+
+        // Handle farkle_state message from server
+        function handleFarkleState(data) {
+            if (data.ended) {
+                console.log('[FARKLE] Game ended:', data.reason);
+                farkleGameActive = false;
+                farkleState.tableId = null;
+                updateFarkleUI();
+                return;
+            }
+
+            // Update local state from server
+            farkleState.tableId = data.tableId;
+            farkleState.phase = data.phase;
+            farkleState.players = data.players || [];
+            farkleState.currentPlayerIndex = data.currentPlayerIndex;
+            farkleState.dice = data.dice || [1,1,1,1,1,1];
+            farkleState.held = data.held || [false,false,false,false,false,false];
+            farkleState.turnScore = data.turnScore || 0;
+            farkleState.version = data.version || 0;
+            farkleState.hostId = data.hostId;
+
+            // Reset preview to match server state
+            farklePreviewHeld = [...farkleState.held];
+
+            // Update dice visuals to show server values
+            updateDiceToServerState();
+
+            // Update UI
+            farkleGameActive = farkleState.phase !== 'lobby';
+            updateFarkleUI();
+
+            console.log('[FARKLE] State updated:', farkleState.phase, 'Turn:', farkleState.currentPlayerIndex, 'My turn:', isMyFarkleTurn());
+        }
+
+        // Update 3D dice to match server state
+        function updateDiceToServerState() {
+            // Position dice to show the server values
+            // For MVP: just update values, animation comes later
+            for (let i = 0; i < farkleDice.length && i < 6; i++) {
+                const die = farkleDice[i];
+                if (die) {
+                    die.value = farkleState.dice[i];
+                    die.kept = farkleState.held[i];
+                }
+            }
+            updateDiceHighlights();
+        }
+
+        // Update Farkle UI display
+        function updateFarkleUI() {
+            // Get or create Farkle UI panel
+            let panel = document.getElementById('farklePanel');
+            if (!panel) {
+                panel = document.createElement('div');
+                panel.id = 'farklePanel';
+                panel.style.cssText = 'position:fixed;top:50%;right:20px;transform:translateY(-50%);background:rgba(0,0,0,0.85);padding:20px;border-radius:10px;color:white;font-family:monospace;min-width:250px;z-index:1000;display:none;';
+                document.body.appendChild(panel);
+            }
+
+            if (!farkleState.tableId) {
+                panel.style.display = 'none';
+                return;
+            }
+
+            panel.style.display = 'block';
+
+            const isMyTurn = isMyFarkleTurn();
+            const currentPlayer = farkleState.players[farkleState.currentPlayerIndex];
+            const myPlayer = farkleState.players.find(p => p.id === localPlayerId);
+
+            let html = `<h3 style="margin:0 0 10px 0;color:#ffaa00;">FARKLE</h3>`;
+
+            // Phase display
+            html += `<div style="margin-bottom:10px;padding:5px;background:rgba(255,255,255,0.1);border-radius:5px;">`;
+            html += `Phase: <strong>${farkleState.phase}</strong><br>`;
+            html += `Turn Score: <strong style="color:#44ff88;">${farkleState.turnScore}</strong>`;
+            html += `</div>`;
+
+            // Dice display
+            html += `<div style="margin-bottom:10px;">Dice: `;
+            for (let i = 0; i < 6; i++) {
+                const val = farkleState.dice[i];
+                const held = farkleState.held[i];
+                const preview = farklePreviewHeld[i];
+                const style = held ? 'background:#004400;' : (preview ? 'background:#444400;' : 'background:#333;');
+                html += `<span style="display:inline-block;width:25px;height:25px;line-height:25px;text-align:center;margin:2px;border-radius:4px;${style}">${val}</span>`;
+            }
+            html += `</div>`;
+
+            // Players
+            html += `<div style="margin-bottom:10px;">`;
+            html += `<strong>Players:</strong><br>`;
+            farkleState.players.forEach((p, idx) => {
+                const isCurrent = idx === farkleState.currentPlayerIndex;
+                const isMe = p.id === localPlayerId;
+                const marker = isCurrent ? '► ' : '  ';
+                const nameStyle = isMe ? 'color:#44ff88;' : '';
+                html += `<div style="${nameStyle}">${marker}${p.name}: ${p.score}</div>`;
+            });
+            html += `</div>`;
+
+            // Action buttons
+            html += `<div style="margin-top:15px;">`;
+
+            if (farkleState.phase === 'lobby') {
+                if (amFarkleHost() && farkleState.players.length >= 2) {
+                    html += `<button onclick="startFarkleGame()" style="padding:10px 20px;margin:5px;cursor:pointer;background:#44ff88;border:none;border-radius:5px;font-weight:bold;">START GAME</button>`;
+                } else if (amFarkleHost()) {
+                    html += `<div style="color:#888;">Waiting for more players...</div>`;
+                } else {
+                    html += `<div style="color:#888;">Waiting for host to start...</div>`;
+                }
+            } else if (isMyTurn) {
+                if (farkleState.phase === 'waiting_for_roll') {
+                    html += `<button onclick="rollFarkleDice()" style="padding:10px 20px;margin:5px;cursor:pointer;background:#ff6644;border:none;border-radius:5px;font-weight:bold;">ROLL</button>`;
+                } else if (farkleState.phase === 'selecting') {
+                    html += `<button onclick="confirmFarkleHold()" style="padding:10px 20px;margin:5px;cursor:pointer;background:#44aaff;border:none;border-radius:5px;font-weight:bold;">HOLD</button>`;
+                    html += `<button onclick="rollFarkleDice()" style="padding:10px 20px;margin:5px;cursor:pointer;background:#ff6644;border:none;border-radius:5px;font-weight:bold;">ROLL AGAIN</button>`;
+                    html += `<button onclick="bankFarklePoints()" style="padding:10px 20px;margin:5px;cursor:pointer;background:#44ff88;border:none;border-radius:5px;font-weight:bold;">BANK</button>`;
+                }
+            } else if (farkleState.phase === 'farkled') {
+                html += `<div style="color:#ff4444;font-size:18px;font-weight:bold;">FARKLE!</div>`;
+            } else {
+                html += `<div style="color:#888;">Waiting for ${currentPlayer?.name || 'player'}...</div>`;
+            }
+
+            html += `<br><button onclick="leaveFarkleTable()" style="padding:5px 15px;margin-top:10px;cursor:pointer;background:#666;border:none;border-radius:5px;">Leave Table</button>`;
+            html += `</div>`;
+
+            panel.innerHTML = html;
+        }
+        // ========== END FARKLE MULTIPLAYER CLIENT ==========
+
+        // Called when player presses E near a Farkle table
+        function joinFarkleLobby(table) {
+            // Generate table ID from position (unique per table)
+            const tableId = `farkle_${Math.round(table.position.x)}_${Math.round(table.position.z)}`;
+            console.log('[FARKLE] Joining table:', tableId);
+            joinFarkleTable(tableId);
+        }
+
+        // Legacy stub functions for keyboard controls
+        function toggleFarkleControls() {}
+        function passFarkleTurn() {}
         function selectPrevDie() {}
         function selectNextDie() {}
         function toggleSelectedDieKept() {}
-        function updateDiceHighlights() {}
-        // ========== END FARKLE STUB ==========
+        let farkleRolled = false;
+        let diceSettled = false;
 
         // Check dice settled state in animate loop
         let diceSettleCheckTimer = 0;
