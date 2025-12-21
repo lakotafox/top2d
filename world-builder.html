@@ -5575,7 +5575,7 @@
                         col = idleFrames[dir][frame % idleFrames[dir].length];
                     }
 
-                    if (playerSpriteImg && playerSpriteImg.complete) {
+                    if (playerSpriteImg && playerSpriteImg.complete && playerSpriteImg.naturalWidth > 0) {
                         // Draw shadow
                         mapCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
                         mapCtx.beginPath();
@@ -9497,6 +9497,24 @@
                 };
                 playerSpriteImg.src = playerSpriteData;
             } else {
+                // Load default sprite
+                playerSpriteImg = new Image();
+                playerSpriteImg.onload = () => {
+                    console.log('Default player sprite loaded for builder, size:', playerSpriteImg.naturalWidth, 'x', playerSpriteImg.naturalHeight);
+                };
+                playerSpriteImg.onerror = (e) => {
+                    console.log('Default sprite failed from origin, trying relative path...', e);
+                    const fallbackImg = new Image();
+                    fallbackImg.onload = () => {
+                        playerSpriteImg = fallbackImg;
+                        console.log('Fallback sprite loaded');
+                    };
+                    fallbackImg.src = 'assets/player_sprite.png';
+                };
+                const spriteUrl = window.location.origin + '/assets/player_sprite.png';
+                console.log('Loading default sprite from:', spriteUrl);
+                playerSpriteImg.src = spriteUrl;
+
                 const preview = document.getElementById('playerSpritePreview');
                 if (preview) {
                     const ctx = preview.getContext('2d');
@@ -11041,7 +11059,9 @@
         function closeGame() {
             window.close();
         }
+        let uiHidden = false;
         function hideAllUI() {
+            uiHidden = true;
             document.getElementById('debugButtons').style.display = 'none';
             document.getElementById('info').style.display = 'none';
             document.getElementById('debugPanel').style.display = 'none';
@@ -11049,6 +11069,15 @@
             if (toggleBtn) toggleBtn.style.display = 'none';
             const debugLog = document.getElementById('debugLog');
             if (debugLog) debugLog.style.display = 'none';
+        }
+        function showAllUI() {
+            uiHidden = false;
+            document.getElementById('debugButtons').style.display = '';
+            document.getElementById('info').style.display = '';
+        }
+        function toggleAllUI() {
+            if (uiHidden) showAllUI();
+            else hideAllUI();
         }
 
         function initGame() {
@@ -11370,6 +11399,7 @@
                                 animation: p.animation || 'idle',
                                 name: p.name || 'Player',
                                 currentMap: p.currentMap || 'main',
+                                inTavern: p.inTavern || false,
                                 frame: 0, frameTimer: 0
                             });
                             console.log('[MP] Added existing player:', p.name, 'on map:', p.currentMap);
@@ -11386,6 +11416,7 @@
                             animation: data.player.animation || 'idle',
                             name: data.player.name || 'Player',
                             currentMap: data.player.currentMap || 'main',
+                            inTavern: data.player.inTavern || false,
                             frame: 0, frameTimer: 0
                         });
                         console.log('[MP] Player joined:', data.player.name, 'on map:', data.player.currentMap);
@@ -11402,6 +11433,7 @@
                             other.direction = data.player.direction || other.direction;
                             other.animation = data.player.animation || other.animation;
                             other.currentMap = data.player.currentMap || other.currentMap;
+                            other.inTavern = data.player.inTavern || false;
                         }
                     }
                     break;
@@ -11430,7 +11462,8 @@
                 y: player.y,
                 direction: player.direction,
                 animation: player.moving ? 'walk' : 'idle',
-                currentMap: currentGameMap
+                currentMap: currentGameMap,
+                inTavern: inTavernMode
             }));
         }
 
@@ -12392,6 +12425,7 @@
 
             if (e.key === 'Escape') window.close();
             if (e.key === 'c' || e.key === 'C') showCollision = !showCollision;
+            if (e.key === 'h' || e.key === 'H') toggleAllUI();
             if (e.key === ' ' && !player.attacking) {
                 // Check for interact-type doors first
                 if (checkTriggerInteraction('interact')) {
@@ -12908,6 +12942,8 @@
         let transitionPhase = 'none'; // 'fadeOut', 'fadeIn', 'none', 'doorAnim'
         let pendingTransition = null;
         let pendingExternalUrl = null; // For external door navigation
+        let inTavernMode = false; // True when player is in tavern (new tab)
+        let tavernWindow = null; // Reference to tavern window
 
 
         // Check if player is on a trigger and interact
@@ -13222,8 +13258,12 @@
                     transitionAlpha = 1;
                     // Check if this is an external door navigation
                     if (pendingExternalUrl) {
-                        window.location.href = pendingExternalUrl;
-                        return; // Page will navigate away
+                        // Open tavern in new tab instead of navigating
+                        tavernWindow = window.open(pendingExternalUrl, '_blank');
+                        inTavernMode = true;
+                        pendingExternalUrl = null;
+                        transitionPhase = 'tavern'; // Stay on black screen
+                        return;
                     }
                     executeMapTransition(pendingTransition);
                 }
@@ -13257,11 +13297,66 @@
 
         // Draw transition overlay
         function drawTransitionOverlay() {
-            if (transitionAlpha > 0) {
-                ctx.fillStyle = 'rgba(0, 0, 0, ' + transitionAlpha + ')';
+            if (transitionAlpha > 0 || inTavernMode) {
+                ctx.fillStyle = '#000';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Show tavern message when in tavern mode
+                if (inTavernMode) {
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 24px "Press Start 2P", monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText("YOU ARE IN THE TAVERN", canvas.width / 2, canvas.height / 2 - 30);
+                    ctx.font = '12px "Press Start 2P", monospace';
+                    ctx.fillStyle = '#888';
+                    ctx.fillText("( DO NOT CLOSE THIS TAB )", canvas.width / 2, canvas.height / 2 + 20);
+                    ctx.fillText("RETURN THROUGH THE BLUE DOOR", canvas.width / 2, canvas.height / 2 + 50);
+                }
             }
         }
+
+        // Listen for focus to detect return from tavern
+        window.addEventListener('focus', () => {
+            if (inTavernMode) {
+                // Check if tavern window was closed
+                if (!tavernWindow || tavernWindow.closed) {
+                    inTavernMode = false;
+
+                    // Spawn player at return point
+                    const returnInfoStr = localStorage.getItem('externalDoorReturn');
+                    if (returnInfoStr) {
+                        try {
+                            const returnInfo = JSON.parse(returnInfoStr);
+                            const tileSize = gridSize * TILE_SCALE;
+
+                            // Switch map if needed
+                            if (returnInfo.map && returnInfo.map !== currentGameMap) {
+                                currentGameMap = returnInfo.map;
+                                const mapData = mapsData[returnInfo.map];
+                                if (mapData) {
+                                    layers = mapData.layers || [];
+                                    triggers = mapData.triggers || [];
+                                }
+                            }
+
+                            // Move player to return position
+                            player.x = returnInfo.x * tileSize + tileSize / 2;
+                            player.y = returnInfo.y * tileSize + tileSize / 2;
+                            console.log('[TAVERN RETURN] Spawned at:', player.x, player.y);
+
+                            // Clear the return info
+                            localStorage.removeItem('externalDoorReturn');
+                        } catch (e) {
+                            console.error('[TAVERN RETURN] Error:', e);
+                        }
+                    }
+
+                    transitionPhase = 'fadeIn';
+                    transitionAlpha = 1;
+                }
+            }
+        });
 
         function draw() {
             ctx.fillStyle = '#1a1a2e';
@@ -13497,32 +13592,38 @@
                 }
             }
 
-            // DEBUG: Draw player position marker at player feet
-            ctx.fillStyle = '#f0f';
-            ctx.beginPath();
-            ctx.arc(player.x - camX, player.y - camY, 5, 0, Math.PI * 2);
-            ctx.fill();
+            // DEBUG: Draw player position marker at player feet (only when UI visible)
+            if (!uiHidden) {
+                ctx.fillStyle = '#f0f';
+                ctx.beginPath();
+                ctx.arc(player.x - camX, player.y - camY, 5, 0, Math.PI * 2);
+                ctx.fill();
+            }
 
             ctx.restore();
 
-            // DEBUG HUD: Show player position (drawn after ctx.restore so not affected by zoom)
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
-            ctx.fillRect(10, 10, 200, 50);
-            ctx.fillStyle = '#0ff';
-            ctx.font = 'bold 14px monospace';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-            ctx.fillText('PLAYER POS (for builder)', 15, 15);
-            ctx.fillStyle = '#ff0';
-            ctx.fillText('x:' + Math.round(player.x) + ' y:' + Math.round(player.y), 15, 35);
+            // DEBUG HUD: Show player position (only when UI visible)
+            if (!uiHidden) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(10, 10, 200, 50);
+                ctx.fillStyle = '#0ff';
+                ctx.font = 'bold 14px monospace';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText('PLAYER POS (for builder)', 15, 15);
+                ctx.fillStyle = '#ff0';
+                ctx.fillText('x:' + Math.round(player.x) + ' y:' + Math.round(player.y), 15, 35);
+            }
 
             // === LIGHTING OVERLAY (drawn after all game content) ===
             renderLighting();
 
-            // Debug info (drawn after restore so it's not zoomed)
-            ctx.fillStyle = '#fff';
-            ctx.font = '12px monospace';
-            ctx.fillText('Layers: ' + layers.length + ' | Tiles: ' + tilesDrawn + ' | Zoom: ' + cameraZoom.toFixed(1) + 'x', 10, canvas.height - 10);
+            // Debug info (drawn after restore so it's not zoomed, only when UI visible)
+            if (!uiHidden) {
+                ctx.fillStyle = '#fff';
+                ctx.font = '12px monospace';
+                ctx.fillText('Layers: ' + layers.length + ' | Tiles: ' + tilesDrawn + ' | Zoom: ' + cameraZoom.toFixed(1) + 'x', 10, canvas.height - 10);
+            }
 
             // Spawn and player position debug when collision is shown
             if (showCollision) {
@@ -13738,10 +13839,10 @@
                 });
             });
 
-            // Add other multiplayer players (only on same map)
+            // Add other multiplayer players (only on same map, not in tavern)
             otherPlayers.forEach((other, odId) => {
-                // Only show players on the same map
-                if (other.currentMap !== currentGameMap) return;
+                // Skip players in tavern or on different map
+                if (other.inTavern || other.currentMap !== currentGameMap) return;
 
                 const otherGridY = Math.floor((other.y + player.height) / (gridSize * TILE_SCALE));
                 entities.push({
