@@ -726,6 +726,48 @@
         </div>
     </div>
 
+    <!-- Farkle Prompt (shows when near table) -->
+    <div id="farklePrompt" style="display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); padding:10px 20px; border-radius:5px; z-index:100;">
+        <span style="color:#fc8;">Press E to play Farkle</span>
+    </div>
+
+    <!-- Farkle Table Placement Panel -->
+    <div id="farklePanel" style="display:none; position:fixed; top:10px; left:10px; background:rgba(60,30,0,0.95); padding:15px; border-radius:8px; border:2px solid #db8; max-width:280px; z-index:150;">
+        <h3 style="color:#fc8; margin:0 0 10px 0; font-size:14px;">FARKLE TABLE</h3>
+        <p style="color:#db8; font-size:11px; margin:0 0 10px 0;">WASD move, Q/E fly, Click to place</p>
+        <button onclick="cancelFarklePlacement()" style="padding:8px 15px; background:#a44; border:none; color:white; border-radius:4px; cursor:pointer;">Cancel</button>
+    </div>
+
+    <!-- Farkle Camera Panel -->
+    <div id="farkleCameraPanel" style="display:none; position:fixed; top:10px; left:10px; background:rgba(60,30,0,0.95); padding:15px; border-radius:8px; border:2px solid #db8; max-width:280px; z-index:150;">
+        <h3 style="color:#fc8; margin:0 0 10px 0; font-size:14px;">SET FARKLE CAMERA</h3>
+        <p style="color:#db8; font-size:11px; margin:0 0 10px 0;">WASD move, Q/E height, Click to set view</p>
+        <button onclick="cancelFarkleCamera()" style="padding:8px 15px; background:#a44; border:none; color:white; border-radius:4px; cursor:pointer;">Cancel</button>
+    </div>
+
+    <!-- Farkle UI Rotation Panel -->
+    <div id="farkleUIRotatePanel" style="display:none; position:fixed; top:10px; left:10px; background:rgba(60,30,0,0.95); padding:15px; border-radius:8px; border:2px solid #db8; max-width:280px; z-index:150;">
+        <h3 style="color:#fc8; margin:0 0 10px 0; font-size:14px;">UI ROTATION</h3>
+        <p style="color:#db8; font-size:11px; margin:0 0 10px 0;">Set which way the game UI faces</p>
+
+        <div style="margin-bottom:10px;">
+            <label style="color:#db8; font-size:11px;">Rotation: <span id="uiRotationVal">0</span>°</label>
+            <input type="range" id="uiRotationSlider" min="0" max="360" step="15" value="0" style="width:100%;">
+        </div>
+
+        <div style="display:flex; gap:5px; margin-bottom:12px;">
+            <button onclick="setUIRotation(0)" style="flex:1; padding:6px; background:#654; border:none; color:#fc8; border-radius:3px; cursor:pointer;">0°</button>
+            <button onclick="setUIRotation(90)" style="flex:1; padding:6px; background:#654; border:none; color:#fc8; border-radius:3px; cursor:pointer;">90°</button>
+            <button onclick="setUIRotation(180)" style="flex:1; padding:6px; background:#654; border:none; color:#fc8; border-radius:3px; cursor:pointer;">180°</button>
+            <button onclick="setUIRotation(270)" style="flex:1; padding:6px; background:#654; border:none; color:#fc8; border-radius:3px; cursor:pointer;">270°</button>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+            <button onclick="confirmUIRotation()" style="flex:1; padding:10px; background:#a84; border:none; color:white; border-radius:4px; cursor:pointer; font-weight:bold;">Confirm</button>
+            <button onclick="cancelUIRotation()" style="padding:10px 15px; background:#a44; border:none; color:white; border-radius:4px; cursor:pointer;">Cancel</button>
+        </div>
+    </div>
+
     <!-- Tavern Music -->
     <audio id="tavernMusic" loop preload="auto">
         <source src="8-bit-tavern-355302.mp3" type="audio/mpeg">
@@ -838,7 +880,72 @@
         let farkleGameActive = false;
         let farkleDice = []; // Array of {mesh, body, value, kept}
         let farklePhysicsBodies = []; // Physics bodies for dice tray
-        // FARKLE GAME LOGIC REMOVED - Awaiting multiplayer rewrite
+        let activeFarkleTable = null; // Currently active table for game
+
+        // Create 3D dice for Farkle game
+        function createFarkleDice(table) {
+            // Clear existing dice
+            for (const die of farkleDice) {
+                if (die.mesh) scene.remove(die.mesh);
+                if (die.body) physicsWorld.removeBody(die.body);
+            }
+            farkleDice = [];
+
+            const dieSize = 0.12;
+            const tableY = table.position.y + 0.15; // Above table surface
+
+            for (let i = 0; i < 6; i++) {
+                // Create die mesh (simple cube with rounded edges look)
+                const geometry = new THREE.BoxGeometry(dieSize, dieSize, dieSize);
+                const material = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    roughness: 0.3,
+                    metalness: 0.1
+                });
+                const mesh = new THREE.Mesh(geometry, material);
+
+                // Position in a row on the table
+                const offsetX = (i - 2.5) * 0.2;
+                mesh.position.set(
+                    table.position.x + offsetX,
+                    tableY,
+                    table.position.z
+                );
+                mesh.castShadow = true;
+                scene.add(mesh);
+
+                // Create physics body
+                const shape = new CANNON.Box(new CANNON.Vec3(dieSize/2, dieSize/2, dieSize/2));
+                const body = new CANNON.Body({
+                    mass: 0.1,
+                    shape: shape,
+                    position: new CANNON.Vec3(mesh.position.x, mesh.position.y, mesh.position.z),
+                    material: diceMaterial
+                });
+                body.linearDamping = 0.3;
+                body.angularDamping = 0.3;
+                physicsWorld.addBody(body);
+
+                farkleDice.push({
+                    mesh: mesh,
+                    body: body,
+                    value: 1,
+                    kept: false
+                });
+            }
+
+            console.log('[FARKLE] Created 6 dice at table position');
+        }
+
+        // Remove 3D dice
+        function removeFarkleDice() {
+            for (const die of farkleDice) {
+                if (die.mesh) scene.remove(die.mesh);
+                if (die.body) physicsWorld.removeBody(die.body);
+            }
+            farkleDice = [];
+            activeFarkleTable = null;
+        }
 
         // Camera - near plane at 0.05 to reduce clipping into objects
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
@@ -4385,12 +4492,19 @@
             farkleUIRotation = 0;
 
             // Show UI rotation panel
-            document.getElementById('farkleCameraPanel').style.display = 'none';
-            document.getElementById('farkleUIRotatePanel').style.display = 'block';
-            document.getElementById('uiRotationSlider').value = 0;
-            document.getElementById('uiRotationVal').textContent = '0';
-            document.getElementById('modeIndicator').textContent = 'Adjust UI orientation - use slider or buttons';
-            document.getElementById('modeIndicator').style.color = '#a8f';
+            const farkleCamPanel = document.getElementById('farkleCameraPanel');
+            if (farkleCamPanel) farkleCamPanel.style.display = 'none';
+            const farkleUIPanel = document.getElementById('farkleUIRotatePanel');
+            if (farkleUIPanel) farkleUIPanel.style.display = 'block';
+            const uiRotSlider = document.getElementById('uiRotationSlider');
+            if (uiRotSlider) uiRotSlider.value = 0;
+            const uiRotVal = document.getElementById('uiRotationVal');
+            if (uiRotVal) uiRotVal.textContent = '0';
+            const modeInd = document.getElementById('modeIndicator');
+            if (modeInd) {
+                modeInd.textContent = 'Adjust UI orientation - use slider or buttons';
+                modeInd.style.color = '#a8f';
+            }
 
             // Create preview UI on table
             createUIPreview();
@@ -4467,8 +4581,10 @@
         // Set UI rotation from buttons or slider
         window.setUIRotation = function(degrees) {
             farkleUIRotation = degrees;
-            document.getElementById('uiRotationSlider').value = degrees;
-            document.getElementById('uiRotationVal').textContent = degrees;
+            const uiRotSlider = document.getElementById('uiRotationSlider');
+            if (uiRotSlider) uiRotSlider.value = degrees;
+            const uiRotValEl = document.getElementById('uiRotationVal');
+            if (uiRotValEl) uiRotValEl.textContent = degrees;
             createUIPreview();
         };
 
@@ -4483,6 +4599,19 @@
             farkleTables.push(pendingFarkleTable);
             const tableIndex = farkleTables.length;
 
+            // Broadcast table to other players
+            if (multiplayerWs && multiplayerWs.readyState === WebSocket.OPEN) {
+                multiplayerWs.send(JSON.stringify({
+                    type: 'farkle_table_placed',
+                    position: { x: pendingFarkleTable.position.x, y: pendingFarkleTable.position.y, z: pendingFarkleTable.position.z },
+                    rotation: pendingFarkleTable.rotation,
+                    uiRotation: pendingFarkleTable.uiRotation,
+                    cameraPos: pendingFarkleTable.cameraPos ? { x: pendingFarkleTable.cameraPos.x, y: pendingFarkleTable.cameraPos.y, z: pendingFarkleTable.cameraPos.z } : null,
+                    cameraRot: pendingFarkleTable.cameraRot ? { x: pendingFarkleTable.cameraRot.x, y: pendingFarkleTable.cameraRot.y, z: pendingFarkleTable.cameraRot.z } : null
+                }));
+                console.log('[FARKLE] Broadcasted table placement to other players');
+            }
+
             // Generate and copy table info
             copyFarkleTableInfo(pendingFarkleTable, tableIndex);
 
@@ -4490,17 +4619,23 @@
             clearUIPreview();
             pendingFarkleTable = null;
 
-            // Update counter
-            document.getElementById('farkleTableCount').textContent = farkleTables.length;
+            // Update counter (if element exists)
+            const tableCountEl = document.getElementById('farkleTableCount');
+            if (tableCountEl) tableCountEl.textContent = farkleTables.length;
 
             // Exit UI rotation mode
             farkleUIRotateMode = false;
 
             // Show main UI
-            document.getElementById('farkleUIRotatePanel').style.display = 'none';
-            document.getElementById('info').style.display = 'block';
-            document.getElementById('modeIndicator').textContent = 'Click to enable mouse look';
-            document.getElementById('modeIndicator').style.color = '#4af';
+            const farkleUIRotPanelEl = document.getElementById('farkleUIRotatePanel');
+            if (farkleUIRotPanelEl) farkleUIRotPanelEl.style.display = 'none';
+            const infoEl = document.getElementById('info');
+            if (infoEl) infoEl.style.display = 'block';
+            const modeIndEl = document.getElementById('modeIndicator');
+            if (modeIndEl) {
+                modeIndEl.textContent = 'Click to enable mouse look';
+                modeIndEl.style.color = '#4af';
+            }
             document.exitPointerLock();
 
             console.log('[FARKLE] Table #' + tableIndex + ' placed with UI rotation:', farkleUIRotation);
@@ -4517,10 +4652,15 @@
 
             farkleUIRotateMode = false;
 
-            document.getElementById('farkleUIRotatePanel').style.display = 'none';
-            document.getElementById('info').style.display = 'block';
-            document.getElementById('modeIndicator').textContent = 'Click to enable mouse look';
-            document.getElementById('modeIndicator').style.color = '#4af';
+            const farkleUIRotPanelEl2 = document.getElementById('farkleUIRotatePanel');
+            if (farkleUIRotPanelEl2) farkleUIRotPanelEl2.style.display = 'none';
+            const infoEl2 = document.getElementById('info');
+            if (infoEl2) infoEl2.style.display = 'block';
+            const modeIndEl2 = document.getElementById('modeIndicator');
+            if (modeIndEl2) {
+                modeIndEl2.textContent = 'Click to enable mouse look';
+                modeIndEl2.style.color = '#4af';
+            }
             document.exitPointerLock();
 
             console.log('[FARKLE] UI rotation cancelled');
@@ -5008,6 +5148,12 @@
                 case 'farkle_error':
                     console.log('[FARKLE] Error from server:', data.error);
                     break;
+
+                case 'farkle_table_placed':
+                    // Another player placed a Farkle table - create it locally
+                    console.log('[FARKLE] Received table from another player:', data);
+                    createRemoteFarkleTable(data);
+                    break;
             }
         }
 
@@ -5343,82 +5489,101 @@
             document.getElementById('rdYOffsetVal').textContent = returnDoorYOffset.toFixed(1);
         });
 
-        // Farkle rotation slider
-        document.getElementById('farkleRotationSlider').addEventListener('input', (e) => {
-            farkleRotationY = parseFloat(e.target.value);
-            document.getElementById('farkleRotationVal').textContent = farkleRotationY;
-        });
+        // Farkle rotation slider (if exists)
+        const farkleRotSlider = document.getElementById('farkleRotationSlider');
+        if (farkleRotSlider) {
+            farkleRotSlider.addEventListener('input', (e) => {
+                farkleRotationY = parseFloat(e.target.value);
+                document.getElementById('farkleRotationVal').textContent = farkleRotationY;
+            });
+        }
 
-        // Leg height slider
-        document.getElementById('legHeightSlider').addEventListener('input', (e) => {
-            tableLegHeight = parseFloat(e.target.value);
-            document.getElementById('legHeightVal').textContent = tableLegHeight.toFixed(2);
-            // Auto-update felt height to match table top
-            feltHeightOffset = tableLegHeight + 0.12; // legHeight + tableTopThickness + felt offset
-            document.getElementById('feltHeightSlider').value = feltHeightOffset;
-            document.getElementById('feltHeightVal').textContent = feltHeightOffset.toFixed(2);
-            // Update preview table if it exists
-            if (farklePreview) {
-                scene.remove(farklePreview);
-                farklePreview = createDiceBoxMesh(true);
-                farklePreview.position.copy(farkleBasePosition);
-                farklePreview.rotation.y = farkleRotationY * Math.PI / 180;
-                scene.add(farklePreview);
-            }
-        });
+        // Leg height slider (if exists)
+        const legHeightSlider = document.getElementById('legHeightSlider');
+        if (legHeightSlider) {
+            legHeightSlider.addEventListener('input', (e) => {
+                tableLegHeight = parseFloat(e.target.value);
+                const legHeightVal = document.getElementById('legHeightVal');
+                if (legHeightVal) legHeightVal.textContent = tableLegHeight.toFixed(2);
+                feltHeightOffset = tableLegHeight + 0.12;
+                const feltHeightSlider = document.getElementById('feltHeightSlider');
+                const feltHeightVal = document.getElementById('feltHeightVal');
+                if (feltHeightSlider) feltHeightSlider.value = feltHeightOffset;
+                if (feltHeightVal) feltHeightVal.textContent = feltHeightOffset.toFixed(2);
+                if (farklePreview) {
+                    scene.remove(farklePreview);
+                    farklePreview = createDiceBoxMesh(true);
+                    farklePreview.position.copy(farkleBasePosition);
+                    farklePreview.rotation.y = farkleRotationY * Math.PI / 180;
+                    scene.add(farklePreview);
+                }
+            });
+        }
 
-        // Felt height slider
-        document.getElementById('feltHeightSlider').addEventListener('input', (e) => {
-            feltHeightOffset = parseFloat(e.target.value);
-            document.getElementById('feltHeightVal').textContent = feltHeightOffset.toFixed(2);
-            // Update preview table if it exists
-            if (farklePreview) {
-                scene.remove(farklePreview);
-                farklePreview = createDiceBoxMesh(true);
-                farklePreview.position.copy(farkleBasePosition);
-                farklePreview.rotation.y = farkleRotationY * Math.PI / 180;
-                scene.add(farklePreview);
-            }
-        });
+        // Felt height slider (if exists)
+        const feltHeightSliderEl = document.getElementById('feltHeightSlider');
+        if (feltHeightSliderEl) {
+            feltHeightSliderEl.addEventListener('input', (e) => {
+                feltHeightOffset = parseFloat(e.target.value);
+                const feltHeightVal = document.getElementById('feltHeightVal');
+                if (feltHeightVal) feltHeightVal.textContent = feltHeightOffset.toFixed(2);
+                if (farklePreview) {
+                    scene.remove(farklePreview);
+                    farklePreview = createDiceBoxMesh(true);
+                    farklePreview.position.copy(farkleBasePosition);
+                    farklePreview.rotation.y = farkleRotationY * Math.PI / 180;
+                    scene.add(farklePreview);
+                }
+            });
+        }
 
-        // Felt color picker
-        document.getElementById('feltColorPicker').addEventListener('input', (e) => {
-            const hexColor = e.target.value;
-            document.getElementById('feltColorVal').textContent = hexColor;
-            feltColor = parseInt(hexColor.replace('#', ''), 16);
-            // Update preview table if it exists
-            if (farklePreview) {
-                scene.remove(farklePreview);
-                farklePreview = createDiceBoxMesh(true);
-                farklePreview.position.copy(farkleBasePosition);
-                farklePreview.rotation.y = farkleRotationY * Math.PI / 180;
-                scene.add(farklePreview);
-            }
-        });
+        // Felt color picker (if exists)
+        const feltColorPicker = document.getElementById('feltColorPicker');
+        if (feltColorPicker) {
+            feltColorPicker.addEventListener('input', (e) => {
+                const hexColor = e.target.value;
+                const feltColorVal = document.getElementById('feltColorVal');
+                if (feltColorVal) feltColorVal.textContent = hexColor;
+                feltColor = parseInt(hexColor.replace('#', ''), 16);
+                if (farklePreview) {
+                    scene.remove(farklePreview);
+                    farklePreview = createDiceBoxMesh(true);
+                    farklePreview.position.copy(farkleBasePosition);
+                    farklePreview.rotation.y = farkleRotationY * Math.PI / 180;
+                    scene.add(farklePreview);
+                }
+            });
+        }
 
-        // Felt emissive slider
-        document.getElementById('feltEmissiveSlider').addEventListener('input', (e) => {
-            feltEmissive = parseFloat(e.target.value);
-            document.getElementById('feltEmissiveVal').textContent = feltEmissive.toFixed(1);
-            // Update preview table if it exists
-            if (farklePreview) {
-                scene.remove(farklePreview);
-                farklePreview = createDiceBoxMesh(true);
-                farklePreview.position.copy(farkleBasePosition);
-                farklePreview.rotation.y = farkleRotationY * Math.PI / 180;
-                scene.add(farklePreview);
-            }
-        });
+        // Felt emissive slider (if exists)
+        const feltEmissiveSlider = document.getElementById('feltEmissiveSlider');
+        if (feltEmissiveSlider) {
+            feltEmissiveSlider.addEventListener('input', (e) => {
+                feltEmissive = parseFloat(e.target.value);
+                const feltEmissiveVal = document.getElementById('feltEmissiveVal');
+                if (feltEmissiveVal) feltEmissiveVal.textContent = feltEmissive.toFixed(1);
+                if (farklePreview) {
+                    scene.remove(farklePreview);
+                    farklePreview = createDiceBoxMesh(true);
+                    farklePreview.position.copy(farkleBasePosition);
+                    farklePreview.rotation.y = farkleRotationY * Math.PI / 180;
+                    scene.add(farklePreview);
+                }
+            });
+        }
 
-        // UI rotation slider
-        document.getElementById('uiRotationSlider').addEventListener('input', (e) => {
-            farkleUIRotation = parseInt(e.target.value);
-            document.getElementById('uiRotationVal').textContent = farkleUIRotation;
-            // Update preview UI
-            if (farkleUIRotateMode) {
-                createUIPreview();
-            }
-        });
+        // UI rotation slider (if exists)
+        const uiRotationSlider = document.getElementById('uiRotationSlider');
+        if (uiRotationSlider) {
+            uiRotationSlider.addEventListener('input', (e) => {
+                farkleUIRotation = parseInt(e.target.value);
+                const uiRotationVal = document.getElementById('uiRotationVal');
+                if (uiRotationVal) uiRotationVal.textContent = farkleUIRotation;
+                if (farkleUIRotateMode) {
+                    createUIPreview();
+                }
+            });
+        }
 
         // ============================================
         // FARKLE DICE GAME
@@ -5864,18 +6029,9 @@
             pendingFarkleTableForMode = null;
         };
 
-        // FARKLE GAME REMOVED - Stub function
-        window.startFarkleGame = function(table) {
-            console.log('[FARKLE] Game logic removed - awaiting rewrite');
-        };
-
-        // FARKLE GAME LOGIC REMOVED - Stubs to prevent errors
-        function canCurrentPlayerAct() { return false; }
-        window.rollFarkleDice = function() {};
+        // Farkle game logic is now in the multiplayer client section below
         let diceSettled = false;
         let farkleControlsVisible = false;
-        window.toggleFarkleControls = function() {};
-        window.exitFarkleGame = function() {};
 
         // Check if player is near a Farkle table
         function checkNearFarkleTable() {
@@ -6012,38 +6168,49 @@
         }
 
         // Host starts the game
-        function startFarkleGame() {
+        window.startFarkleGame = function() {
             sendFarkleAction('start');
-        }
+        };
 
         // Roll dice (when it's your turn)
-        function rollFarkleDice() {
+        window.rollFarkleDice = function() {
             if (!isMyFarkleTurn()) {
                 console.log('[FARKLE] Not your turn');
                 return;
             }
             sendFarkleAction('roll');
-        }
+        };
 
         // Confirm held dice selection
-        function confirmFarkleHold() {
+        window.confirmFarkleHold = function() {
             if (!isMyFarkleTurn()) return;
             if (farkleState.phase !== 'selecting') return;
 
             // Send preview selection to server
             sendFarkleAction('hold', { held: farklePreviewHeld });
-        }
+        };
 
         // Bank points
-        function bankFarklePoints() {
+        window.bankFarklePoints = function() {
             if (!isMyFarkleTurn()) return;
             sendFarkleAction('bank');
-        }
+        };
+
+        // Toggle die selection (preview before confirming)
+        window.toggleFarkleDie = function(index) {
+            if (!isMyFarkleTurn() || farkleState.phase !== 'selecting') return;
+            if (farkleState.held[index]) return; // Can't unhold already held dice
+
+            farklePreviewHeld[index] = !farklePreviewHeld[index];
+            updateFarkleUI();
+            console.log('[FARKLE] Toggled die', index, '- preview:', farklePreviewHeld);
+        };
 
         // Leave the table
-        function leaveFarkleTable() {
+        window.leaveFarkleTable = function() {
             sendFarkleAction('leave');
             farkleGameActive = false;
+            removeFarkleDice();
             farkleState.tableId = null;
             updateFarkleUI();
         }
@@ -6110,6 +6277,9 @@
             farkleState.version = data.version || 0;
             farkleState.hostId = data.hostId;
 
+            // Activate game mode when we have a valid game
+            farkleGameActive = true;
+
             // Reset preview to match server state
             farklePreviewHeld = [...farkleState.held];
 
@@ -6139,12 +6309,12 @@
 
         // Update Farkle UI display
         function updateFarkleUI() {
-            // Get or create Farkle UI panel
-            let panel = document.getElementById('farklePanel');
+            // Get or create Farkle GAME UI panel (separate from placement panel)
+            let panel = document.getElementById('farkleGamePanel');
             if (!panel) {
                 panel = document.createElement('div');
-                panel.id = 'farklePanel';
-                panel.style.cssText = 'position:fixed;top:50%;right:20px;transform:translateY(-50%);background:rgba(0,0,0,0.85);padding:20px;border-radius:10px;color:white;font-family:monospace;min-width:250px;z-index:1000;display:none;';
+                panel.id = 'farkleGamePanel';
+                panel.style.cssText = 'position:fixed;top:50%;right:20px;transform:translateY(-50%);background:rgba(40,20,0,0.95);padding:20px;border-radius:10px;border:2px solid #fc8;color:white;font-family:monospace;min-width:280px;z-index:1000;display:none;';
                 document.body.appendChild(panel);
             }
 
@@ -6167,14 +6337,16 @@
             html += `Turn Score: <strong style="color:#44ff88;">${farkleState.turnScore}</strong>`;
             html += `</div>`;
 
-            // Dice display
+            // Dice display (clickable during selection phase)
             html += `<div style="margin-bottom:10px;">Dice: `;
             for (let i = 0; i < 6; i++) {
                 const val = farkleState.dice[i];
                 const held = farkleState.held[i];
                 const preview = farklePreviewHeld[i];
-                const style = held ? 'background:#004400;' : (preview ? 'background:#444400;' : 'background:#333;');
-                html += `<span style="display:inline-block;width:25px;height:25px;line-height:25px;text-align:center;margin:2px;border-radius:4px;${style}">${val}</span>`;
+                const canClick = isMyTurn && farkleState.phase === 'selecting' && !held;
+                const style = held ? 'background:#004400;cursor:not-allowed;' : (preview ? 'background:#444400;cursor:pointer;' : 'background:#333;cursor:pointer;');
+                const onclick = canClick ? `onclick="toggleFarkleDie(${i})"` : '';
+                html += `<span ${onclick} style="display:inline-block;width:30px;height:30px;line-height:30px;text-align:center;margin:2px;border-radius:4px;font-weight:bold;${style}">${val}</span>`;
             }
             html += `</div>`;
 
@@ -6227,6 +6399,11 @@
             // Generate table ID from position (unique per table)
             const tableId = `farkle_${Math.round(table.position.x)}_${Math.round(table.position.z)}`;
             console.log('[FARKLE] Joining table:', tableId);
+
+            // Store active table and create dice
+            activeFarkleTable = table;
+            createFarkleDice(table);
+
             joinFarkleTable(tableId);
         }
 
@@ -6236,8 +6413,7 @@
         function selectPrevDie() {}
         function selectNextDie() {}
         function toggleSelectedDieKept() {}
-        let farkleRolled = false;
-        let diceSettled = false;
+        // farkleRolled and diceSettled already declared earlier
 
         // Check dice settled state in animate loop
         let diceSettleCheckTimer = 0;
@@ -6572,11 +6748,14 @@
             }
 
             // Show/hide Farkle prompt when near table
-            if (!farkleGameActive && !farklePlaceMode) {
-                const nearTable = checkNearFarkleTable();
-                document.getElementById('farklePrompt').style.display = nearTable ? 'block' : 'none';
-            } else {
-                document.getElementById('farklePrompt').style.display = 'none';
+            const farklePromptEl = document.getElementById('farklePrompt');
+            if (farklePromptEl) {
+                if (!farkleGameActive && !farklePlaceMode) {
+                    const nearTable = checkNearFarkleTable();
+                    farklePromptEl.style.display = nearTable ? 'block' : 'none';
+                } else {
+                    farklePromptEl.style.display = 'none';
+                }
             }
 
             // Update return door preview position via raycast
@@ -6600,11 +6779,14 @@
             }
 
             // Show/hide return door prompt
-            if (!settingReturnDoor && !farkleGameActive) {
-                const nearDoor = checkNearReturnDoor();
-                document.getElementById('returnDoorPrompt').style.display = nearDoor ? 'block' : 'none';
-            } else {
-                document.getElementById('returnDoorPrompt').style.display = 'none';
+            const returnDoorPromptEl = document.getElementById('returnDoorPrompt');
+            if (returnDoorPromptEl) {
+                if (!settingReturnDoor && !farkleGameActive) {
+                    const nearDoor = checkNearReturnDoor();
+                    returnDoorPromptEl.style.display = nearDoor ? 'block' : 'none';
+                } else {
+                    returnDoorPromptEl.style.display = 'none';
+                }
             }
 
             // Update player body position
@@ -6622,19 +6804,22 @@
 
             // Update position display
             const pos = camera.position;
-            document.getElementById('posDisplay').textContent =
-                `${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}`;
-            document.getElementById('heightDisplay').textContent = pos.y.toFixed(2);
+            const posDisplayEl = document.getElementById('posDisplay');
+            if (posDisplayEl) posDisplayEl.textContent = `${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}`;
+            const heightDisplayEl = document.getElementById('heightDisplay');
+            if (heightDisplayEl) heightDisplayEl.textContent = pos.y.toFixed(2);
 
-            document.getElementById('lookDisplay').textContent =
-                `${(yaw * 180 / Math.PI).toFixed(1)}°, ${(pitch * 180 / Math.PI).toFixed(1)}°`;
+            const lookDisplayEl = document.getElementById('lookDisplay');
+            if (lookDisplayEl) lookDisplayEl.textContent = `${(yaw * 180 / Math.PI).toFixed(1)}°, ${(pitch * 180 / Math.PI).toFixed(1)}°`;
             const groundedEl = document.getElementById('groundedDisplay');
-            if (isGrounded) {
-                groundedEl.textContent = 'GROUNDED';
-                groundedEl.style.color = '#4f8';
-            } else {
-                groundedEl.textContent = 'FALLING';
-                groundedEl.style.color = '#f44';
+            if (groundedEl) {
+                if (isGrounded) {
+                    groundedEl.textContent = 'GROUNDED';
+                    groundedEl.style.color = '#4f8';
+                } else {
+                    groundedEl.textContent = 'FALLING';
+                    groundedEl.style.color = '#f44';
+                }
             }
 
             renderer.render(scene, camera);
@@ -6643,21 +6828,34 @@
         // ============================================
         // SAVED FARKLE TABLES - Auto-load on startup
         // ============================================
-        const savedFarkleTables = [
-            { // Table #1 - Upper floor purple table
-                position: new THREE.Vector3(6.282, 1.723, 17.696),
-                rotation: 90,
-                uiRotation: 0,
-                cameraPos: new THREE.Vector3(5.927, 4.591, 17.700),
-                cameraRot: new THREE.Euler(-1.5568, -0.1875, -1.4959),
-                feltSurfaceY: 1.070,
-                config: {
-                    legHeight: 0.95,
-                    feltColor: 0x551653,
-                    feltEmissive: 0.8
-                }
-            }
-        ];
+        // No pre-saved tables - players place their own
+        const savedFarkleTables = [];
+
+        // Create a Farkle table from remote player data
+        function createRemoteFarkleTable(data) {
+            // Create the table mesh
+            const tableMesh = createDiceBoxMesh(false);
+            tableMesh.position.set(data.position.x, data.position.y, data.position.z);
+            tableMesh.rotation.y = data.rotation * Math.PI / 180;
+            scene.add(tableMesh);
+
+            // Create the table object
+            const table = {
+                mesh: tableMesh,
+                position: new THREE.Vector3(data.position.x, data.position.y, data.position.z),
+                rotation: data.rotation,
+                uiRotation: data.uiRotation || 0,
+                cameraPos: data.cameraPos ? new THREE.Vector3(data.cameraPos.x, data.cameraPos.y, data.cameraPos.z) : null,
+                cameraRot: data.cameraRot ? new THREE.Euler(data.cameraRot.x, data.cameraRot.y, data.cameraRot.z) : null
+            };
+
+            farkleTables.push(table);
+            console.log('[FARKLE] Created remote table at', table.position);
+
+            // Update counter if exists
+            const tableCountEl = document.getElementById('farkleTableCount');
+            if (tableCountEl) tableCountEl.textContent = farkleTables.length;
+        }
 
         // Load saved Farkle tables
         function loadSavedFarkleTables() {
@@ -6689,8 +6887,9 @@
                 console.log('[FARKLE] Loaded saved table at', tableData.position);
             }
 
-            // Update counter
-            document.getElementById('farkleTableCount').textContent = farkleTables.length;
+            // Update counter (if element exists)
+            const tableCountEl = document.getElementById('farkleTableCount');
+            if (tableCountEl) tableCountEl.textContent = farkleTables.length;
 
             // Reset config to defaults
             tableLegHeight = 0.95;

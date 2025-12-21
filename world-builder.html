@@ -427,6 +427,23 @@
 
         .anim-frame-thumb:hover { border-color: #fff; }
 
+        /* Dialog page button styles */
+        .dialog-page {
+            padding: 8px 12px;
+            background: #333;
+            border: 2px solid #555;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #aaa;
+        }
+        .dialog-page:hover { border-color: #888; }
+        .dialog-page.active {
+            background: #484;
+            border-color: #6a6;
+            color: #fff;
+        }
+
         .anim-frame-thumb .frame-num {
             position: absolute;
             bottom: 2px;
@@ -688,6 +705,11 @@
                     > LOAD SAVE
                 </button>
             </div>
+            <div>
+                <button class="retro-btn" onclick="showDirectJoinPrompt()" style="background:#226;">
+                    > JOIN ROOM
+                </button>
+            </div>
             <p class="blink" style="margin-top:20px; font-size:8px; color:#fff;">
                 SELECT OPTION
             </p>
@@ -725,24 +747,83 @@
             </div>
         </div>
         <div class="load-box" id="craftMultiplayerPrompt" style="display:none;">
-            <h1>CO-OP<br>BUILD</h1>
-            <p>- OPTIONAL -</p>
+            <h1>BUILD MODE</h1>
+            <p style="font-size:7px; color:#888;">CHOOSE HOW TO BUILD</p>
+            <div style="margin-top:20px;">
+                <button class="retro-btn" onclick="startCraftSolo()" style="width:200px;">
+                    > SOLO
+                </button>
+                <p style="font-size:6px; color:#666; margin:5px 0 15px 0;">BUILD ALONE</p>
+            </div>
+            <div>
+                <button class="retro-btn" onclick="showHostPrompt()" style="width:200px;">
+                    > HOST ROOM
+                </button>
+                <p style="font-size:6px; color:#666; margin:5px 0 15px 0;">OTHERS JOIN YOU</p>
+            </div>
+            <div>
+                <button class="retro-btn" onclick="showJoinPrompt()" style="width:200px;">
+                    > JOIN ROOM
+                </button>
+                <p style="font-size:6px; color:#666; margin:5px 0 15px 0;">JOIN SOMEONE ELSE</p>
+            </div>
+            <div style="margin-top:10px;">
+                <button class="retro-btn" onclick="hideCraftMultiplayerPrompt()" style="font-size:8px;">
+                    > BACK
+                </button>
+            </div>
+        </div>
+        <!-- HOST ROOM PROMPT -->
+        <div class="load-box" id="hostRoomPrompt" style="display:none;">
+            <h1>HOST ROOM</h1>
+            <p style="font-size:7px; color:#888;">YOUR PROJECT = THE MAP</p>
             <div style="margin-top:15px;">
-                <input type="text" id="craftPlayerName" placeholder="YOUR NAME" maxlength="12"
+                <input type="text" id="hostPlayerName" placeholder="YOUR NAME" maxlength="12"
                     style="font-family:'Press Start 2P',monospace; font-size:10px; padding:10px; width:180px; text-align:center; background:#111; color:#fff; border:2px solid #fff;">
             </div>
             <div style="margin-top:10px;">
-                <input type="text" id="craftRoomCode" placeholder="ROOM CODE" maxlength="12"
+                <input type="text" id="hostRoomCode" placeholder="ROOM CODE" maxlength="12"
                     style="font-family:'Press Start 2P',monospace; font-size:10px; padding:10px; width:180px; text-align:center; background:#111; color:#fff; border:2px solid #fff;">
             </div>
-            <p style="font-size:6px; color:#666; margin-top:8px;">LEAVE BLANK FOR SOLO</p>
+            <p style="font-size:6px; color:#666; margin-top:5px;">SHARE THIS CODE WITH FRIENDS</p>
             <div style="margin-top:15px;">
-                <button class="retro-btn" onclick="startCraft()">
-                    > BUILD
+                <button class="retro-btn" onclick="startCraftHost()">
+                    > CREATE
                 </button>
             </div>
             <div>
-                <button class="retro-btn" onclick="hideCraftMultiplayerPrompt()" style="font-size:8px;">
+                <button class="retro-btn" onclick="hideHostPrompt()" style="font-size:8px;">
+                    > BACK
+                </button>
+            </div>
+        </div>
+        <!-- JOIN ROOM PROMPT -->
+        <div class="load-box" id="joinRoomPrompt" style="display:none;">
+            <h1>JOIN ROOM</h1>
+            <p style="font-size:7px; color:#888;">LOAD SAME SAVE AS HOST</p>
+            <div style="margin-top:15px;">
+                <button class="retro-btn" onclick="document.getElementById('joinSaveFileInput').click()" style="font-size:8px; background:#2a7;">
+                    > LOAD SAVE FILE
+                </button>
+                <input type="file" id="joinSaveFileInput" accept=".json" style="display:none;" onchange="handleJoinSaveFile(event)">
+                <p id="joinSaveStatus" style="font-size:6px; color:#888; margin-top:5px;">No file loaded</p>
+            </div>
+            <div style="margin-top:10px;">
+                <input type="text" id="joinPlayerName" placeholder="YOUR NAME" maxlength="12"
+                    style="font-family:'Press Start 2P',monospace; font-size:10px; padding:10px; width:180px; text-align:center; background:#111; color:#fff; border:2px solid #fff;">
+            </div>
+            <div style="margin-top:10px;">
+                <input type="text" id="joinRoomCode" placeholder="ROOM CODE" maxlength="12"
+                    style="font-family:'Press Start 2P',monospace; font-size:10px; padding:10px; width:180px; text-align:center; background:#111; color:#fff; border:2px solid #fff;">
+            </div>
+            <p style="font-size:6px; color:#666; margin-top:5px;">ENTER HOST'S ROOM CODE</p>
+            <div style="margin-top:15px;">
+                <button class="retro-btn" onclick="startCraftJoin()">
+                    > JOIN
+                </button>
+            </div>
+            <div>
+                <button class="retro-btn" onclick="hideJoinPrompt()" style="font-size:8px;">
                     > BACK
                 </button>
             </div>
@@ -873,6 +954,7 @@
                 <button id="lightingMode" onclick="setMode('lighting')">Lights</button>
                 <button id="triggerMode" onclick="setMode('trigger')">Triggers</button>
                 <button id="cameraMode" onclick="setMode('camera')">Camera</button>
+                <button id="dialogMode" onclick="setMode('dialog')">Dialogs</button>
             </div>
 
             <!-- TILE MODE -->
@@ -1299,6 +1381,39 @@
                     </ol>
                 </div>
             </div>
+
+            <!-- DIALOG MODE -->
+            <div id="dialogModeContent" style="display:none;">
+                <h3>Dialog System</h3>
+
+                <!-- Dialog List -->
+                <div style="background:#1a2a3a; padding:10px; border-radius:4px; margin-bottom:15px;">
+                    <label style="font-size:11px; color:#aaa; display:block; margin-bottom:8px;">Your Dialogs:</label>
+                    <div id="dialogList" style="max-height:150px; overflow-y:auto; margin-bottom:10px;">
+                        <div style="color:#666; font-size:12px; text-align:center; padding:20px;">No dialogs created yet</div>
+                    </div>
+                    <button onclick="openDialogEditor(-1)" style="width:100%; padding:8px; background:#484;">+ New Dialog</button>
+                </div>
+
+                <!-- Quick Instructions -->
+                <div style="background:#222; padding:12px; border-radius:4px; margin-bottom:15px;">
+                    <p style="font-size:11px; color:#aaa; line-height:1.6; margin:0;">
+                        Create dialogs here, then attach them to <b style="color:#88f;">NPCs</b> or <b style="color:#fa0;">Triggers</b> to use them in your game.
+                    </p>
+                </div>
+
+                <!-- Attach to NPC Section -->
+                <div style="background:#1a1a2e; padding:12px; border-radius:4px;">
+                    <h4 style="margin:0 0 10px 0; color:#88f;">Attach to NPC</h4>
+                    <select id="dialogNpcSelect" style="width:100%; padding:6px; margin-bottom:8px;">
+                        <option value="">Select an NPC...</option>
+                    </select>
+                    <select id="dialogToAttach" style="width:100%; padding:6px; margin-bottom:8px;">
+                        <option value="">Select a dialog...</option>
+                    </select>
+                    <button onclick="attachDialogToNpc()" style="width:100%; padding:8px; background:#448;">Attach Dialog</button>
+                </div>
+            </div>
         </div>
 
         <div class="resize-handle" id="sidebarResize"></div>
@@ -1312,6 +1427,7 @@
                 <button onclick="exportConfig()">Export</button>
                 <button onclick="showStorageInfo()" style="background:#666;" title="Show storage usage">💾 Info</button>
                 <button onclick="testMap()" style="background:#e74c3c;">Test Map</button>
+                <button onclick="showRoomInfo()" style="background:#2980b9;">Room Info</button>
                 <button id="grabToolBtn" onclick="toggleGrabTool()" style="background:#555;">✋ Grab</button>
                 <div class="zoom-controls">
                     <button onclick="zoomOut()">-</button>
@@ -1469,6 +1585,114 @@
                         </div>
                     </div>
                     <div class="anim-frames-list" id="npcFramesList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dialog Editor Modal -->
+    <div class="anim-modal" id="dialogModal">
+        <div class="anim-modal-content" style="width:700px; max-width:95vw;">
+            <div style="display:flex; gap:20px; height:100%;">
+                <!-- Left: Controls -->
+                <div style="flex:0 0 280px; background:#1a1a2e; padding:15px; border-radius:8px; overflow-y:auto;">
+                    <h2 style="margin-top:0; color:#88f;">Dialog Editor</h2>
+
+                    <!-- Dialog Name -->
+                    <div style="margin-bottom:15px;">
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Dialog Name:</label>
+                        <input type="text" id="dialogNameInput" placeholder="e.g. villager_greeting" style="width:100%; padding:8px;">
+                    </div>
+
+                    <!-- Style Selection -->
+                    <div style="margin-bottom:15px;">
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Style:</label>
+                        <select id="dialogStyleSelect" style="width:100%; padding:8px;" onchange="updateDialogPreview()">
+                            <option value="1">Classic NES</option>
+                            <option value="2">Final Fantasy</option>
+                            <option value="3">Pokemon</option>
+                            <option value="4">Earthbound</option>
+                            <option value="5">Chrono Trigger</option>
+                            <option value="6">Modern Pixel</option>
+                        </select>
+                    </div>
+
+                    <!-- Colors -->
+                    <div style="margin-bottom:15px;">
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Colors:</label>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <div>
+                                <label style="font-size:10px; color:#666;">Background</label>
+                                <input type="color" id="dialogBgColor" value="#000000" style="width:100%; height:30px;" onchange="updateDialogPreview()">
+                            </div>
+                            <div>
+                                <label style="font-size:10px; color:#666;">Border</label>
+                                <input type="color" id="dialogBorderColor" value="#ffffff" style="width:100%; height:30px;" onchange="updateDialogPreview()">
+                            </div>
+                            <div>
+                                <label style="font-size:10px; color:#666;">Text</label>
+                                <input type="color" id="dialogTextColor" value="#ffffff" style="width:100%; height:30px;" onchange="updateDialogPreview()">
+                            </div>
+                            <div>
+                                <label style="font-size:10px; color:#666;">Accent</label>
+                                <input type="color" id="dialogAccentColor" value="#ffffff" style="width:100%; height:30px;" onchange="updateDialogPreview()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Size -->
+                    <div style="margin-bottom:15px;">
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Size:</label>
+                        <div style="display:flex; gap:8px;">
+                            <div style="flex:1;">
+                                <label style="font-size:10px; color:#666;">Width</label>
+                                <input type="number" id="dialogWidth" value="280" min="100" max="500" style="width:100%; padding:4px;" onchange="updateDialogPreview()">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:10px; color:#666;">Height</label>
+                                <input type="number" id="dialogHeight" value="80" min="50" max="200" style="width:100%; padding:4px;" onchange="updateDialogPreview()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div style="display:flex; gap:8px; margin-top:20px;">
+                        <button onclick="saveDialog()" style="flex:1; padding:10px; background:#484; font-size:13px;">Save</button>
+                        <button onclick="closeDialogEditor()" style="flex:1; padding:10px; background:#644; font-size:13px;">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Right: Pages and Preview -->
+                <div style="flex:1; display:flex; flex-direction:column; gap:15px;">
+                    <!-- Pages List -->
+                    <div style="background:#1a1a2e; padding:15px; border-radius:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                            <h3 style="margin:0; color:#fa0;">Pages</h3>
+                            <button onclick="addDialogPage()" style="padding:5px 10px; background:#484; font-size:12px;">+ Add Page</button>
+                        </div>
+                        <div id="dialogPagesList" style="display:flex; gap:8px; flex-wrap:wrap; max-height:60px; overflow-y:auto;">
+                            <div class="dialog-page active" onclick="selectDialogPageEditor(0)">1</div>
+                        </div>
+                    </div>
+
+                    <!-- Current Page Editor -->
+                    <div style="background:#1a1a2e; padding:15px; border-radius:8px; flex:1;">
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Speaker Name:</label>
+                            <input type="text" id="dialogSpeaker" placeholder="NPC name or leave empty" style="width:100%; padding:8px;" onkeyup="updateDialogPreview()">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Text:</label>
+                            <textarea id="dialogTextInput" rows="4" placeholder="Enter dialog text..." style="width:100%; padding:8px; resize:vertical;" onkeyup="updateDialogPreview()"></textarea>
+                        </div>
+                        <button onclick="removeCurrentDialogPage()" style="margin-top:8px; padding:5px 10px; background:#644; font-size:11px;">Delete Page</button>
+                    </div>
+
+                    <!-- Preview -->
+                    <div style="background:#222; padding:15px; border-radius:8px; text-align:center;">
+                        <label style="font-size:11px; color:#888; display:block; margin-bottom:10px;">Preview:</label>
+                        <canvas id="dialogPreviewCanvas" width="280" height="80" style="image-rendering:pixelated; transform:scale(1.5);"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1849,6 +2073,11 @@
         let npcPreviewFrame = 0;
         let npcPreviewInterval = null;
 
+        // Dialog System
+        let dialogs = []; // Array of dialog configurations { name, style, colors, pages: [{speaker, text}], ... }
+        let currentDialogIndex = -1;
+        let dialogEditorOpen = false;
+
         // Sound System
         let sounds = []; // Array of { name, data, duration, type: 'ambient'|'action' }
         let currentSoundIndex = -1;
@@ -1998,6 +2227,8 @@
                     updateTilesetDropdown();
                     setPhase('collision');
                     rebuildCollisionView();
+                    // Broadcast to other builders
+                    broadcastEdit({ editType: 'addTileset', name: file.name, data: e.target.result });
                 };
                 img.src = e.target.result;
             };
@@ -2018,6 +2249,8 @@
                     updateTilesetDropdown();
                     drawPaintTileset();
                     drawPropTileset();
+                    // Broadcast to other builders
+                    broadcastEdit({ editType: 'addTileset', name: file.name, data: e.target.result });
                 };
                 img.src = e.target.result;
             };
@@ -3101,6 +3334,7 @@
             document.getElementById('lightingMode').classList.toggle('active', m === 'lighting');
             document.getElementById('triggerMode').classList.toggle('active', m === 'trigger');
             document.getElementById('cameraMode').classList.toggle('active', m === 'camera');
+            document.getElementById('dialogMode').classList.toggle('active', m === 'dialog');
             document.getElementById('tileModeContent').style.display = m === 'tile' ? 'block' : 'none';
             document.getElementById('npcModeContent').style.display = m === 'npc' ? 'block' : 'none';
             document.getElementById('animPropModeContent').style.display = m === 'animProp' ? 'block' : 'none';
@@ -3108,9 +3342,10 @@
             document.getElementById('lightingModeContent').style.display = m === 'lighting' ? 'block' : 'none';
             document.getElementById('triggerModeContent').style.display = m === 'trigger' ? 'block' : 'none';
             document.getElementById('cameraModeContent').style.display = m === 'camera' ? 'block' : 'none';
+            document.getElementById('dialogModeContent').style.display = m === 'dialog' ? 'block' : 'none';
 
             // Update mode label for mobile
-            const labels = { tile: 'Tiles', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers', camera: 'Camera' };
+            const labels = { tile: 'Tiles', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers', camera: 'Camera', dialog: 'Dialogs' };
             document.getElementById('currentModeLabel').textContent = labels[m] || m;
 
             // Collapse menu on mobile after selection
@@ -3125,6 +3360,10 @@
             if (m === 'camera') {
                 updateMapDropdowns();
                 updateCameraBoundsInfo();
+            }
+            if (m === 'dialog') {
+                updateDialogList();
+                updateDialogNpcDropdown();
             }
 
             // Redraw map to show appropriate overlays
@@ -6728,9 +6967,13 @@
 
             if (npcEditorEditingIndex >= 0) {
                 npcs[npcEditorEditingIndex] = npcData;
+                // Broadcast update to other builders
+                broadcastEdit({ editType: 'updateNpc', index: npcEditorEditingIndex, npc: npcData });
             } else {
                 npcs.push(npcData);
                 currentNpcIndex = npcs.length - 1;
+                // Broadcast new NPC to other builders
+                broadcastEdit({ editType: 'addNpc', npc: npcData });
             }
 
             document.getElementById('npcModal').classList.remove('visible');
@@ -8585,7 +8828,9 @@
                 // Multi-map support
                 maps,
                 currentMapName,
-                placedTriggers
+                placedTriggers,
+                // Dialogs
+                dialogs
             };
         }
 
@@ -8696,7 +8941,7 @@
         function showCraftMultiplayerPrompt() {
             document.getElementById('modeSelect').style.display = 'none';
             document.getElementById('craftMultiplayerPrompt').style.display = 'block';
-            document.getElementById('craftPlayerName').focus();
+            // Focus is handled in showHostPrompt/showJoinPrompt
         }
 
         function hideCraftMultiplayerPrompt() {
@@ -8714,7 +8959,7 @@
             // Hide mode select, show co-op prompt
             document.getElementById('modeSelect').style.display = 'none';
             document.getElementById('craftMultiplayerPrompt').style.display = 'block';
-            document.getElementById('craftPlayerName').focus();
+            // Focus is handled in showHostPrompt/showJoinPrompt
         }
 
         // === BUILDER MULTIPLAYER SYSTEM ===
@@ -8727,6 +8972,9 @@
         let gamePlayersInBuilder = new Map(); // id -> {x, y, name, direction, currentMap, animation, frame, lastFrameTime}
         let gamePlayerAnimInterval = null; // Animation loop for game players in builder
         let builderGameSocket = null; // socket to game server to see testers
+
+        // Track builder co-op players in the room
+        let builderPlayersInRoom = new Map(); // id -> {name, joinedAt}
 
         function connectBuilderMultiplayer(name, roomCode) {
             console.log('[BUILDER MP DEBUG] connectBuilderMultiplayer called with name:', name, 'roomCode:', roomCode);
@@ -8880,19 +9128,32 @@
             console.log('[BUILDER MP DEBUG] handleBuilderMessage received:', data);
             console.log('[BUILDER MP DEBUG] data.type:', data.type);
 
-            // Ignore our own messages
-            if (data.type === 'welcome' || data.type === 'join') {
-                if (data.player) {
-                    console.log('[BUILDER MP DEBUG] Player joined:', data.player.name);
-                }
+            // Track players joining/leaving for room info
+            if (data.type === 'welcome') {
+                // Initial player list when we join
                 if (data.players) {
-                    console.log('[BUILDER MP DEBUG] Players in room:', data.players.length);
+                    builderPlayersInRoom.clear();
+                    data.players.forEach(p => {
+                        builderPlayersInRoom.set(p.id, { name: p.name, joinedAt: Date.now() });
+                    });
+                    console.log('[BUILDER MP] Players in room:', builderPlayersInRoom.size);
+                }
+                return;
+            }
+
+            if (data.type === 'join') {
+                if (data.player) {
+                    builderPlayersInRoom.set(data.player.id, { name: data.player.name, joinedAt: Date.now() });
+                    console.log('[BUILDER MP] Player joined:', data.player.name, '- Total:', builderPlayersInRoom.size);
                 }
                 return;
             }
 
             if (data.type === 'leave') {
-                console.log('[BUILDER MP DEBUG] Player left');
+                if (data.playerId) {
+                    builderPlayersInRoom.delete(data.playerId);
+                    console.log('[BUILDER MP] Player left - Remaining:', builderPlayersInRoom.size);
+                }
                 return;
             }
 
@@ -8901,6 +9162,229 @@
                 console.log('[BUILDER MP DEBUG] >>> APPLYING REMOTE EDIT <<<', data.editType);
                 applyRemoteEdit(data);
             }
+        }
+
+        function sendFullProject() {
+            if (!builderSocket || !builderConnected) return;
+
+            // Save current map state first
+            saveCurrentMapState();
+
+            // Create serializable project data (exclude non-serializable stuff like images)
+            const projectData = {
+                maps: {},
+                placedTriggers: placedTriggers,
+                placedNpcs: placedNpcs,
+                tileSounds: tileSounds,
+                pointLights: pointLights,
+                tileCollisions: tileCollisions,
+                collisionMasks: collisionMasks,
+                tileSplitLines: tileSplitLines,
+                animatedProps: animatedProps.map(p => {
+                    const copy = { ...p };
+                    delete copy._spriteImg; // Not serializable
+                    return copy;
+                }),
+                // Tilesets (with base64 data for image reload)
+                tilesets: tilesets.map(t => {
+                    let data = t.data;
+                    // If no data but we have an image, extract base64 from it
+                    if (!data && t.img) {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = t.img.width;
+                            canvas.height = t.img.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(t.img, 0, 0);
+                            data = canvas.toDataURL('image/png');
+                            t.data = data; // Cache it for future
+                        } catch (e) {
+                            console.error('[BUILDER MP] Failed to extract tileset data:', e);
+                        }
+                    }
+                    return { name: t.name, data: data };
+                }),
+                // NPC definitions (with spriteData for image reload)
+                npcs: npcs.map(n => {
+                    const copy = { ...n };
+                    delete copy._spriteImg; // Not serializable
+                    return copy;
+                }),
+                currentTilesetIndex: currentTilesetIndex,
+                currentMapName: currentMapName,
+                playerPreviewPos: playerPreviewPos,
+                spawnMapName: spawnMapName,
+                // Dialogs
+                dialogs: dialogs
+            };
+
+            // Copy all maps (without image references)
+            for (const mapName in maps) {
+                projectData.maps[mapName] = {
+                    layers: maps[mapName].layers,
+                    layerVisibility: maps[mapName].layerVisibility,
+                    layerNames: maps[mapName].layerNames,
+                    currentLayer: maps[mapName].currentLayer,
+                    tileCollisions: maps[mapName].tileCollisions,
+                    collisionMasks: maps[mapName].collisionMasks,
+                    tileSplitLines: maps[mapName].tileSplitLines,
+                    mapCols: maps[mapName].mapCols,
+                    mapRows: maps[mapName].mapRows,
+                    cameraBounds: maps[mapName].cameraBounds
+                };
+            }
+
+            console.log('[BUILDER MP] Sending full project:');
+            console.log('[BUILDER MP] - Maps:', Object.keys(projectData.maps).length);
+            console.log('[BUILDER MP] - Tilesets:', projectData.tilesets.length);
+            console.log('[BUILDER MP] - NPCs:', projectData.npcs.length);
+            console.log('[BUILDER MP] - Triggers:', projectData.placedTriggers.length);
+
+            // Send tilesets separately in chunks (base64 images are huge)
+            const tilesetsToSend = projectData.tilesets;
+            projectData.tilesets = []; // Send empty, will send separately
+
+            // Send main project first (without tileset data)
+            // Wrap as builderEdit so server broadcasts it
+            const mainMsg = JSON.stringify({
+                type: 'builderEdit',
+                editType: 'fullProject',
+                project: projectData
+            });
+            console.log('[BUILDER MP] Main project size:', (mainMsg.length / 1024).toFixed(1), 'KB');
+            builderSocket.send(mainMsg);
+
+            // Send each tileset as a separate message
+            tilesetsToSend.forEach((ts, i) => {
+                setTimeout(() => {
+                    if (!builderSocket || !builderConnected) return;
+                    const tsMsg = JSON.stringify({
+                        type: 'builderEdit',
+                        editType: 'tilesetSync',
+                        index: i,
+                        name: ts.name,
+                        data: ts.data
+                    });
+                    console.log('[BUILDER MP] Sending tileset', i, ts.name, (tsMsg.length / 1024).toFixed(1), 'KB');
+                    try {
+                        builderSocket.send(tsMsg);
+                    } catch (e) {
+                        console.error('[BUILDER MP] Failed to send tileset:', e);
+                    }
+                }, 100 * (i + 1)); // Stagger sends to avoid overwhelming
+            });
+
+            console.log('[BUILDER MP] Full project queued!');
+        }
+
+        function loadFullProject(project) {
+            console.log('[BUILDER MP] Loading full project with maps:', Object.keys(project.maps));
+
+            // Load maps
+            for (const mapName in project.maps) {
+                maps[mapName] = project.maps[mapName];
+            }
+
+            // Load triggers, NPCs, sounds, lights
+            placedTriggers = project.placedTriggers || [];
+            placedNpcs = project.placedNpcs || [];
+            tileSounds = project.tileSounds || {};
+            pointLights = project.pointLights || {};
+            tileCollisions = project.tileCollisions || {};
+            collisionMasks = project.collisionMasks || {};
+            tileSplitLines = project.tileSplitLines || {};
+
+            // Load animated props (need to reload images)
+            animatedProps = project.animatedProps || [];
+            animatedProps.forEach((prop, i) => {
+                if (prop.spriteData) {
+                    const img = new Image();
+                    img.onload = () => {
+                        animatedProps[i]._spriteImg = img;
+                        updateAnimPropListDisplay();
+                    };
+                    img.src = prop.spriteData;
+                }
+            });
+
+            // Load tilesets (need to reload images from base64)
+            console.log('[BUILDER MP] Loading tilesets:', project.tilesets ? project.tilesets.length : 0);
+            if (project.tilesets && project.tilesets.length > 0) {
+                tilesets = [];
+                project.tilesets.forEach((ts, i) => {
+                    console.log('[BUILDER MP] Tileset', i, ts.name, 'data length:', ts.data ? ts.data.length : 'NO DATA');
+                    if (!ts.data) {
+                        console.error('[BUILDER MP] Tileset', ts.name, 'has no data!');
+                        return;
+                    }
+                    const img = new Image();
+                    img.onload = () => {
+                        console.log('[BUILDER MP] Tileset loaded:', ts.name, img.width, 'x', img.height);
+                        tilesets[i] = { name: ts.name, img: img, data: ts.data };
+                        // Update tilesetImg if this is the current tileset
+                        if (i === (project.currentTilesetIndex || 0)) {
+                            tilesetImg = img;
+                            currentTilesetIndex = i;
+                        }
+                        updateTilesetDropdown();
+                        renderTilesetPanel();
+                        renderMap();
+                    };
+                    img.onerror = (e) => {
+                        console.error('[BUILDER MP] Failed to load tileset image:', ts.name, e);
+                    };
+                    img.src = ts.data;
+                });
+            } else {
+                console.warn('[BUILDER MP] No tilesets in project!');
+            }
+
+            // Load NPC definitions (need to reload images from spriteData)
+            if (project.npcs && project.npcs.length > 0) {
+                npcs = [];
+                project.npcs.forEach((npc, i) => {
+                    npcs[i] = { ...npc };
+                    if (npc.spriteData) {
+                        const img = new Image();
+                        img.onload = () => {
+                            npcs[i]._spriteImg = img;
+                            updateNpcList();
+                        };
+                        img.src = npc.spriteData;
+                    }
+                });
+            }
+
+            // Load dialogs
+            if (project.dialogs) {
+                dialogs = project.dialogs;
+            }
+
+            // Load spawn
+            if (project.playerPreviewPos) {
+                playerPreviewPos = project.playerPreviewPos;
+            }
+            spawnMapName = project.spawnMapName || spawnMapName;
+
+            // Switch to the current map
+            if (project.currentMapName && maps[project.currentMapName]) {
+                currentMapName = project.currentMapName;
+                loadMapState(maps[currentMapName]);
+            }
+
+            // Update all UI
+            updateMapDropdowns();
+            updateTriggerList();
+            updatePlacedNpcList();
+            updatePlacedSoundsList();
+            updatePlacedLightsList();
+            updateAnimPropListDisplay();
+            updateDialogList();
+            renderLayerList();
+            renderMap();
+
+            console.log('[BUILDER MP] Full project loaded successfully!');
+            showBuilderStatus('Synced: ' + builderRoomCode);
         }
 
         function applyRemoteEdit(edit) {
@@ -9124,6 +9608,95 @@
                     }
                     break;
 
+                case 'addTileset':
+                    // Another builder added a tileset
+                    if (edit.name && edit.data) {
+                        const img = new Image();
+                        img.onload = () => {
+                            tilesets.push({ name: edit.name, img: img, data: edit.data });
+                            updateTilesetDropdown();
+                            renderMap();
+                            console.log('[BUILDER MP] Remote tileset added:', edit.name);
+                        };
+                        img.src = edit.data;
+                    }
+                    break;
+
+                case 'addNpc':
+                    // Another builder added an NPC definition
+                    if (edit.npc) {
+                        npcs.push({ ...edit.npc });
+                        const idx = npcs.length - 1;
+                        if (edit.npc.spriteData) {
+                            const img = new Image();
+                            img.onload = () => {
+                                npcs[idx]._spriteImg = img;
+                                updateNpcList();
+                            };
+                            img.src = edit.npc.spriteData;
+                        }
+                        updateNpcList();
+                        console.log('[BUILDER MP] Remote NPC added:', edit.npc.name);
+                    }
+                    break;
+
+                case 'updateNpc':
+                    // Another builder updated an NPC definition
+                    if (edit.index >= 0 && edit.index < npcs.length && edit.npc) {
+                        npcs[edit.index] = { ...edit.npc };
+                        if (edit.npc.spriteData) {
+                            const img = new Image();
+                            img.onload = () => {
+                                npcs[edit.index]._spriteImg = img;
+                                updateNpcList();
+                            };
+                            img.src = edit.npc.spriteData;
+                        }
+                        updateNpcList();
+                        console.log('[BUILDER MP] Remote NPC updated:', edit.npc.name);
+                    }
+                    break;
+
+                case 'addDialog':
+                    // Another builder added a dialog
+                    if (edit.dialog) {
+                        dialogs.push(edit.dialog);
+                        updateDialogList();
+                        console.log('[BUILDER MP] Remote dialog added:', edit.dialog.name);
+                    }
+                    break;
+
+                case 'updateDialog':
+                    // Another builder updated a dialog
+                    if (edit.index >= 0 && edit.index < dialogs.length && edit.dialog) {
+                        dialogs[edit.index] = edit.dialog;
+                        updateDialogList();
+                        console.log('[BUILDER MP] Remote dialog updated:', edit.dialog.name);
+                    }
+                    break;
+
+                case 'deleteDialog':
+                    // Another builder deleted a dialog
+                    if (edit.index >= 0 && edit.index < dialogs.length) {
+                        dialogs.splice(edit.index, 1);
+                        placedNpcs.forEach(n => {
+                            if (n.dialogIndex === edit.index) n.dialogIndex = -1;
+                            else if (n.dialogIndex > edit.index) n.dialogIndex--;
+                        });
+                        updateDialogList();
+                        console.log('[BUILDER MP] Remote dialog deleted:', edit.index);
+                    }
+                    break;
+
+                case 'attachNpcDialog':
+                    // Another builder attached a dialog to an NPC
+                    if (edit.npcIndex >= 0 && edit.npcIndex < placedNpcs.length) {
+                        placedNpcs[edit.npcIndex].dialogIndex = edit.dialogIndex;
+                        updateDialogNpcDropdown();
+                        console.log('[BUILDER MP] Remote NPC dialog attached:', edit.npcIndex, '->', edit.dialogIndex);
+                    }
+                    break;
+
                 case 'deleteLayer':
                     // Another builder deleted a layer
                     if (edit.mapName === currentMapName) {
@@ -9318,6 +9891,15 @@
             editBatch = [];
         }
 
+        // Warn before closing tab if in co-op mode
+        window.addEventListener('beforeunload', (e) => {
+            if (builderConnected) {
+                e.preventDefault();
+                e.returnValue = 'You are in a co-op session. Make sure to save your work!';
+                return e.returnValue;
+            }
+        });
+
         function showBuilderStatus(msg) {
             // Show connection status in builder UI
             let statusEl = document.getElementById('builderMpStatus');
@@ -9329,6 +9911,84 @@
             }
             statusEl.textContent = 'CO-OP: ' + msg;
             statusEl.style.background = msg.includes('Disconnected') ? '#a00' : '#0a0';
+        }
+
+        function showRoomInfo() {
+            // Create or update room info modal
+            let modal = document.getElementById('roomInfoModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'roomInfoModal';
+                modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:10000;';
+                modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+                document.body.appendChild(modal);
+            }
+
+            // Build content
+            let html = '<div style="background:#1a1a2e;border:3px solid #4af;padding:20px;min-width:300px;max-width:500px;border-radius:8px;font-family:monospace;">';
+            html += '<h2 style="color:#4af;margin:0 0 15px 0;text-align:center;">ROOM INFO</h2>';
+
+            // Connection status
+            if (builderConnected && builderRoomCode) {
+                html += '<div style="background:#0a0;color:#fff;padding:8px;margin-bottom:15px;border-radius:4px;text-align:center;">';
+                html += 'Connected to: <strong>' + builderRoomCode + '</strong></div>';
+            } else {
+                html += '<div style="background:#a00;color:#fff;padding:8px;margin-bottom:15px;border-radius:4px;text-align:center;">';
+                html += 'Not connected to co-op</div>';
+            }
+
+            // Your name
+            html += '<div style="color:#fff;margin-bottom:10px;"><strong style="color:#f90;">Your Name:</strong> ' + builderPlayerName + '</div>';
+
+            // Builder players in room
+            html += '<div style="color:#4af;font-weight:bold;margin-bottom:8px;">Builders in Room (' + builderPlayersInRoom.size + '):</div>';
+            if (builderPlayersInRoom.size > 0) {
+                html += '<ul style="color:#fff;margin:0 0 15px 20px;padding:0;">';
+                builderPlayersInRoom.forEach((p, id) => {
+                    html += '<li style="margin:4px 0;">' + p.name + '</li>';
+                });
+                html += '</ul>';
+            } else {
+                html += '<div style="color:#888;margin-bottom:15px;padding-left:10px;">No other builders</div>';
+            }
+
+            // Game testers in room
+            html += '<div style="color:#4af;font-weight:bold;margin-bottom:8px;">Game Testers (' + gamePlayersInBuilder.size + '):</div>';
+            if (gamePlayersInBuilder.size > 0) {
+                html += '<ul style="color:#fff;margin:0 0 15px 20px;padding:0;">';
+                gamePlayersInBuilder.forEach((p, id) => {
+                    html += '<li style="margin:4px 0;">' + p.name + ' <span style="color:#888;">(Map: ' + (p.currentMap || 'unknown') + ')</span></li>';
+                });
+                html += '</ul>';
+            } else {
+                html += '<div style="color:#888;margin-bottom:15px;padding-left:10px;">No game testers</div>';
+            }
+
+            // Project info
+            html += '<div style="border-top:1px solid #333;padding-top:15px;margin-top:10px;">';
+            html += '<div style="color:#4af;font-weight:bold;margin-bottom:8px;">Project Info:</div>';
+            html += '<div style="color:#fff;margin-left:10px;">';
+            html += '<div>Maps: ' + Object.keys(maps).length + '</div>';
+            html += '<div>Tilesets: ' + tilesets.length + '</div>';
+            html += '<div>NPCs: ' + npcs.length + '</div>';
+            html += '<div>Triggers: ' + placedTriggers.length + '</div>';
+            html += '</div></div>';
+
+            // Share save button (for host to share with late joiners)
+            html += '<div style="border-top:1px solid #333;padding-top:15px;margin-top:15px;">';
+            html += '<div style="color:#f90;font-weight:bold;margin-bottom:8px;">For Late Joiners:</div>';
+            html += '<p style="color:#888;font-size:10px;margin:0 0 10px 0;">Download current save and share with friends who join late</p>';
+            html += '<button onclick="downloadProject(); document.getElementById(\'roomInfoModal\').style.display=\'none\'" ';
+            html += 'style="width:100%;padding:10px;background:#2a7;color:#fff;border:none;cursor:pointer;font-size:12px;border-radius:4px;">Download Save to Share</button>';
+            html += '</div>';
+
+            // Close button
+            html += '<button onclick="document.getElementById(\'roomInfoModal\').style.display=\'none\'" ';
+            html += 'style="width:100%;margin-top:10px;padding:10px;background:#e74c3c;color:#fff;border:none;cursor:pointer;font-size:14px;border-radius:4px;">Close</button>';
+
+            html += '</div>';
+            modal.innerHTML = html;
+            modal.style.display = 'flex';
         }
 
         // Adventure mode - load project, open test, hide UI
@@ -9376,20 +10036,66 @@
             }, 1000);
         }
 
-        // Craft mode - just load into editor
-        async function startCraft() {
-            console.log('[BUILDER MP DEBUG] startCraft called');
+        // Show/hide prompt functions
+        function showDirectJoinPrompt() {
+            // Show join prompt directly from main menu (no save file needed)
+            document.getElementById('mainMenu').style.display = 'none';
+            document.getElementById('joinRoomPrompt').style.display = 'block';
+        }
+
+        function showHostPrompt() {
+            document.getElementById('craftMultiplayerPrompt').style.display = 'none';
+            document.getElementById('hostRoomPrompt').style.display = 'block';
+        }
+
+        function hideHostPrompt() {
+            document.getElementById('hostRoomPrompt').style.display = 'none';
+            document.getElementById('craftMultiplayerPrompt').style.display = 'block';
+        }
+
+        function showJoinPrompt() {
+            document.getElementById('craftMultiplayerPrompt').style.display = 'none';
+            document.getElementById('joinRoomPrompt').style.display = 'block';
+        }
+
+        function hideJoinPrompt() {
+            document.getElementById('joinRoomPrompt').style.display = 'none';
+            document.getElementById('mainMenu').style.display = 'block';
+            joinSaveData = null;
+            document.getElementById('joinSaveStatus').textContent = 'No file loaded';
+        }
+
+        // Handle save file loaded in Join Room prompt
+        let joinSaveData = null;
+        function handleJoinSaveFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    joinSaveData = JSON.parse(e.target.result);
+                    document.getElementById('joinSaveStatus').textContent = 'Loaded: ' + file.name;
+                    document.getElementById('joinSaveStatus').style.color = '#0f0';
+                    console.log('[JOIN] Save file loaded:', file.name);
+                } catch (err) {
+                    alert('Invalid save file!');
+                    joinSaveData = null;
+                    document.getElementById('joinSaveStatus').textContent = 'Error loading file';
+                    document.getElementById('joinSaveStatus').style.color = '#f00';
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // SOLO MODE - Load local save, no multiplayer
+        async function startCraftSolo() {
+            console.log('[CRAFT] Starting SOLO mode');
             if (!pendingSaveData) {
-                console.log('[BUILDER MP DEBUG] No pendingSaveData, returning');
+                console.log('[CRAFT] No pendingSaveData, returning');
                 return;
             }
 
-            // Get multiplayer settings from craft prompt
-            const playerName = document.getElementById('craftPlayerName').value.trim() || 'Builder';
-            const roomCode = document.getElementById('craftRoomCode').value.trim();
-            console.log('[BUILDER MP DEBUG] playerName:', playerName, 'roomCode:', roomCode);
-
-            // Hide prompts
             document.getElementById('craftMultiplayerPrompt').style.display = 'none';
 
             await loadProject(pendingSaveData);
@@ -9397,14 +10103,115 @@
             document.getElementById('modeSelect').style.display = 'none';
             document.getElementById('mainMenu').style.display = 'block';
 
-            // Connect to builder multiplayer if room code provided
-            console.log('[BUILDER MP DEBUG] About to check roomCode for connection...');
-            if (roomCode) {
-                console.log('[BUILDER MP DEBUG] Room code exists, calling connectBuilderMultiplayer');
-                connectBuilderMultiplayer(playerName, roomCode);
-            } else {
-                console.log('[BUILDER MP DEBUG] No room code, skipping multiplayer connection');
+            console.log('[CRAFT] Solo mode ready');
+        }
+
+        // HOST MODE - Load local save, then connect to room (others get your project)
+        async function startCraftHost() {
+            console.log('[CRAFT] Starting HOST mode');
+            if (!pendingSaveData) {
+                console.log('[CRAFT] No pendingSaveData, returning');
+                return;
             }
+
+            const playerName = document.getElementById('hostPlayerName').value.trim() || 'Host';
+            const roomCode = document.getElementById('hostRoomCode').value.trim();
+
+            if (!roomCode) {
+                alert('Please enter a room code for others to join');
+                return;
+            }
+
+            document.getElementById('hostRoomPrompt').style.display = 'none';
+
+            // Load YOUR local project first (you're the host, your project is the map)
+            await loadProject(pendingSaveData);
+            pendingSaveData = null;
+            document.getElementById('modeSelect').style.display = 'none';
+            document.getElementById('mainMenu').style.display = 'block';
+
+            // Connect to multiplayer - you're the host
+            console.log('[CRAFT] Host connecting to room:', roomCode);
+            connectBuilderMultiplayer(playerName, roomCode);
+
+            console.log('[CRAFT] Host mode ready - share room code:', roomCode);
+        }
+
+        // JOIN MODE - Load same save as host, then connect for real-time sync
+        async function startCraftJoin() {
+            console.log('[CRAFT] Starting JOIN mode');
+
+            const playerName = document.getElementById('joinPlayerName').value.trim() || 'Builder';
+            const roomCode = document.getElementById('joinRoomCode').value.trim();
+
+            if (!roomCode) {
+                alert('Please enter a room code to join');
+                return;
+            }
+
+            if (!joinSaveData) {
+                alert('Please load the save file first!');
+                return;
+            }
+
+            document.getElementById('joinRoomPrompt').style.display = 'none';
+
+            // Load the save file
+            console.log('[CRAFT] Loading save for co-op join');
+            await loadProject(joinSaveData);
+            joinSaveData = null;
+
+            // Show the builder interface
+            document.getElementById('loadPhase').classList.remove('active');
+            document.getElementById('buildPhase').classList.add('active');
+            setPhase('build');
+
+            // Connect to multiplayer for real-time sync
+            console.log('[CRAFT] Joining room:', roomCode);
+            connectBuilderMultiplayer(playerName, roomCode);
+
+            console.log('[CRAFT] Join mode ready - edits will sync with room');
+        }
+
+        // Initialize an empty project for joiners
+        function initEmptyProject() {
+            gridSize = 16;
+            mapCols = 40;
+            mapRows = 30;
+            layers = [[]];
+            layerVisibility = [true];
+            layerNames = ['Layer 1'];
+            currentLayer = 0;
+            tileCollisions = {};
+            collisionMasks = {};
+            tileSplitLines = {};
+            maps = { 'main': { layers: [[]], layerVisibility: [true], layerNames: ['Layer 1'], currentLayer: 0 }};
+            currentMapName = 'main';
+            placedTriggers = [];
+            placedNpcs = [];
+            npcs = [];
+            tilesets = [];
+            animatedProps = [];
+            placedAnimProps = [];
+            sounds = [];
+            tileSounds = {};
+            pointLights = {};
+            dialogs = [];
+
+            // Initialize empty layer grid
+            for (let y = 0; y < mapRows; y++) {
+                layers[0][y] = [];
+                for (let x = 0; x < mapCols; x++) {
+                    layers[0][y][x] = null;
+                }
+            }
+
+            console.log('[CRAFT] Empty project initialized');
+        }
+
+        // Legacy function for backwards compatibility
+        async function startCraft() {
+            startCraftSolo();
         }
 
         async function loadProject(projectData) {
@@ -9720,6 +10527,11 @@
             placedTriggers = p.placedTriggers || [];
             console.log('Loaded', placedTriggers.length, 'triggers');
             updateDoorNumberDropdown();
+
+            // Load dialogs
+            dialogs = p.dialogs || [];
+            console.log('Loaded', dialogs.length, 'dialogs');
+            updateDialogList();
 
             // Load tilesets (new format with multiple tilesets)
             if (p.tilesets && p.tilesets.length > 0) {
@@ -10706,6 +11518,316 @@
                 info.innerHTML = 'No bounds (camera follows player)';
                 info.style.color = '#aaa';
             }
+        }
+
+        // ===== DIALOG SYSTEM =====
+        const dialogStylePresets = {
+            1: { name: 'Classic NES', bg: '#000000', border: '#ffffff', text: '#ffffff', accent: '#ffffff', radius: 0, borderW: 4 },
+            2: { name: 'Final Fantasy', bg: '#000088', border: '#ffffff', text: '#ffffff', accent: '#ffff00', radius: 0, borderW: 2 },
+            3: { name: 'Pokemon', bg: '#f8f8f8', border: '#303030', text: '#303030', accent: '#e03030', radius: 8, borderW: 3 },
+            4: { name: 'Earthbound', bg: '#000000', border: '#a080ff', text: '#ffffff', accent: '#ffff00', radius: 0, borderW: 2 },
+            5: { name: 'Chrono Trigger', bg: '#1a1a4e', border: '#8888ff', text: '#ffffff', accent: '#ffcc00', radius: 4, borderW: 2 },
+            6: { name: 'Modern Pixel', bg: '#2d2d2d', border: '#4a9eff', text: '#ffffff', accent: '#4a9eff', radius: 6, borderW: 2 }
+        };
+
+        let dialogEditorPages = [{ speaker: '', text: '' }];
+        let dialogEditorPageIndex = 0;
+        let dialogEditingIndex = -1; // -1 = new dialog
+
+        function openDialogEditor(index) {
+            dialogEditingIndex = index;
+
+            if (index >= 0 && dialogs[index]) {
+                // Editing existing dialog
+                const d = dialogs[index];
+                document.getElementById('dialogNameInput').value = d.name || '';
+                document.getElementById('dialogStyleSelect').value = d.style || 1;
+                document.getElementById('dialogBgColor').value = d.colors?.background || '#000000';
+                document.getElementById('dialogBorderColor').value = d.colors?.border || '#ffffff';
+                document.getElementById('dialogTextColor').value = d.colors?.text || '#ffffff';
+                document.getElementById('dialogAccentColor').value = d.colors?.accent || '#ffffff';
+                document.getElementById('dialogWidth').value = d.width || 280;
+                document.getElementById('dialogHeight').value = d.height || 80;
+                dialogEditorPages = d.pages ? JSON.parse(JSON.stringify(d.pages)) : [{ speaker: '', text: '' }];
+            } else {
+                // New dialog
+                document.getElementById('dialogNameInput').value = '';
+                document.getElementById('dialogStyleSelect').value = '1';
+                applyDialogStylePreset(1);
+                document.getElementById('dialogWidth').value = 280;
+                document.getElementById('dialogHeight').value = 80;
+                dialogEditorPages = [{ speaker: '', text: '' }];
+            }
+
+            dialogEditorPageIndex = 0;
+            loadDialogPage(0);
+            updateDialogPagesListEditor();
+            updateDialogPreview();
+
+            document.getElementById('dialogModal').classList.add('visible');
+        }
+
+        function closeDialogEditor() {
+            document.getElementById('dialogModal').classList.remove('visible');
+        }
+
+        function applyDialogStylePreset(style) {
+            const preset = dialogStylePresets[style];
+            if (preset) {
+                document.getElementById('dialogBgColor').value = preset.bg;
+                document.getElementById('dialogBorderColor').value = preset.border;
+                document.getElementById('dialogTextColor').value = preset.text;
+                document.getElementById('dialogAccentColor').value = preset.accent;
+            }
+        }
+
+        function loadDialogPage(index) {
+            // Save current page first
+            if (dialogEditorPages[dialogEditorPageIndex]) {
+                dialogEditorPages[dialogEditorPageIndex] = {
+                    speaker: document.getElementById('dialogSpeaker').value,
+                    text: document.getElementById('dialogTextInput').value
+                };
+            }
+
+            dialogEditorPageIndex = index;
+            const page = dialogEditorPages[index] || { speaker: '', text: '' };
+            document.getElementById('dialogSpeaker').value = page.speaker || '';
+            document.getElementById('dialogTextInput').value = page.text || '';
+            updateDialogPagesListEditor();
+            updateDialogPreview();
+        }
+
+        function selectDialogPageEditor(index) {
+            loadDialogPage(index);
+        }
+
+        function addDialogPage() {
+            // Save current page
+            dialogEditorPages[dialogEditorPageIndex] = {
+                speaker: document.getElementById('dialogSpeaker').value,
+                text: document.getElementById('dialogTextInput').value
+            };
+
+            dialogEditorPages.push({ speaker: '', text: '' });
+            loadDialogPage(dialogEditorPages.length - 1);
+        }
+
+        function removeCurrentDialogPage() {
+            if (dialogEditorPages.length <= 1) {
+                alert('Cannot delete the only page');
+                return;
+            }
+
+            dialogEditorPages.splice(dialogEditorPageIndex, 1);
+            if (dialogEditorPageIndex >= dialogEditorPages.length) {
+                dialogEditorPageIndex = dialogEditorPages.length - 1;
+            }
+            loadDialogPage(dialogEditorPageIndex);
+        }
+
+        function updateDialogPagesListEditor() {
+            const container = document.getElementById('dialogPagesList');
+            container.innerHTML = dialogEditorPages.map((page, i) => {
+                const active = i === dialogEditorPageIndex ? 'active' : '';
+                const preview = (page.text || 'Empty').substring(0, 15);
+                return `<div class="dialog-page ${active}" onclick="selectDialogPageEditor(${i})">${i + 1}</div>`;
+            }).join('');
+        }
+
+        function updateDialogPreview() {
+            const canvas = document.getElementById('dialogPreviewCanvas');
+            if (!canvas) return;
+
+            const width = parseInt(document.getElementById('dialogWidth').value) || 280;
+            const height = parseInt(document.getElementById('dialogHeight').value) || 80;
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            const bgColor = document.getElementById('dialogBgColor').value;
+            const borderColor = document.getElementById('dialogBorderColor').value;
+            const textColor = document.getElementById('dialogTextColor').value;
+            const accentColor = document.getElementById('dialogAccentColor').value;
+            const style = parseInt(document.getElementById('dialogStyleSelect').value);
+            const preset = dialogStylePresets[style];
+
+            // Draw background
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw border
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = preset?.borderW || 2;
+            const radius = preset?.radius || 0;
+
+            if (radius > 0) {
+                ctx.beginPath();
+                ctx.roundRect(2, 2, width - 4, height - 4, radius);
+                ctx.stroke();
+            } else {
+                ctx.strokeRect(2, 2, width - 4, height - 4);
+            }
+
+            // Draw speaker name
+            const speaker = document.getElementById('dialogSpeaker').value;
+            const text = document.getElementById('dialogTextInput').value;
+
+            ctx.font = '12px monospace';
+            let y = 18;
+
+            if (speaker) {
+                ctx.fillStyle = accentColor;
+                ctx.fillText(speaker, 12, y);
+                y += 16;
+            }
+
+            // Draw text (simple word wrap)
+            ctx.fillStyle = textColor;
+            const words = text.split(' ');
+            let line = '';
+            const maxWidth = width - 24;
+
+            for (const word of words) {
+                const testLine = line + word + ' ';
+                const metrics = ctx.measureText(testLine);
+                if (metrics.width > maxWidth && line) {
+                    ctx.fillText(line, 12, y);
+                    line = word + ' ';
+                    y += 14;
+                    if (y > height - 10) break;
+                } else {
+                    line = testLine;
+                }
+            }
+            if (y <= height - 10) {
+                ctx.fillText(line, 12, y);
+            }
+        }
+
+        function saveDialog() {
+            // Save current page
+            dialogEditorPages[dialogEditorPageIndex] = {
+                speaker: document.getElementById('dialogSpeaker').value,
+                text: document.getElementById('dialogTextInput').value
+            };
+
+            const name = document.getElementById('dialogNameInput').value.trim() || 'Dialog ' + (dialogs.length + 1);
+            const style = parseInt(document.getElementById('dialogStyleSelect').value);
+
+            const dialogData = {
+                name: name,
+                style: style,
+                width: parseInt(document.getElementById('dialogWidth').value) || 280,
+                height: parseInt(document.getElementById('dialogHeight').value) || 80,
+                colors: {
+                    background: document.getElementById('dialogBgColor').value,
+                    border: document.getElementById('dialogBorderColor').value,
+                    text: document.getElementById('dialogTextColor').value,
+                    accent: document.getElementById('dialogAccentColor').value
+                },
+                pages: JSON.parse(JSON.stringify(dialogEditorPages))
+            };
+
+            if (dialogEditingIndex >= 0) {
+                dialogs[dialogEditingIndex] = dialogData;
+                broadcastEdit({ editType: 'updateDialog', index: dialogEditingIndex, dialog: dialogData });
+            } else {
+                dialogs.push(dialogData);
+                broadcastEdit({ editType: 'addDialog', dialog: dialogData });
+            }
+
+            closeDialogEditor();
+            updateDialogList();
+            console.log('[DIALOG] Saved dialog:', name);
+        }
+
+        function deleteDialog(index) {
+            if (!confirm('Delete dialog "' + dialogs[index].name + '"?')) return;
+
+            // Check if any NPC uses this dialog
+            const usedBy = placedNpcs.filter(n => n.dialogIndex === index);
+            if (usedBy.length > 0) {
+                alert('Cannot delete: This dialog is attached to ' + usedBy.length + ' NPC(s)');
+                return;
+            }
+
+            dialogs.splice(index, 1);
+
+            // Update NPC dialog references
+            placedNpcs.forEach(n => {
+                if (n.dialogIndex > index) n.dialogIndex--;
+            });
+
+            broadcastEdit({ editType: 'deleteDialog', index: index });
+            updateDialogList();
+        }
+
+        function updateDialogList() {
+            const container = document.getElementById('dialogList');
+            if (!container) return;
+
+            if (dialogs.length === 0) {
+                container.innerHTML = '<div style="color:#666; font-size:12px; text-align:center; padding:20px;">No dialogs created yet</div>';
+                return;
+            }
+
+            container.innerHTML = dialogs.map((d, i) => {
+                const pageCount = d.pages?.length || 1;
+                const preview = d.pages?.[0]?.text?.substring(0, 30) || 'Empty';
+                return `<div style="display:flex; align-items:center; gap:8px; padding:8px; margin-bottom:5px; background:#333; border-radius:4px;">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:12px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${d.name}</div>
+                        <div style="font-size:10px; color:#888;">${pageCount} page${pageCount > 1 ? 's' : ''}</div>
+                    </div>
+                    <button onclick="openDialogEditor(${i})" style="padding:4px 8px; font-size:11px; background:#448;">Edit</button>
+                    <button onclick="deleteDialog(${i})" style="padding:4px 8px; font-size:11px; background:#644;">X</button>
+                </div>`;
+            }).join('');
+
+            // Also update the dialog dropdown for attaching
+            updateDialogDropdown();
+        }
+
+        function updateDialogDropdown() {
+            const select = document.getElementById('dialogToAttach');
+            if (!select) return;
+
+            select.innerHTML = '<option value="">Select a dialog...</option>' +
+                dialogs.map((d, i) => `<option value="${i}">${d.name}</option>`).join('');
+        }
+
+        function updateDialogNpcDropdown() {
+            const select = document.getElementById('dialogNpcSelect');
+            if (!select) return;
+
+            select.innerHTML = '<option value="">Select an NPC...</option>' +
+                placedNpcs.map((n, i) => {
+                    const npcDef = npcs[n.npcIndex];
+                    const name = npcDef?.name || 'NPC ' + i;
+                    const hasDialog = n.dialogIndex >= 0 ? ' (has dialog)' : '';
+                    return `<option value="${i}">${name}${hasDialog}</option>`;
+                }).join('');
+        }
+
+        function attachDialogToNpc() {
+            const npcIdx = parseInt(document.getElementById('dialogNpcSelect').value);
+            const dialogIdx = parseInt(document.getElementById('dialogToAttach').value);
+
+            if (isNaN(npcIdx) || npcIdx < 0) {
+                alert('Please select an NPC');
+                return;
+            }
+            if (isNaN(dialogIdx) || dialogIdx < 0) {
+                alert('Please select a dialog');
+                return;
+            }
+
+            placedNpcs[npcIdx].dialogIndex = dialogIdx;
+            broadcastEdit({ editType: 'attachNpcDialog', npcIndex: npcIdx, dialogIndex: dialogIdx });
+
+            alert('Dialog attached to NPC!');
+            updateDialogNpcDropdown();
         }
 
         // ===== TEST MAP =====
@@ -13142,7 +14264,6 @@
         let inTavernMode = false; // True when player is in tavern (new tab)
         let tavernWindow = null; // Reference to tavern window
 
-
         // Check if player is on a trigger and interact
         // doorTypeFilter: 'interact' = only interact doors, 'walkover' = only walkover doors, null = all
         function checkTriggerInteraction(doorTypeFilter) {
@@ -13165,6 +14286,16 @@
                 // Check if player is in trigger zone
                 if (playerTileX >= trigger.x && playerTileX < trigger.x + (trigger.width || 1) &&
                     playerTileY >= trigger.y && playerTileY < trigger.y + (trigger.height || 1)) {
+
+                    // Skip if target map doesn't exist (unless external door)
+                    if (trigger.doorType !== 'external' && !mapsData[trigger.targetMap]) {
+                        // Only log once per door to avoid spam
+                        if (!trigger._warnedMissing) {
+                            console.warn('[TRIGGER] Door ' + trigger.doorNumber + ' target map "' + trigger.targetMap + '" not found');
+                            trigger._warnedMissing = true;
+                        }
+                        return false;
+                    }
 
                     // Found a trigger - start transition
                     startMapTransition(trigger);
