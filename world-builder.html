@@ -2658,8 +2658,8 @@
             }
             // Sync split line on drag end
             if (draggingSplitLine && modifiedSplitKey && tileSplitLines[modifiedSplitKey]) {
-                console.log('[SYNC] Broadcasting splitLine:', modifiedSplitKey);
-                broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, line: tileSplitLines[modifiedSplitKey] });
+                console.log('[SYNC] Broadcasting splitLine:', modifiedSplitKey, 'line:', tileSplitLines[modifiedSplitKey]);
+                broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, lineData: JSON.stringify(tileSplitLines[modifiedSplitKey]) });
                 modifiedSplitKey = null;
             }
             draggingSplitLine = false;
@@ -2733,8 +2733,8 @@
         collisionTilesetCanvas.addEventListener('touchend', () => {
             // Sync split line on drag end
             if (draggingSplitLine && modifiedSplitKey && tileSplitLines[modifiedSplitKey]) {
-                console.log('[SYNC] Broadcasting splitLine:', modifiedSplitKey);
-                broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, line: tileSplitLines[modifiedSplitKey] });
+                console.log('[SYNC] Broadcasting splitLine:', modifiedSplitKey, 'line:', tileSplitLines[modifiedSplitKey]);
+                broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, lineData: JSON.stringify(tileSplitLines[modifiedSplitKey]) });
                 modifiedSplitKey = null;
             }
             draggingSplitLine = false;
@@ -2748,8 +2748,8 @@
         collisionTilesetCanvas.addEventListener('touchcancel', () => {
             // Sync split line on drag end
             if (draggingSplitLine && modifiedSplitKey && tileSplitLines[modifiedSplitKey]) {
-                console.log('[SYNC] Broadcasting splitLine:', modifiedSplitKey);
-                broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, line: tileSplitLines[modifiedSplitKey] });
+                console.log('[SYNC] Broadcasting splitLine:', modifiedSplitKey, 'line:', tileSplitLines[modifiedSplitKey]);
+                broadcastEdit({ editType: 'splitLine', key: modifiedSplitKey, lineData: JSON.stringify(tileSplitLines[modifiedSplitKey]) });
                 modifiedSplitKey = null;
             }
             draggingSplitLine = false;
@@ -9788,8 +9788,13 @@
 
                 case 'splitLine':
                     // Another builder set a split line
-                    console.log('[SYNC] Received splitLine:', edit.key, edit.line);
-                    tileSplitLines[edit.key] = edit.line;
+                    console.log('[SYNC] Received splitLine:', edit.key, 'lineData:', edit.lineData);
+                    try {
+                        tileSplitLines[edit.key] = JSON.parse(edit.lineData);
+                    } catch (e) {
+                        // Fallback: flat line at middle
+                        tileSplitLines[edit.key] = new Array(16).fill(8);
+                    }
                     drawCollisionTileset();
                     break;
 
