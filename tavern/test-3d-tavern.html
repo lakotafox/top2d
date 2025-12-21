@@ -240,6 +240,18 @@
             </div>
         </div>
 
+        <!-- RETURN DOOR SECTION (Collapsible) -->
+        <div style="border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px;">
+            <label onclick="toggleReturnDoorSection()" style="color:#0ff; cursor:pointer; font-size:12px;"><span id="returnDoorArrow" style="margin-right:5px;">+</span>Return Door</label>
+            <div id="returnDoorContent" style="display:none;">
+                <button class="spawn-btn" id="setReturnDoorBtn" onclick="startReturnDoorPlacement()" style="margin-top:8px; background:#066;">Place Return Door</button>
+                <div id="returnDoorInfo" style="color:#888; font-size:11px; margin-top:5px;">
+                    Door: <span id="returnDoorDisplay">Not set</span>
+                </div>
+                <button onclick="copyReturnDoorData()" style="margin-top:5px; background:#048;">Copy Door Data</button>
+            </div>
+        </div>
+
         <!-- CAMERA SECTION (Collapsible) -->
         <div style="border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px;">
             <label onclick="toggleCameraSection()" style="color:#8af; cursor:pointer; font-size:12px;"><span id="cameraArrow" style="margin-right:5px;">+</span>Camera</label>
@@ -801,6 +813,16 @@
             <span id="farkleTurnIndicator"></span>
         </div>
 
+        <!-- Multiplayer Score Display - Top Left -->
+        <div id="farkleScoreDisplay" style="position:fixed; top:20px; left:20px; background:rgba(20,15,10,0.9); padding:15px 20px; border-radius:8px; border:2px solid #a86; z-index:150; font-family:monospace; min-width:150px;">
+            <div style="font-size:14px; margin-bottom:8px; color:#ffa;">FARKLE</div>
+            <div style="color:#888;">Waiting for players...</div>
+        </div>
+
+        <!-- Turn Message - Top Center -->
+        <div id="farkleTurnMessage" style="position:fixed; top:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); padding:10px 25px; border-radius:6px; z-index:150; font-size:16px; color:#ff0; display:none;">
+        </div>
+
         <!-- Controls hint - Bottom center -->
         <div style="position:fixed; bottom:30px; left:50%; transform:translateX(-50%); z-index:150;">
             <div style="text-align:center; background:rgba(0,0,0,0.6); padding:8px 16px; border-radius:6px;">
@@ -835,6 +857,20 @@
         <span style="color:#ffa;">Press E to play Farkle</span>
     </div>
 
+    <!-- Farkle Lobby UI -->
+    <div id="farkleLobby" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(30,20,10,0.95); padding:30px 40px; border-radius:12px; border:3px solid #b86; z-index:200; text-align:center; min-width:280px;">
+        <h2 style="color:#ffa; margin:0 0 15px 0; font-size:22px;">FARKLE TABLE</h2>
+        <div id="farkleLobbyStatus" style="color:#aaa; margin-bottom:15px;">Waiting for players...</div>
+        <div id="farkleLobbyPlayers" style="text-align:left; margin-bottom:20px; padding:10px; background:rgba(0,0,0,0.3); border-radius:6px;">
+            <!-- Player list goes here -->
+        </div>
+        <div id="farkleLobbyButtons">
+            <button id="farkleStartBtn" onclick="tableLeaderStartGame()" style="display:none; padding:12px 30px; background:#684; border:none; color:white; border-radius:6px; cursor:pointer; font-size:16px; font-weight:bold; margin-right:10px;">Start Game</button>
+            <button onclick="leaveFarkleLobby()" style="padding:10px 20px; background:#644; border:none; color:#caa; border-radius:4px; cursor:pointer; font-size:12px;">Leave Table</button>
+        </div>
+        <div id="farkleLobbyWaiting" style="color:#888; font-size:12px; margin-top:15px;"></div>
+    </div>
+
     <!-- Return Door Prompt -->
     <div id="returnDoorPrompt" style="display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); padding:10px 20px; border-radius:5px; z-index:100;">
         <span style="color:#8ff;">Press E to return to world</span>
@@ -867,8 +903,8 @@
         </div>
 
         <div style="display:flex; gap:8px; margin-top:12px;">
-            <button onclick="placeReturnDoor()" style="flex:1; padding:10px; background:#0aa; border:none; color:white; border-radius:4px; cursor:pointer; font-weight:bold;">✓ Place Door</button>
-            <button onclick="exitReturnDoorPlacement()" style="padding:10px 15px; background:#a44; border:none; color:white; border-radius:4px; cursor:pointer;">✕</button>
+            <button onclick="placeReturnDoor()" style="flex:1; padding:10px; background:#0aa; border:none; color:white; border-radius:4px; cursor:pointer; font-weight:bold;">Place Door</button>
+            <button onclick="exitReturnDoorPlacement()" style="padding:10px 15px; background:#a44; border:none; color:white; border-radius:4px; cursor:pointer;">Cancel</button>
         </div>
     </div>
 
@@ -995,6 +1031,9 @@
         let farkleGameActive = false;
         let farkleDice = []; // Array of {mesh, body, value, kept}
         let farklePhysicsBodies = []; // Physics bodies for dice tray
+        let isPlayerTurn = true; // Legacy single/2-player mode turn tracking
+        let npcTurnInProgress = false; // Legacy NPC turn tracking
+        let farkleGameMode = 'npc'; // Legacy mode: 'npc' or '2player'
 
         // Camera - near plane at 0.05 to reduce clipping into objects
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
@@ -1288,6 +1327,9 @@
                 }, 100);
 
                 console.log('Tavern loaded!', 'Size:', size);
+
+                // Create permanent return door
+                createPermanentReturnDoor();
             },
             function(progress) {
                 if (progress.total > 0) {
@@ -1375,7 +1417,7 @@
             }
 
             // Return door placement mode - click to place door
-            if (returnDoorPlaceMode) {
+            if (settingReturnDoor) {
                 console.log('[RETURN DOOR] Click detected - placing door');
                 placeReturnDoor();
                 return;
@@ -1393,7 +1435,7 @@
                 return; // Don't request pointer lock during game
             }
 
-            if (!isLooking && !collisionPlaceMode && !copyMode && !farklePlaceMode && !returnDoorPlaceMode) {
+            if (!isLooking && !collisionPlaceMode && !copyMode && !farklePlaceMode && !settingReturnDoor) {
                 renderer.domElement.requestPointerLock();
             }
         });
@@ -1477,8 +1519,12 @@
                     exitFarklePlacement();
                     return;
                 }
-                if (returnDoorPlaceMode) {
-                    exitReturnDoorPlacement();
+                if (settingReturnDoor) {
+                    settingReturnDoor = false;
+                    const btn = document.getElementById('setReturnDoorBtn');
+                    btn.classList.remove('active');
+                    btn.textContent = 'Place Return Door';
+                    btn.style.background = '#066';
                     return;
                 }
                 if (settingSpawn) {
@@ -1496,6 +1542,10 @@
                 uiVisible = !uiVisible;
                 document.getElementById('info').style.display = uiVisible ? 'block' : 'none';
                 document.getElementById('modeIndicator').style.display = uiVisible ? 'block' : 'none';
+                // Hide/show return door visual (but keep it interactable)
+                if (returnDoorMesh) {
+                    returnDoorMesh.visible = uiVisible;
+                }
             }
             // V to toggle first/third person view
             if (e.key.toLowerCase() === 'v') {
@@ -1519,12 +1569,10 @@
                     useReturnDoor();
                     return;
                 }
-                // Then check Farkle table
+                // Then check Farkle table - join lobby
                 const nearTable = checkNearFarkleTable();
                 if (nearTable) {
-                    pendingFarkleTableForMode = nearTable;
-                    document.getElementById('farkleModeSelect').style.display = 'block';
-                    document.getElementById('farklePrompt').style.display = 'none';
+                    joinFarkleLobby(nearTable);
                 }
             }
             // Farkle game controls: A/D to switch dice, Space to toggle keep, R to roll, Q for help
@@ -1738,6 +1786,42 @@
             navigator.clipboard.writeText(JSON.stringify(data, null, 2));
             alert('Spawn data copied to clipboard!');
         };
+
+        // ========== RETURN DOOR UI FUNCTIONS ==========
+        window.toggleReturnDoorSection = function() {
+            const content = document.getElementById('returnDoorContent');
+            const arrow = document.getElementById('returnDoorArrow');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                arrow.textContent = '-';
+            } else {
+                content.style.display = 'none';
+                arrow.textContent = '+';
+            }
+        };
+
+        window.copyReturnDoorData = function() {
+            if (!returnDoorPosition) {
+                alert('No return door placed!');
+                return;
+            }
+            const data = {
+                type: 'returnDoor',
+                position: {
+                    x: parseFloat(returnDoorPosition.x.toFixed(3)),
+                    y: parseFloat(returnDoorPosition.y.toFixed(3)),
+                    z: parseFloat(returnDoorPosition.z.toFixed(3))
+                },
+                size: {
+                    width: returnDoorWidth,
+                    height: returnDoorHeight,
+                    depth: returnDoorDepth
+                }
+            };
+            navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+            alert('Return door data copied to clipboard!');
+        };
+        // ========== END RETURN DOOR FUNCTIONS ==========
 
         window.undoLastAction = function() {
             if (undoHistory.length === 0) return;
@@ -2683,10 +2767,53 @@
         let farkleUIRotation = 0; // UI rotation offset in degrees (0, 90, 180, 270)
 
         // Return Door Placement
-        let returnDoorPosition = null; // Only one return door
-        let returnDoorPlaceMode = false;
+        let settingReturnDoor = false;
+        let returnDoorPosition = null;
         let returnDoorPreview = null;
-        let returnDoorMesh = null; // The placed door mesh
+        let returnDoorMesh = null;
+        let returnDoorWidth = 2.2;
+        let returnDoorHeight = 4;
+        let returnDoorDepth = 0.2;
+        let returnDoorYOffset = 0;
+        let returnDoorBasePos = new THREE.Vector3();
+
+        // Permanent return door position
+        const PERMANENT_RETURN_DOOR = {
+            position: { x: 16.59, y: 5.141, z: 23.3 },
+            size: { width: 2.2, height: 4, depth: 0.2 }
+        };
+
+        // Create permanent return door on load
+        function createPermanentReturnDoor() {
+            const door = PERMANENT_RETURN_DOOR;
+            returnDoorPosition = new THREE.Vector3(door.position.x, door.position.y, door.position.z);
+            returnDoorWidth = door.size.width;
+            returnDoorHeight = door.size.height;
+            returnDoorDepth = door.size.depth;
+
+            // Create door mesh
+            const geometry = new THREE.BoxGeometry(returnDoorWidth, returnDoorHeight, returnDoorDepth);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x00ffff,
+                transparent: true,
+                opacity: 0.6,
+                side: THREE.DoubleSide
+            });
+            returnDoorMesh = new THREE.Mesh(geometry, material);
+
+            // Add cyan edges
+            const edges = new THREE.EdgesGeometry(geometry);
+            const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff });
+            const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
+            returnDoorMesh.add(edgeLines);
+
+            returnDoorMesh.position.copy(returnDoorPosition);
+            returnDoorMesh.userData.isReturnDoor = true;
+            returnDoorMesh.visible = false; // Start hidden (H to show)
+            scene.add(returnDoorMesh);
+
+            console.log('[RETURN DOOR] Permanent door created at', returnDoorPosition);
+        }
         let farkleUIPreview = []; // Preview UI meshes
 
         // Multiplayer
@@ -4741,12 +4868,6 @@
         };
 
         // ========== RETURN DOOR FUNCTIONS ==========
-        // Door dimensions (door-shaped: tall and thin)
-        let returnDoorWidth = 1.0;
-        let returnDoorHeight = 2.2;
-        let returnDoorDepth = 0.3;
-        let returnDoorBasePos = new THREE.Vector3();
-
         function createReturnDoorPreview() {
             if (returnDoorPreview) {
                 scene.remove(returnDoorPreview);
@@ -4776,7 +4897,7 @@
         }
 
         window.startReturnDoorPlacement = function() {
-            returnDoorPlaceMode = true;
+            settingReturnDoor = true;
 
             // Show collision boxes so user can see context
             if (!bucketCollisionVisualsVisible) {
@@ -4848,7 +4969,7 @@
             // Clean up
             scene.remove(returnDoorPreview);
             returnDoorPreview = null;
-            returnDoorPlaceMode = false;
+            settingReturnDoor = false;
 
             // Hide panel, show main UI
             document.getElementById('returnDoorPanel').style.display = 'none';
@@ -4866,6 +4987,10 @@
             document.exitPointerLock();
 
             console.log('[RETURN DOOR] Placed at', returnDoorPosition);
+
+            // Update sidebar display
+            document.getElementById('returnDoorDisplay').textContent =
+                `${returnDoorPosition.x.toFixed(1)}, ${returnDoorPosition.y.toFixed(1)}, ${returnDoorPosition.z.toFixed(1)}`;
         };
 
         window.checkNearReturnDoor = function() {
@@ -4876,11 +5001,16 @@
 
         window.useReturnDoor = function() {
             console.log('[RETURN DOOR] Returning to 2D world...');
-            window.location.href = '../world-builder.html';
+            // Just close this tab - game test will detect and resume
+            window.close();
+            // Fallback if window.close() is blocked
+            setTimeout(() => {
+                alert('Please close this tab to return to the game.');
+            }, 500);
         };
 
         window.exitReturnDoorPlacement = function() {
-            returnDoorPlaceMode = false;
+            settingReturnDoor = false;
             if (returnDoorPreview) {
                 scene.remove(returnDoorPreview);
                 returnDoorPreview = null;
@@ -5022,6 +5152,11 @@
         }
 
         function handleMultiplayerMessage(data) {
+            // Log all farkle messages for debugging
+            if (data.type && data.type.startsWith('farkle')) {
+                console.log('[FARKLE WS] Received message type:', data.type, 'from:', data.playerName || data.playerId);
+            }
+
             switch (data.type) {
                 case 'welcome':
                     console.log('[MULTIPLAYER] Welcome! Players in room:', data.players?.length || 0);
@@ -5058,6 +5193,47 @@
                     console.log('[MULTIPLAYER] Player left:', data.playerId);
                     removeOtherPlayer(data.playerId);
                     updatePlayerListUI();
+                    // Remove from Farkle game if active
+                    if (farkleMultiplayer.active) {
+                        handleFarklePlayerLeft(data.playerId);
+                    }
+                    break;
+
+                // Farkle lobby messages
+                case 'farkle_lobby_join':
+                    handleFarkleLobbyJoin(data);
+                    break;
+                case 'farkle_lobby_sync':
+                    handleFarkleLobbySync(data);
+                    break;
+                case 'farkle_lobby_leave':
+                    handleFarkleLobbyLeave(data);
+                    break;
+                case 'farkle_game_begin':
+                    handleFarkleGameBegin(data);
+                    break;
+
+                // Farkle game messages
+                case 'farkle_start':
+                    handleFarkleStart(data);
+                    break;
+                case 'farkle_join':
+                    handleFarkleJoin(data);
+                    break;
+                case 'farkle_roll':
+                    handleFarkleRoll(data);
+                    break;
+                case 'farkle_keep':
+                    handleFarkleKeep(data);
+                    break;
+                case 'farkle_bank':
+                    handleFarkleBank(data);
+                    break;
+                case 'farkle_next_turn':
+                    handleFarkleNextTurn(data);
+                    break;
+                case 'farkle_end':
+                    handleFarkleEnd(data);
                     break;
             }
         }
@@ -5065,10 +5241,14 @@
         function spawnOtherPlayer(playerData) {
             if (otherPlayers.has(playerData.id)) return; // Already spawned
 
-            console.log('[MULTIPLAYER] Spawning player:', playerData.name, 'at', playerData.x, playerData.y);
+            // Parse height from animation field (format: "anim:height")
+            let initialY = 3.5;
+            if (playerData.animation && playerData.animation.includes(':')) {
+                const parts = playerData.animation.split(':');
+                initialY = parseFloat(parts[1]) || 3.5;
+            }
 
-            // Floor height in tavern: playerPos.y (5.143) - eyeHeight (1.6) ≈ 3.5
-            const floorY = 3.5;
+            console.log('[MULTIPLAYER] Spawning player:', playerData.name, 'at', playerData.x, playerData.y, 'height:', initialY);
 
             // Create VISIBLE marker immediately (bright colored pillar)
             const markerGeom = new THREE.CylinderGeometry(0.3, 0.3, 2, 8);
@@ -5078,7 +5258,7 @@
                 opacity: 0.8
             });
             const marker = new THREE.Mesh(markerGeom, markerMat);
-            marker.position.set(playerData.x, floorY + 1, playerData.y);
+            marker.position.set(playerData.x, initialY + 1, playerData.y);
             scene.add(marker);
 
             // Create placeholder while loading
@@ -5088,21 +5268,22 @@
                 mixer: null,
                 animations: {},
                 nameTag: createNameTag(playerData.name),
-                position: new THREE.Vector3(playerData.x, floorY, playerData.y),
+                position: new THREE.Vector3(playerData.x, initialY, playerData.y),
                 direction: playerData.direction || 'down',
                 currentAnim: 'idle',
-                floorY: floorY
+                floorY: initialY
             };
             otherPlayers.set(playerData.id, playerInfo);
 
-            // Load the Hooded Adventurer model (now in tavern folder)
+            // Load the arms model for other players
             const loader = new GLTFLoader();
-            console.log('[MULTIPLAYER] Loading model from: Hooded%20Adventurer.glb');
-            loader.load('Hooded%20Adventurer.glb', function(gltf) {
+            console.log('[MULTIPLAYER] Loading arms model');
+            loader.load('tavern_assets3d/fp_arms_low_poly.glb', function(gltf) {
                 console.log('[MULTIPLAYER] GLTF loaded successfully!', gltf);
                 const model = gltf.scene;
                 model.scale.setScalar(1.0);
-                model.position.copy(playerInfo.position);
+                // Position arms lower (offset down by 1.5 units)
+                model.position.set(playerInfo.position.x, playerInfo.position.y - 1.5, playerInfo.position.z);
                 model.visible = true;
 
                 // Ensure all child meshes are visible and rendered correctly
@@ -5118,12 +5299,12 @@
                     }
                 });
 
-                // Set initial rotation (same formula as spawn model clone)
+                // Set initial rotation - same as spawn model clone (yaw + PI)
                 if (playerData.yaw !== undefined) {
-                    model.rotation.y = playerData.yaw + mpRotationOffset;
+                    model.rotation.y = playerData.yaw + Math.PI;
                     playerInfo.lastYaw = playerData.yaw;
                 } else {
-                    model.rotation.y = mpRotationOffset; // Default facing
+                    model.rotation.y = Math.PI; // Default facing
                 }
 
                 scene.add(model);
@@ -5157,6 +5338,7 @@
                 playerInfo.model = model;
                 playerInfo.mixer = mixer;
                 playerInfo.animations = animations;
+                playerInfo.currentAnim = 'idle';
 
                 console.log('[MULTIPLAYER] Model loaded for:', playerData.name, 'at Y:', playerInfo.position.y);
             }, function(progress) {
@@ -5172,24 +5354,32 @@
             const other = otherPlayers.get(playerData.id);
             if (!other) return;
 
-            const floorY = other.floorY || 3.5;
+            // Parse height from animation field (format: "anim:height" e.g. "walk:5.50")
+            let actualY = other.floorY || 3.5;
+            let actualAnim = playerData.animation || 'idle';
+            if (playerData.animation && playerData.animation.includes(':')) {
+                const parts = playerData.animation.split(':');
+                actualAnim = parts[0];
+                actualY = parseFloat(parts[1]) || actualY;
+            }
 
             // Update position
-            other.position.set(playerData.x, floorY, playerData.y);
+            other.position.set(playerData.x, actualY, playerData.y);
 
             // Update marker position (always)
             if (other.marker) {
-                other.marker.position.set(playerData.x, floorY + 1, playerData.y);
+                other.marker.position.set(playerData.x, actualY + 1, playerData.y);
             }
 
             if (other.model) {
-                other.model.position.copy(other.position);
+                // Apply same offset as spawn (lower by 1.5)
+                other.model.position.set(other.position.x, other.position.y - 1.5, other.position.z);
 
                 // Use yaw directly if available (3D tavern players), otherwise use cardinal direction
                 if (playerData.yaw !== undefined) {
-                    // Model faces same direction as camera (adjustable offset)
-                    other.model.rotation.y = playerData.yaw + mpRotationOffset;
-                    other.lastYaw = playerData.yaw; // Store for slider updates
+                    // Model faces where player is looking (same as spawn clone: yaw + PI)
+                    other.model.rotation.y = playerData.yaw + Math.PI;
+                    other.lastYaw = playerData.yaw;
                 } else {
                     // Fallback for 2D players using cardinal directions
                     const rotations = {
@@ -5201,6 +5391,25 @@
                     other.model.rotation.y = rotations[playerData.direction] || Math.PI;
                 }
                 other.direction = playerData.direction;
+
+                // Switch animation if changed (simple approach)
+                if (other.animations && other.currentAnim !== actualAnim) {
+                    // Stop all animations
+                    Object.values(other.animations).forEach(a => a.stop());
+                    // Play the new one
+                    if (other.animations[actualAnim]) {
+                        other.animations[actualAnim].play();
+                    } else if (other.animations['idle']) {
+                        other.animations['idle'].play();
+                    }
+                    other.currentAnim = actualAnim;
+                }
+
+                // Fake bobbing motion when walking (smooth up/down)
+                if (actualAnim === 'walk') {
+                    const bob = Math.sin(Date.now() * 0.01) * 0.1;
+                    other.model.position.y += bob;
+                }
             }
         }
 
@@ -5272,11 +5481,12 @@
             const now = Date.now();
             if (now - lastPositionSendTime < 100) return; // Throttle to 10/sec
 
-            // Check if position or yaw changed significantly
+            // Check if position or yaw changed significantly (including height!)
             const dx = Math.abs(playerPos.x - lastSentPosition.x);
+            const dy = Math.abs(playerPos.y - lastSentPosition.y); // Height change
             const dz = Math.abs(playerPos.z - lastSentPosition.z);
             const dyaw = Math.abs(yaw - lastSentYaw);
-            if (dx < 0.01 && dz < 0.01 && dyaw < 0.05) return; // No significant change
+            if (dx < 0.01 && dy < 0.01 && dz < 0.01 && dyaw < 0.05) return; // No significant change
 
             lastPositionSendTime = now;
             lastSentPosition = { x: playerPos.x, y: playerPos.y, z: playerPos.z };
@@ -5295,13 +5505,17 @@
                 direction = 'left';
             }
 
+            // Encode height into animation field as "anim:height" since server only forwards known fields
+            const anim = keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ? 'walk' : 'idle';
+            const animWithHeight = anim + ':' + playerPos.y.toFixed(2);
+
             multiplayerWs.send(JSON.stringify({
                 type: 'update',
                 x: playerPos.x,
-                y: playerPos.z, // 3D z = message y
+                y: playerPos.z, // 3D z = message y (horizontal)
                 direction: direction,
                 yaw: yaw, // Send actual yaw for 3D rotation
-                animation: keys.KeyW || keys.KeyA || keys.KeyS || keys.KeyD ? 'walk' : 'idle'
+                animation: animWithHeight // e.g. "walk:5.50" or "idle:3.20"
             }));
         }
 
@@ -5329,7 +5543,6 @@
         });
 
         // Return Door slider listeners
-        let returnDoorYOffset = 0;
         document.getElementById('rdWidthSlider').addEventListener('input', (e) => {
             returnDoorWidth = parseFloat(e.target.value);
             document.getElementById('rdWidthVal').textContent = returnDoorWidth.toFixed(1);
@@ -5952,7 +6165,25 @@
 
         // Roll the dice
         window.rollFarkleDice = function() {
-            if (!canCurrentPlayerAct()) return;
+            console.log('[FARKLE DEBUG] rollFarkleDice called');
+            console.log('[FARKLE DEBUG] multiplayer.active:', farkleMultiplayer.active);
+            console.log('[FARKLE DEBUG] multiplayer.isMyTurn:', farkleMultiplayer.isMyTurn);
+            console.log('[FARKLE DEBUG] multiplayer.currentTurnIndex:', farkleMultiplayer.currentTurnIndex);
+            if (farkleMultiplayer.active) {
+                console.log('[FARKLE DEBUG] Players:', JSON.stringify(farkleMultiplayer.players));
+            }
+
+            // In multiplayer, only roll if it's our turn
+            if (farkleMultiplayer.active && !farkleMultiplayer.isMyTurn) {
+                console.log('[FARKLE DEBUG] Roll blocked - not our turn');
+                showFarkleMessage("Not your turn!");
+                return;
+            }
+            if (!canCurrentPlayerAct()) {
+                console.log('[FARKLE DEBUG] Roll blocked - canCurrentPlayerAct returned false');
+                return;
+            }
+            console.log('[FARKLE DEBUG] Roll allowed - proceeding');
 
             // If already rolled, check for valid roll conditions
             if (farkleRolled) {
@@ -6063,6 +6294,19 @@
 
             farkleGameActive = false;
             activeFarkleTable = null;
+
+            // Reset multiplayer state
+            if (farkleMultiplayer.active) {
+                sendFarkleMessage('farkle_end', { reason: 'left' });
+                farkleMultiplayer = {
+                    active: false,
+                    players: [],
+                    currentTurnIndex: 0,
+                    isMyTurn: false,
+                    hostId: null,
+                    gameId: null
+                };
+            }
 
             // Reset scores and game state
             farkleTurnScore = 0;
@@ -6189,13 +6433,636 @@
         // Farkle scoring variables
         let farkleTurnScore = 0;
         let farkleTotalScore = 0;
-        let farkleNPCScore = 0; // Also used for Player 2 score in 2-player mode
         let farkleRolled = false; // Has player rolled this turn?
         let selectedDieIndex = 0; // Currently highlighted die
-        let isPlayerTurn = true; // Whose turn is it? (true = P1, false = P2/NPC)
-        let npcTurnInProgress = false; // Is NPC currently taking their turn?
-        let farkleGameMode = 'npc'; // 'npc' or '2player'
         let pendingFarkleTableForMode = null; // Table waiting for mode selection
+
+        // Multiplayer Farkle state
+        let farkleMultiplayer = {
+            active: false,           // Is this a multiplayer game?
+            players: [],             // Array of {id, name, score}
+            currentTurnIndex: 0,     // Index in players array
+            isMyTurn: false,         // Is it local player's turn?
+            hostId: null,            // Who started the game
+            gameId: null             // Unique game ID
+        };
+
+        // ========== FARKLE MULTIPLAYER FUNCTIONS ==========
+
+        // Send Farkle message to room
+        function sendFarkleMessage(type, data) {
+            if (!multiplayerWs || multiplayerWs.readyState !== WebSocket.OPEN) return;
+            multiplayerWs.send(JSON.stringify({
+                type: type,
+                ...data,
+                playerId: localPlayerId,
+                playerName: localPlayerName
+            }));
+        }
+
+        // Farkle lobby state
+        let farkleLobby = {
+            active: false,
+            inLobby: false,
+            tableLeaderId: null,
+            tableId: null,
+            players: [],
+            pendingTable: null
+        };
+
+        // Join or create a Farkle lobby when pressing E at table
+        function joinFarkleLobby(table) {
+            if (farkleLobby.inLobby || farkleGameActive) return;
+
+            const tableId = 'table_' + Math.round(table.position.x) + '_' + Math.round(table.position.z);
+
+            farkleLobby = {
+                active: true,
+                inLobby: true,
+                tableLeaderId: localPlayerId, // We might be leader if first
+                tableId: tableId,
+                players: [{
+                    id: localPlayerId,
+                    name: localPlayerName,
+                    score: 0
+                }],
+                pendingTable: table
+            };
+
+            // Broadcast that we're joining this table's lobby
+            sendFarkleMessage('farkle_lobby_join', {
+                tableId: tableId,
+                tablePosition: {
+                    x: table.position.x,
+                    y: table.position.y,
+                    z: table.position.z
+                }
+            });
+
+            // Show lobby UI
+            showFarkleLobbyUI();
+            console.log('[FARKLE] Joined lobby for table:', tableId);
+        }
+
+        // Handle someone joining the lobby
+        function handleFarkleLobbyJoin(data) {
+            console.log('[FARKLE DEBUG] Received lobby_join from:', data.playerName, 'tableId:', data.tableId);
+
+            if (data.playerId === localPlayerId) return;
+            if (!farkleLobby.inLobby) {
+                // We're not in lobby, but someone near us is - auto join!
+                const tablePos = new THREE.Vector3(data.tablePosition.x, data.tablePosition.y, data.tablePosition.z);
+                const dist = camera.position.distanceTo(tablePos);
+                console.log('[FARKLE DEBUG] Not in lobby, distance to table:', dist);
+                if (dist < 10) {
+                    // Find the table and join
+                    const nearTable = findNearestFarkleTable();
+                    if (nearTable) {
+                        joinFarkleLobby(nearTable);
+                    }
+                }
+                return;
+            }
+
+            // Same table?
+            if (data.tableId !== farkleLobby.tableId) {
+                console.log('[FARKLE DEBUG] Different table, ignoring');
+                return;
+            }
+
+            // Add player if not already in list
+            if (!farkleLobby.players.find(p => p.id === data.playerId)) {
+                farkleLobby.players.push({
+                    id: data.playerId,
+                    name: data.playerName,
+                    score: 0
+                });
+                console.log('[FARKLE DEBUG] Added player to lobby:', data.playerName, 'Total:', farkleLobby.players.length);
+                updateFarkleLobbyUI();
+            }
+
+            // Only send sync if we were here first (we are index 0 = table leader)
+            // This prevents race conditions where both players send syncs
+            if (farkleLobby.players[0]?.id === localPlayerId) {
+                console.log('[FARKLE DEBUG] We are table leader, sending sync');
+                sendFarkleMessage('farkle_lobby_sync', {
+                    tableId: farkleLobby.tableId,
+                    players: farkleLobby.players
+                });
+            }
+        }
+
+        // Handle lobby sync (get full player list)
+        function handleFarkleLobbySync(data) {
+            console.log('[FARKLE DEBUG] Received lobby_sync from:', data.playerName);
+            console.log('[FARKLE DEBUG] Their player list:', data.players.map(p => p.name));
+            console.log('[FARKLE DEBUG] My current list:', farkleLobby.players.map(p => p.name));
+
+            if (!farkleLobby.inLobby) return;
+            if (data.tableId !== farkleLobby.tableId) return;
+            if (data.playerId === localPlayerId) return;
+
+            // The sender's list is authoritative for order (they were here first)
+            // Start with their list, then add ourselves if not in it
+            const newList = [...data.players];
+            if (!newList.find(p => p.id === localPlayerId)) {
+                newList.push({
+                    id: localPlayerId,
+                    name: localPlayerName,
+                    score: 0
+                });
+            }
+            farkleLobby.players = newList;
+
+            // Table leader is always first player
+            if (farkleLobby.players.length > 0) {
+                farkleLobby.tableLeaderId = farkleLobby.players[0].id;
+            }
+
+            console.log('[FARKLE DEBUG] After sync, my list:', farkleLobby.players.map(p => p.name));
+            console.log('[FARKLE DEBUG] Table leader is:', farkleLobby.players[0]?.name);
+            console.log('[FARKLE DEBUG] Am I leader?', farkleLobby.players[0]?.id === localPlayerId);
+
+            updateFarkleLobbyUI();
+        }
+
+        // Show lobby UI
+        function showFarkleLobbyUI() {
+            document.getElementById('farkleLobby').style.display = 'block';
+            document.getElementById('farklePrompt').style.display = 'none';
+            updateFarkleLobbyUI();
+        }
+
+        // Update lobby UI
+        function updateFarkleLobbyUI() {
+            const statusEl = document.getElementById('farkleLobbyStatus');
+            const playersEl = document.getElementById('farkleLobbyPlayers');
+            const startBtn = document.getElementById('farkleStartBtn');
+            const waitingEl = document.getElementById('farkleLobbyWaiting');
+
+            const count = farkleLobby.players.length;
+            statusEl.textContent = 'Players at table: ' + count + '/4';
+
+            // Player list
+            let html = '';
+            farkleLobby.players.forEach((p, i) => {
+                const isLeader = (i === 0);
+                const isMe = (p.id === localPlayerId);
+                const leaderTag = isLeader ? ' (Table Leader)' : '';
+                const youTag = isMe ? ' (you)' : '';
+                const color = isLeader ? '#ffa' : '#fff';
+                html += '<div style="color:' + color + '; padding:4px 0;">' + p.name + leaderTag + youTag + '</div>';
+            });
+            playersEl.innerHTML = html;
+
+            // Show start button only for table leader
+            const isTableLeader = farkleLobby.players.length > 0 && farkleLobby.players[0].id === localPlayerId;
+            if (isTableLeader && count >= 2) {
+                startBtn.style.display = 'inline-block';
+                waitingEl.textContent = 'You can start the game or wait for more players';
+            } else if (isTableLeader) {
+                startBtn.style.display = 'none';
+                waitingEl.textContent = 'Waiting for at least 1 more player...';
+            } else {
+                startBtn.style.display = 'none';
+                const leaderName = farkleLobby.players[0]?.name || 'table leader';
+                waitingEl.textContent = 'Waiting for ' + leaderName + ' to start the game...';
+            }
+        }
+
+        // Table leader starts the game
+        window.tableLeaderStartGame = function() {
+            console.log('[FARKLE DEBUG] tableLeaderStartGame called');
+            console.log('[FARKLE DEBUG] inLobby:', farkleLobby.inLobby);
+            console.log('[FARKLE DEBUG] players[0]:', farkleLobby.players[0]?.name);
+            console.log('[FARKLE DEBUG] Am I leader?', farkleLobby.players[0]?.id === localPlayerId);
+
+            if (!farkleLobby.inLobby) return;
+            if (farkleLobby.players[0]?.id !== localPlayerId) return; // Not leader
+
+            // Setup multiplayer state
+            farkleMultiplayer = {
+                active: true,
+                players: farkleLobby.players.map(p => ({ ...p, score: 0 })),
+                currentTurnIndex: 0,
+                isMyTurn: true, // Leader goes first
+                hostId: localPlayerId,
+                gameId: farkleLobby.tableId
+            };
+
+            console.log('[FARKLE DEBUG] Game starting! Players:', farkleMultiplayer.players.map(p => p.name));
+            console.log('[FARKLE DEBUG] isMyTurn:', farkleMultiplayer.isMyTurn);
+            console.log('[FARKLE DEBUG] currentTurnIndex:', farkleMultiplayer.currentTurnIndex);
+
+            // Broadcast game start
+            sendFarkleMessage('farkle_game_begin', {
+                tableId: farkleLobby.tableId,
+                players: farkleMultiplayer.players
+            });
+
+            // Hide lobby, start game
+            document.getElementById('farkleLobby').style.display = 'none';
+            farkleLobby.inLobby = false;
+            startFarkleGameMultiplayer(farkleLobby.pendingTable);
+
+            console.log('[FARKLE] Table leader started game with', farkleMultiplayer.players.length, 'players');
+        };
+
+        // Handle game begin from table leader
+        function handleFarkleGameBegin(data) {
+            console.log('[FARKLE DEBUG] handleFarkleGameBegin received:', JSON.stringify(data));
+            console.log('[FARKLE DEBUG] My ID:', localPlayerId, 'Sender ID:', data.playerId);
+            console.log('[FARKLE DEBUG] inLobby:', farkleLobby.inLobby, 'tableId match:', data.tableId === farkleLobby.tableId);
+
+            if (data.playerId === localPlayerId) {
+                console.log('[FARKLE DEBUG] Ignoring - we sent this');
+                return;
+            }
+            if (!farkleLobby.inLobby) {
+                console.log('[FARKLE DEBUG] Ignoring - not in lobby');
+                return;
+            }
+            if (data.tableId !== farkleLobby.tableId) {
+                console.log('[FARKLE DEBUG] Ignoring - different table');
+                return;
+            }
+
+            console.log('[FARKLE DEBUG] Game started by table leader');
+
+            // Find my index in the player list
+            const myIndex = data.players.findIndex(p => p.id === localPlayerId);
+            console.log('[FARKLE DEBUG] My index in player list:', myIndex);
+
+            farkleMultiplayer = {
+                active: true,
+                players: data.players,
+                currentTurnIndex: 0,
+                isMyTurn: (myIndex === 0), // First player goes first
+                hostId: data.playerId,
+                gameId: data.tableId
+            };
+
+            console.log('[FARKLE DEBUG] farkleMultiplayer set:', JSON.stringify(farkleMultiplayer));
+            console.log('[FARKLE DEBUG] isMyTurn:', farkleMultiplayer.isMyTurn);
+
+            // Hide lobby, start game
+            document.getElementById('farkleLobby').style.display = 'none';
+            farkleLobby.inLobby = false;
+            console.log('[FARKLE DEBUG] Calling startFarkleGameMultiplayer');
+            startFarkleGameMultiplayer(farkleLobby.pendingTable);
+        }
+
+        // Leave lobby
+        window.leaveFarkleLobby = function() {
+            sendFarkleMessage('farkle_lobby_leave', { tableId: farkleLobby.tableId });
+            document.getElementById('farkleLobby').style.display = 'none';
+            farkleLobby = {
+                active: false,
+                inLobby: false,
+                tableLeaderId: null,
+                tableId: null,
+                players: [],
+                pendingTable: null
+            };
+        };
+
+        // Handle someone leaving lobby
+        function handleFarkleLobbyLeave(data) {
+            if (!farkleLobby.inLobby) return;
+            if (data.tableId !== farkleLobby.tableId) return;
+
+            farkleLobby.players = farkleLobby.players.filter(p => p.id !== data.playerId);
+
+            // If we're now the first player, we become table leader
+            if (farkleLobby.players.length > 0) {
+                farkleLobby.tableLeaderId = farkleLobby.players[0].id;
+            }
+
+            updateFarkleLobbyUI();
+        }
+
+        // Legacy handlers for backwards compatibility
+        function handleFarkleStart(data) {
+            // Convert old start to lobby join
+            handleFarkleLobbyJoin(data);
+        }
+
+        function handleFarkleJoin(data) {
+            // Convert old join to lobby join
+            handleFarkleLobbyJoin(data);
+        }
+
+        // Handle dice roll from another player
+        function handleFarkleRoll(data) {
+            console.log('[FARKLE DEBUG] handleFarkleRoll received:', JSON.stringify(data));
+            console.log('[FARKLE DEBUG] multiplayer.active:', farkleMultiplayer.active);
+            console.log('[FARKLE DEBUG] from playerId:', data.playerId, 'my id:', localPlayerId);
+
+            if (!farkleMultiplayer.active) {
+                console.log('[FARKLE DEBUG] Ignoring roll - multiplayer not active');
+                return;
+            }
+            if (data.playerId === localPlayerId) {
+                console.log('[FARKLE DEBUG] Ignoring roll - we sent it');
+                return;
+            }
+
+            console.log('[FARKLE DEBUG] Roll received from:', data.playerName, 'Dice values:', data.diceValues);
+
+            // Set dice to the rolled values (skip physics, just show result)
+            if (data.diceValues && farkleDice) {
+                console.log('[FARKLE DEBUG] Applying dice values to local dice');
+                for (let i = 0; i < farkleDice.length; i++) {
+                    if (!farkleDice[i].kept) {
+                        setDieToValue(farkleDice[i], data.diceValues[i]);
+                        console.log('[FARKLE DEBUG] Die', i, 'set to', data.diceValues[i]);
+                    }
+                }
+            }
+            farkleRolled = true;
+            readDiceValues();
+            updateDiceHighlights();
+            updateFarklePlayerList();
+        }
+
+        // Handle dice keep from another player
+        function handleFarkleKeep(data) {
+            console.log('[FARKLE DEBUG] handleFarkleKeep received:', JSON.stringify(data));
+
+            if (!farkleMultiplayer.active) {
+                console.log('[FARKLE DEBUG] Ignoring keep - multiplayer not active');
+                return;
+            }
+            if (data.playerId === localPlayerId) {
+                console.log('[FARKLE DEBUG] Ignoring keep - we sent it');
+                return;
+            }
+
+            console.log('[FARKLE DEBUG] Keep received from:', data.playerName, 'indices:', data.keptIndices, 'turnScore:', data.turnScore);
+
+            // Update kept status
+            if (data.keptIndices && farkleDice) {
+                farkleDice.forEach((die, i) => {
+                    die.kept = data.keptIndices.includes(i);
+                    updateDieGlow(die);
+                });
+            }
+            farkleTurnScore = data.turnScore || 0;
+            console.log('[FARKLE DEBUG] Updated farkleTurnScore to:', farkleTurnScore);
+            updateFarklePlayerList();
+            updateDiceHighlights();
+        }
+
+        // Handle bank from another player
+        function handleFarkleBank(data) {
+            console.log('[FARKLE DEBUG] handleFarkleBank received:', JSON.stringify(data));
+
+            if (!farkleMultiplayer.active) {
+                console.log('[FARKLE DEBUG] Ignoring bank - multiplayer not active');
+                return;
+            }
+
+            console.log('[FARKLE DEBUG] Bank received from:', data.playerName, 'points:', data.points, 'totalScore:', data.totalScore);
+
+            // Update player score
+            const player = farkleMultiplayer.players.find(p => p.id === data.playerId);
+            if (player) {
+                player.score = data.totalScore;
+                console.log('[FARKLE DEBUG] Updated', player.name, 'score to', player.score);
+            }
+            updateFarklePlayerList();
+            showFarkleMessage(data.playerName + ' banked ' + data.points + ' points!');
+        }
+
+        // Handle turn change
+        function handleFarkleNextTurn(data) {
+            console.log('[FARKLE DEBUG] handleFarkleNextTurn received:', JSON.stringify(data));
+            console.log('[FARKLE DEBUG] multiplayer.active:', farkleMultiplayer.active);
+            console.log('[FARKLE DEBUG] nextPlayerId:', data.nextPlayerId, 'my id:', localPlayerId);
+
+            if (!farkleMultiplayer.active) {
+                console.log('[FARKLE DEBUG] Ignoring - multiplayer not active');
+                return;
+            }
+
+            console.log('[FARKLE DEBUG] Setting currentTurnIndex to', data.turnIndex);
+            farkleMultiplayer.currentTurnIndex = data.turnIndex;
+            farkleMultiplayer.isMyTurn = (data.nextPlayerId === localPlayerId);
+            console.log('[FARKLE DEBUG] isMyTurn set to:', farkleMultiplayer.isMyTurn);
+
+            // Reset dice for new turn
+            resetDiceForNewTurn();
+            farkleRolled = false;
+            farkleTurnScore = 0;
+
+            const currentPlayer = farkleMultiplayer.players[data.turnIndex];
+            console.log('[FARKLE DEBUG] Current player:', currentPlayer?.name);
+            if (farkleMultiplayer.isMyTurn) {
+                console.log('[FARKLE DEBUG] It is MY turn now');
+                showFarkleMessage('Your turn! Press R to roll');
+            } else if (currentPlayer) {
+                console.log('[FARKLE DEBUG] It is', currentPlayer.name, "'s turn");
+                showFarkleMessage(currentPlayer.name + "'s turn");
+            }
+            updateFarklePlayerList();
+        }
+
+        // Handle game end
+        function handleFarkleEnd(data) {
+            console.log('[FARKLE MP] Game ended! Winner:', data.winnerName);
+            showFarkleMessage('GAME OVER! ' + data.winnerName + ' wins with ' + data.winnerScore + ' points!');
+
+            setTimeout(() => {
+                exitFarkleGame();
+            }, 3000);
+        }
+
+        // Handle player leaving mid-game
+        function handleFarklePlayerLeft(playerId) {
+            const idx = farkleMultiplayer.players.findIndex(p => p.id === playerId);
+            if (idx !== -1) {
+                const player = farkleMultiplayer.players[idx];
+                farkleMultiplayer.players.splice(idx, 1);
+                showFarkleMessage(player.name + ' left the game');
+                updateFarklePlayerList();
+
+                // If only one player left, they win
+                if (farkleMultiplayer.players.length === 1) {
+                    showFarkleMessage('You win by default!');
+                    setTimeout(() => exitFarkleGame(), 2000);
+                }
+            }
+        }
+
+        // Set a die to show a specific value (for syncing)
+        function setDieToValue(die, value) {
+            if (!die || !die.mesh) return;
+
+            // Position die flat on table
+            const feltY = activeFarkleTable?.mesh?.feltSurfaceY || 1.0;
+            die.mesh.position.y = activeFarkleTable.position.y + feltY + 0.4;
+            die.body.position.copy(die.mesh.position);
+            die.body.velocity.set(0, 0, 0);
+            die.body.angularVelocity.set(0, 0, 0);
+
+            // Rotate to show correct face
+            const rotations = {
+                1: new THREE.Euler(0, 0, 0),
+                2: new THREE.Euler(Math.PI/2, 0, 0),
+                3: new THREE.Euler(0, 0, Math.PI/2),
+                4: new THREE.Euler(0, 0, -Math.PI/2),
+                5: new THREE.Euler(-Math.PI/2, 0, 0),
+                6: new THREE.Euler(Math.PI, 0, 0)
+            };
+            if (rotations[value]) {
+                die.mesh.rotation.copy(rotations[value]);
+                die.body.quaternion.copy(die.mesh.quaternion);
+            }
+            die.currentValue = value;
+        }
+
+        // Reset dice for a new turn
+        function resetDiceForNewTurn() {
+            if (!farkleDice) return;
+            farkleDice.forEach(die => {
+                die.kept = false;
+                die.currentValue = 0;
+                updateDieGlow(die);
+            });
+        }
+
+        // Update Farkle player list UI
+        function updateFarklePlayerList() {
+            const container = document.getElementById('farkleScoreDisplay');
+            if (!container) return;
+
+            let html = '<div style="font-size:14px; margin-bottom:8px; color:#ffa;">FARKLE</div>';
+            farkleMultiplayer.players.forEach((p, i) => {
+                const isCurrentTurn = (i === farkleMultiplayer.currentTurnIndex);
+                const isMe = (p.id === localPlayerId);
+                const color = isCurrentTurn ? '#ff0' : '#fff';
+                const arrow = isCurrentTurn ? '> ' : '  ';
+                const youTag = isMe ? ' (you)' : '';
+                html += `<div style="color:${color}">${arrow}${p.name}${youTag}: ${p.score}</div>`;
+            });
+            html += `<div style="color:#0ff; margin-top:8px;">Turn Score: ${farkleTurnScore}</div>`;
+            container.innerHTML = html;
+
+            // Update turn message at top center
+            const turnMsg = document.getElementById('farkleTurnMessage');
+            if (turnMsg && farkleMultiplayer.players.length > 0) {
+                if (farkleMultiplayer.isMyTurn) {
+                    turnMsg.textContent = 'YOUR TURN - Press R to roll!';
+                    turnMsg.style.color = '#0f0';
+                    turnMsg.style.display = 'block';
+                } else {
+                    const currentPlayer = farkleMultiplayer.players[farkleMultiplayer.currentTurnIndex];
+                    if (currentPlayer) {
+                        turnMsg.textContent = currentPlayer.name + "'s turn...";
+                        turnMsg.style.color = '#ff0';
+                        turnMsg.style.display = 'block';
+                    }
+                }
+            }
+        }
+
+        // Show a Farkle message
+        function showFarkleMessage(msg) {
+            const msgEl = document.getElementById('farkleMessage');
+            if (msgEl) {
+                msgEl.textContent = msg;
+                msgEl.style.display = 'block';
+            }
+        }
+
+        // Find nearest Farkle table
+        function findNearestFarkleTable() {
+            let nearest = null;
+            let minDist = Infinity;
+            savedFarkleTables.forEach(table => {
+                const dist = camera.position.distanceTo(table.position);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearest = table;
+                }
+            });
+            return nearest;
+        }
+
+        // Start game in multiplayer mode
+        function startFarkleGameMultiplayer(table) {
+            farkleGameActive = true;
+            activeFarkleTable = table;
+
+            // Hide hands
+            if (fpsHands) fpsHands.visible = false;
+
+            // Save camera state
+            savedCameraPos.copy(camera.position);
+            savedCameraRotFarkle.copy(camera.rotation);
+
+            // Setup physics
+            setupDiceTrayPhysics(table);
+
+            // Table position for dice spawning
+            const tablePos = table.position;
+
+            // Move camera to the saved position for this table
+            if (table.cameraPos && table.cameraRot) {
+                camera.position.copy(table.cameraPos);
+                camera.rotation.copy(table.cameraRot);
+            } else {
+                // Fallback: calculate position
+                const rotY = table.rotation * Math.PI / 180;
+                const seatOffset = new THREE.Vector3(0, 0.4, 0.6);
+                seatOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
+                camera.position.set(tablePos.x + seatOffset.x, tablePos.y + seatOffset.y, tablePos.z + seatOffset.z);
+                camera.lookAt(tablePos.x, tablePos.y + 0.05, tablePos.z);
+            }
+
+            // Keep pointer lock for looking around
+            renderer.domElement.requestPointerLock();
+            document.getElementById('farkleGameUI').style.display = 'block';
+            document.getElementById('info').style.display = 'none';
+            document.getElementById('modeIndicator').style.display = 'none';
+
+            // Setup 3D UI on the table surface
+            setup3DFarkleUI(table);
+
+            // Create 6 dice above the tray
+            const feltY = table.mesh.feltSurfaceY || 1.0;
+            farkleDice = [];
+            const dieSize = 0.12;
+            for (let i = 0; i < 6; i++) {
+                const offsetX = (i % 3 - 1) * 0.45;
+                const offsetZ = (Math.floor(i / 3) - 0.5) * 0.45;
+                const diePos = new THREE.Vector3(
+                    tablePos.x + offsetX,
+                    tablePos.y + feltY + 0.3,
+                    tablePos.z + offsetZ
+                );
+                const die = createDie(diePos, dieSize);
+                farkleDice.push(die);
+            }
+            console.log('[FARKLE MP] Created', farkleDice.length, 'dice');
+
+            // Hide farkle prompt
+            document.getElementById('farklePrompt').style.display = 'none';
+
+            // Update multiplayer UI
+            updateFarklePlayerList();
+
+            if (farkleMultiplayer.isMyTurn) {
+                showFarkleMessage('Your turn! Press R to roll');
+            } else {
+                const currentPlayer = farkleMultiplayer.players[farkleMultiplayer.currentTurnIndex];
+                if (currentPlayer) {
+                    showFarkleMessage(currentPlayer.name + "'s turn - watching...");
+                }
+            }
+        }
+
+        // ========== END FARKLE MULTIPLAYER FUNCTIONS ==========
 
         // Calculate score for current dice selection
         function calculateFarkleScore(diceValues) {
@@ -6393,6 +7260,13 @@
         // Toggle keep on currently selected die
         function toggleSelectedDieKept() {
             if (!farkleRolled || farkleDice.length === 0) return;
+
+            // Multiplayer turn check
+            if (farkleMultiplayer.active && !farkleMultiplayer.isMyTurn) {
+                showFarkleMessage("Not your turn!");
+                return;
+            }
+
             const die = farkleDice[selectedDieIndex];
 
             // If trying to keep, validate it's a scoring die
@@ -6407,6 +7281,12 @@
             readDiceValues();
             updateTurnScoreDisplay();
             updateSelectionMessage();
+
+            // Broadcast kept dice state in multiplayer
+            if (farkleMultiplayer.active) {
+                const keptIndices = farkleDice.map((d, i) => d.kept ? i : -1).filter(i => i >= 0);
+                sendFarkleMessage('farkle_keep', { keptIndices: keptIndices, turnScore: farkleTurnScore });
+            }
         }
 
         // Update message - simplified since we have 2D dice UI now
@@ -6426,6 +7306,12 @@
         function toggleDieKept(die) {
             if (!farkleRolled) return; // Can't keep dice before rolling
 
+            // Multiplayer turn check
+            if (farkleMultiplayer.active && !farkleMultiplayer.isMyTurn) {
+                showFarkleMessage("Not your turn!");
+                return;
+            }
+
             // If trying to keep, validate it's a scoring die
             if (!die.kept && !canKeepDie(die)) {
                 document.getElementById('farkleMessage').textContent = 'That die doesn\'t score! Only 1s, 5s, or sets of 3+';
@@ -6439,11 +7325,102 @@
             // Update score display
             readDiceValues();
             updateTurnScoreDisplay();
+
+            // Broadcast kept dice state in multiplayer
+            if (farkleMultiplayer.active) {
+                const keptIndices = farkleDice.map((d, i) => d.kept ? i : -1).filter(i => i >= 0);
+                sendFarkleMessage('farkle_keep', { keptIndices: keptIndices, turnScore: farkleTurnScore });
+            }
         }
 
         // Bank current points
         window.bankFarklePoints = function() {
-            if (!farkleGameActive || !farkleRolled) return;
+            console.log('[FARKLE DEBUG] bankFarklePoints called');
+            console.log('[FARKLE DEBUG] farkleGameActive:', farkleGameActive, 'farkleRolled:', farkleRolled);
+
+            if (!farkleGameActive || !farkleRolled) {
+                console.log('[FARKLE DEBUG] Bank blocked - game not active or not rolled');
+                return;
+            }
+
+            // Multiplayer mode
+            if (farkleMultiplayer.active) {
+                console.log('[FARKLE DEBUG] Multiplayer bank - isMyTurn:', farkleMultiplayer.isMyTurn);
+                console.log('[FARKLE DEBUG] Turn score:', farkleTurnScore);
+                console.log('[FARKLE DEBUG] Kept dice:', farkleDice.map((d,i) => d.kept ? i : -1).filter(i => i >= 0));
+
+                if (!farkleMultiplayer.isMyTurn) {
+                    console.log('[FARKLE DEBUG] Bank blocked - not my turn');
+                    showFarkleMessage("Not your turn!");
+                    return;
+                }
+
+                // Must have at least one kept die
+                const keptCount = farkleDice.filter(d => d.kept).length;
+                if (keptCount === 0) {
+                    console.log('[FARKLE DEBUG] Bank blocked - no kept dice');
+                    showFarkleMessage('Keep at least one scoring die!');
+                    return;
+                }
+
+                // Update local player's score
+                const me = farkleMultiplayer.players.find(p => p.id === localPlayerId);
+                if (me) {
+                    me.score += farkleTurnScore;
+                    console.log('[FARKLE DEBUG] My new score:', me.score);
+                }
+
+                // Broadcast bank action
+                console.log('[FARKLE DEBUG] Broadcasting bank:', farkleTurnScore, 'points');
+                sendFarkleMessage('farkle_bank', {
+                    points: farkleTurnScore,
+                    totalScore: me ? me.score : 0
+                });
+
+                // Check for win
+                if (me && me.score >= 10000) {
+                    sendFarkleMessage('farkle_end', {
+                        winnerId: localPlayerId,
+                        winnerName: localPlayerName,
+                        winnerScore: me.score
+                    });
+                    showFarkleMessage('YOU WIN! ' + me.score + ' points!');
+                    setTimeout(() => exitFarkleGame(), 3000);
+                    return;
+                }
+
+                // Move to next player's turn
+                const nextIndex = (farkleMultiplayer.currentTurnIndex + 1) % farkleMultiplayer.players.length;
+                const nextPlayer = farkleMultiplayer.players[nextIndex];
+                console.log('[FARKLE DEBUG] Advancing to next turn - nextIndex:', nextIndex, 'nextPlayer:', nextPlayer?.name, nextPlayer?.id);
+
+                sendFarkleMessage('farkle_next_turn', {
+                    turnIndex: nextIndex,
+                    nextPlayerId: nextPlayer.id
+                });
+
+                // Update local state
+                farkleMultiplayer.currentTurnIndex = nextIndex;
+                farkleMultiplayer.isMyTurn = (nextPlayer.id === localPlayerId);
+                console.log('[FARKLE DEBUG] After bank - isMyTurn:', farkleMultiplayer.isMyTurn);
+
+                // Reset for next turn
+                resetDiceForNewTurn();
+                farkleRolled = false;
+                farkleTurnScore = 0;
+
+                updateFarklePlayerList();
+                if (farkleMultiplayer.isMyTurn) {
+                    console.log('[FARKLE DEBUG] It is now MY turn');
+                    showFarkleMessage('Your turn! Press R to roll');
+                } else {
+                    console.log('[FARKLE DEBUG] It is now', nextPlayer.name + "'s turn");
+                    showFarkleMessage(nextPlayer.name + "'s turn");
+                }
+                return;
+            }
+
+            // Legacy single-player/2-player code below
             if (!canCurrentPlayerAct()) return;
 
             // Must have at least one kept die
@@ -6456,7 +7433,7 @@
 
             // Determine which player is banking
             const isP1 = isPlayerTurn;
-            const playerLabel = farkleGameMode === '2player' ? (isP1 ? 'P1' : 'P2') : 'YOU';
+            const playerLabel = '2player' === '2player' ? (isP1 ? 'P1' : 'P2') : 'YOU';
 
             // Add turn score to appropriate player
             if (isP1) {
@@ -6477,7 +7454,7 @@
             // Check for win
             const scoreToCheck = isP1 ? farkleTotalScore : farkleNPCScore;
             if (scoreToCheck >= 10000) {
-                const winLabel = farkleGameMode === '2player' ? (isP1 ? 'P1' : 'P2') : 'YOU';
+                const winLabel = '2player' === '2player' ? (isP1 ? 'P1' : 'P2') : 'YOU';
                 document.getElementById('farkleMessage').textContent = winLabel + ' WINS! Final Score: ' + scoreToCheck;
                 document.getElementById('farkleTurnIndicator').textContent = 'GAME OVER';
                 document.getElementById('farkleTurnIndicator').style.color = '#4f8';
@@ -6774,7 +7751,9 @@
 
         // Handle click on dice during Farkle game
         function handleFarkleClick(event) {
-            if (!farkleGameActive || !isPlayerTurn) return;
+            // Check if it's player's turn (multiplayer or legacy mode)
+            const canAct = farkleMultiplayer.active ? farkleMultiplayer.isMyTurn : isPlayerTurn;
+            if (!farkleGameActive || !canAct) return;
 
             console.log('[FARKLE] Click detected, checking dice...');
 
@@ -6913,37 +7892,75 @@
                 if (farkleRolled && !diceSettled && diceHaveSettled()) {
                     diceSettled = true;
                     readDiceValues();
+                    const diceValues = farkleDice.map(d => d.value);
+                    console.log('[FARKLE DEBUG] Dice settled! Values:', diceValues);
+
+                    // Broadcast dice values in multiplayer (only if it's our turn)
+                    if (farkleMultiplayer.active && farkleMultiplayer.isMyTurn) {
+                        console.log('[FARKLE DEBUG] Broadcasting dice values to other players:', diceValues);
+                        sendFarkleMessage('farkle_roll', { diceValues: diceValues });
+                    } else if (farkleMultiplayer.active) {
+                        console.log('[FARKLE DEBUG] Not broadcasting - not my turn (isMyTurn:', farkleMultiplayer.isMyTurn, ')');
+                    }
 
                     // Check for Farkle (no scoring dice)
                     const allValues = farkleDice.filter(d => !d.kept).map(d => d.value);
                     const potentialScore = calculateFarkleScore(allValues);
 
                     if (potentialScore === 0) {
-                        // Determine which player farkled
-                        const isP1 = isPlayerTurn;
-                        const playerLabel = farkleGameMode === '2player' ? (isP1 ? 'P1' : 'P2') : 'YOU';
-                        document.getElementById('farkleMessage').textContent = playerLabel + ' FARKLE! Turn lost!';
-                        document.getElementById('farkleMessage').style.color = '#f44';
-                        update3DMessage(playerLabel + ' FARKLE!', '#ff4444');
-                        // Reset after short delay and switch turns
-                        setTimeout(() => {
-                            farkleTurnScore = 0;
-                            farkleRolled = false;
-                            selectedDieIndex = 0;
-                            document.getElementById('farkleTurnScore').textContent = '0';
-                            update3DScores();
-                            for (const die of farkleDice) {
-                                die.kept = false;
+                        // Multiplayer mode Farkle handling
+                        if (farkleMultiplayer.active) {
+                            const currentPlayer = farkleMultiplayer.players[farkleMultiplayer.currentTurnIndex];
+                            const playerLabel = farkleMultiplayer.isMyTurn ? 'YOU' : currentPlayer.name;
+                            showFarkleMessage(playerLabel + ' FARKLE! Turn lost!');
+                            update3DMessage(playerLabel + ' FARKLE!', '#ff4444');
+
+                            // Only the current player broadcasts the next turn
+                            if (farkleMultiplayer.isMyTurn) {
+                                setTimeout(() => {
+                                    // Advance to next player
+                                    const nextIndex = (farkleMultiplayer.currentTurnIndex + 1) % farkleMultiplayer.players.length;
+                                    const nextPlayer = farkleMultiplayer.players[nextIndex];
+                                    sendFarkleMessage('farkle_next_turn', {
+                                        turnIndex: nextIndex,
+                                        nextPlayerId: nextPlayer.id
+                                    });
+                                    // Also apply locally
+                                    farkleMultiplayer.currentTurnIndex = nextIndex;
+                                    farkleMultiplayer.isMyTurn = (nextPlayer.id === localPlayerId);
+                                    resetDiceForNewTurn();
+                                    farkleRolled = false;
+                                    farkleTurnScore = 0;
+                                    updateFarklePlayerList();
+                                }, 2000);
                             }
-                            updateDiceHighlights();
-                            // Switch to other player's turn
-                            if (isP1) {
-                                setTimeout(() => startNPCTurn(), 500);
-                            } else {
-                                // P2 farkled in 2-player mode, switch back to P1
-                                setTimeout(() => startP1Turn(), 500);
-                            }
-                        }, 2000);
+                        } else {
+                            // Legacy single/2-player mode
+                            const isP1 = isPlayerTurn;
+                            const playerLabel = farkleGameMode === '2player' ? (isP1 ? 'P1' : 'P2') : 'YOU';
+                            document.getElementById('farkleMessage').textContent = playerLabel + ' FARKLE! Turn lost!';
+                            document.getElementById('farkleMessage').style.color = '#f44';
+                            update3DMessage(playerLabel + ' FARKLE!', '#ff4444');
+                            // Reset after short delay and switch turns
+                            setTimeout(() => {
+                                farkleTurnScore = 0;
+                                farkleRolled = false;
+                                selectedDieIndex = 0;
+                                document.getElementById('farkleTurnScore').textContent = '0';
+                                update3DScores();
+                                for (const die of farkleDice) {
+                                    die.kept = false;
+                                }
+                                updateDiceHighlights();
+                                // Switch to other player's turn
+                                if (isP1) {
+                                    setTimeout(() => startNPCTurn(), 500);
+                                } else {
+                                    // P2 farkled in 2-player mode, switch back to P1
+                                    setTimeout(() => startP1Turn(), 500);
+                                }
+                            }, 2000);
+                        }
                     } else {
                         // Select first un-kept die and highlight
                         selectedDieIndex = farkleDice.findIndex(d => !d.kept);
@@ -7183,7 +8200,7 @@
             }
 
             // Update return door preview position via raycast
-            if (returnDoorPlaceMode && returnDoorPreview) {
+            if (settingReturnDoor && returnDoorPreview) {
                 raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
                 const intersects = raycaster.intersectObjects(scene.children, true);
 
@@ -7203,7 +8220,7 @@
             }
 
             // Show/hide return door prompt
-            if (!returnDoorPlaceMode && !farkleGameActive) {
+            if (!settingReturnDoor && !farkleGameActive) {
                 const nearDoor = checkNearReturnDoor();
                 document.getElementById('returnDoorPrompt').style.display = nearDoor ? 'block' : 'none';
             } else {

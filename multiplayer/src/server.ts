@@ -9,6 +9,7 @@ interface PlayerState {
   currentMap: string;
   animation: string;
   gameType: 'game2d' | 'tavern3d';
+  inTavern?: boolean;
 }
 
 interface ServerMessage {
@@ -39,9 +40,10 @@ export default class Server implements Party.Server {
       return;
     }
 
-    // Send welcome with current players
+    // Send welcome with current players AND the player's own ID
     conn.send(JSON.stringify({
       type: 'welcome',
+      playerId: conn.id,
       players: Array.from(this.players.values()),
       message: `Welcome! You are player ${this.players.size + 1}/${MAX_PLAYERS}`
     } as ServerMessage));
@@ -88,7 +90,8 @@ export default class Server implements Party.Server {
               direction: data.direction ?? existing.direction,
               currentMap: data.currentMap ?? existing.currentMap,
               animation: data.animation ?? existing.animation,
-              gameType: data.gameType ?? existing.gameType
+              gameType: data.gameType ?? existing.gameType,
+              inTavern: data.inTavern ?? existing.inTavern ?? false
             };
             this.players.set(sender.id, updated);
 
@@ -107,6 +110,17 @@ export default class Server implements Party.Server {
             type: 'sync',
             players: Array.from(this.players.values())
           } as ServerMessage));
+          break;
+        }
+
+        default: {
+          // Forward unknown message types (Farkle, etc.) to all other players
+          const player = this.players.get(sender.id);
+          this.room.broadcast(JSON.stringify({
+            ...data,
+            playerId: sender.id,
+            playerName: player?.name || 'Unknown'
+          }), [sender.id]);
           break;
         }
       }
