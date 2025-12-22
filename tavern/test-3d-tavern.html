@@ -768,6 +768,59 @@
         </div>
     </div>
 
+    <!-- Blackjack Popup -->
+    <div id="blackjackPopup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:linear-gradient(135deg, #1a472a 0%, #0d2818 100%); padding:30px; border-radius:15px; border:4px solid #c9a227; box-shadow:0 20px 60px rgba(0,0,0,0.8); z-index:2000; min-width:600px; font-family:'Georgia',serif; color:white;">
+        <div style="text-align:center; margin-bottom:20px;">
+            <h2 style="margin:0; color:#c9a227; text-shadow:2px 2px 4px rgba(0,0,0,0.5); font-size:28px;">♠ BLACKJACK ♥</h2>
+            <div id="bjPhase" style="color:#88cc88; font-size:14px; margin-top:5px;">Waiting for players...</div>
+        </div>
+
+        <!-- Dealer Area -->
+        <div style="background:rgba(0,0,0,0.3); border-radius:10px; padding:15px; margin-bottom:15px;">
+            <div style="color:#c9a227; font-size:12px; margin-bottom:8px;">DEALER</div>
+            <div id="dealerCards" style="display:flex; gap:8px; min-height:80px; align-items:center;">
+                <span style="color:#666;">No cards</span>
+            </div>
+            <div id="dealerValue" style="color:#88cc88; font-size:14px; margin-top:5px;"></div>
+        </div>
+
+        <!-- Players Area -->
+        <div id="bjPlayers" style="display:flex; gap:15px; margin-bottom:20px; flex-wrap:wrap;">
+            <!-- Player hands will be inserted here -->
+        </div>
+
+        <!-- Betting Controls -->
+        <div id="bjBettingArea" style="display:none; text-align:center; background:rgba(0,0,0,0.3); border-radius:10px; padding:15px;">
+            <div style="color:#c9a227; margin-bottom:10px;">Your Chips: <span id="bjChips">10000</span></div>
+            <div style="display:flex; gap:10px; justify-content:center; align-items:center;">
+                <span style="color:#aaa;">Bet:</span>
+                <button onclick="adjustBet(-100)" style="padding:8px 15px; background:#8b0000; border:none; color:white; border-radius:5px; cursor:pointer;">-100</button>
+                <span id="bjBetAmount" style="font-size:24px; color:#c9a227; min-width:80px;">100</span>
+                <button onclick="adjustBet(100)" style="padding:8px 15px; background:#006400; border:none; color:white; border-radius:5px; cursor:pointer;">+100</button>
+                <button onclick="placeBet()" style="padding:10px 25px; background:#c9a227; border:none; color:#000; border-radius:5px; cursor:pointer; font-weight:bold; margin-left:15px;">PLACE BET</button>
+            </div>
+        </div>
+
+        <!-- Playing Controls -->
+        <div id="bjPlayingArea" style="display:none; text-align:center;">
+            <div style="display:flex; gap:15px; justify-content:center;">
+                <button onclick="blackjackHit()" style="padding:15px 40px; background:#006400; border:none; color:white; border-radius:8px; cursor:pointer; font-size:18px; font-weight:bold;">HIT</button>
+                <button onclick="blackjackStand()" style="padding:15px 40px; background:#8b0000; border:none; color:white; border-radius:8px; cursor:pointer; font-size:18px; font-weight:bold;">STAND</button>
+            </div>
+        </div>
+
+        <!-- Result Message -->
+        <div id="bjResult" style="display:none; text-align:center; font-size:24px; color:#c9a227; margin-top:15px;"></div>
+
+        <!-- Leave Button -->
+        <button onclick="leaveBlackjack()" style="position:absolute; top:10px; right:10px; padding:5px 15px; background:#444; border:none; color:#aaa; border-radius:5px; cursor:pointer;">Leave</button>
+    </div>
+
+    <!-- Blackjack Prompt -->
+    <div id="blackjackPrompt" style="display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); padding:10px 20px; border-radius:5px; z-index:100;">
+        <span style="color:#c9a227;">Press E to play Blackjack</span>
+    </div>
+
     <!-- Tavern Music -->
     <audio id="tavernMusic" loop preload="auto">
         <source src="8-bit-tavern-355302.mp3" type="audio/mpeg">
@@ -1403,6 +1456,10 @@
         document.addEventListener('keydown', (e) => {
             keys[e.key.toLowerCase()] = true;
             if (e.key === 'Escape') {
+                if (blackjackState.active) {
+                    leaveBlackjack();
+                    return;
+                }
                 if (farkleGameActive) {
                     exitFarkleGame();
                     return;
@@ -1474,11 +1531,16 @@
             if (isThirdPerson && e.key === '0') {
                 cancelEmote();
             }
-            // E to interact with return door or Farkle table
-            if (e.key.toLowerCase() === 'e' && !farkleGameActive) {
+            // E to interact with return door, Farkle table, or Blackjack table
+            if (e.key.toLowerCase() === 'e' && !farkleGameActive && !blackjackState.active) {
                 // Check return door first
                 if (checkNearReturnDoor()) {
                     useReturnDoor();
+                    return;
+                }
+                // Check blackjack table
+                if (nearBlackjackTable) {
+                    joinBlackjackTable('table1');
                     return;
                 }
                 // Then check Farkle table - join lobby
@@ -5159,6 +5221,15 @@
                     console.log('[FARKLE] Received table from another player:', data);
                     createRemoteFarkleTable(data);
                     break;
+
+                case 'blackjack_state':
+                    // Server-authoritative Blackjack state update
+                    handleBlackjackState(data);
+                    break;
+
+                case 'blackjack_error':
+                    console.log('[BLACKJACK] Error from server:', data.error);
+                    break;
             }
         }
 
@@ -6036,6 +6107,7 @@
 
         // Farkle game logic is now in the multiplayer client section below
         let diceSettled = false;
+        let farkleRolled = false;
         let farkleControlsVisible = false;
 
         // Check if player is near a Farkle table
@@ -6248,15 +6320,24 @@
                 const die = farkleDice[i];
                 if (!die || !die.mesh) continue;
 
+                // Handle both single material and material array
+                const setEmissive = (hex) => {
+                    if (Array.isArray(die.mesh.material)) {
+                        die.mesh.material.forEach(m => m.emissive?.setHex(hex));
+                    } else if (die.mesh.material.emissive) {
+                        die.mesh.material.emissive.setHex(hex);
+                    }
+                };
+
                 if (farkleState.held[i]) {
                     // Already held - green
-                    die.mesh.material.forEach(m => m.emissive?.setHex(0x004400));
+                    setEmissive(0x004400);
                 } else if (farklePreviewHeld[i]) {
                     // Preview selected - yellow
-                    die.mesh.material.forEach(m => m.emissive?.setHex(0x444400));
+                    setEmissive(0x444400);
                 } else {
                     // Not selected - no highlight
-                    die.mesh.material.forEach(m => m.emissive?.setHex(0x000000));
+                    setEmissive(0x000000);
                 }
             }
         }
@@ -6291,8 +6372,7 @@
             // Update dice visuals to show server values
             updateDiceToServerState();
 
-            // Update UI
-            farkleGameActive = farkleState.phase !== 'lobby';
+            // Update UI - keep game active as long as we have a tableId
             updateFarkleUI();
 
             console.log('[FARKLE] State updated:', farkleState.phase, 'Turn:', farkleState.currentPlayerIndex, 'My turn:', isMyFarkleTurn());
@@ -6398,6 +6478,291 @@
             panel.innerHTML = html;
         }
         // ========== END FARKLE MULTIPLAYER CLIENT ==========
+
+        // ========== BLACKJACK MULTIPLAYER CLIENT ==========
+
+        let blackjackState = {
+            active: false,
+            tableId: null,
+            phase: 'waiting',
+            players: [],
+            dealerHand: [],
+            myPlayerId: null,
+            currentBet: 100
+        };
+
+        function sendBlackjackAction(action, data = {}) {
+            if (!multiplayerWs || multiplayerWs.readyState !== WebSocket.OPEN) {
+                console.log('[BLACKJACK] No WebSocket connection');
+                return;
+            }
+            const message = {
+                type: 'blackjack',
+                action: action,
+                tableId: blackjackState.tableId || 'table1',
+                ...data
+            };
+            console.log('[BLACKJACK] Sending:', message);
+            multiplayerWs.send(JSON.stringify(message));
+        }
+
+        function handleBlackjackState(state) {
+            console.log('[BLACKJACK] State received:', state);
+            blackjackState.phase = state.phase;
+            blackjackState.players = state.players;
+            blackjackState.dealerHand = state.dealerHand;
+            blackjackState.tableId = state.tableId;
+            updateBlackjackUI();
+        }
+
+        function getCardDisplay(card) {
+            if (!card) return '';
+            if (card.hidden) return '<div class="bj-card bj-card-back" style="display:inline-block;width:40px;height:56px;background:#2a5298;border:2px solid #fff;border-radius:5px;margin:2px;text-align:center;line-height:56px;font-size:20px;color:#fff;">?</div>';
+            const suitSymbols = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' };
+            const suitColors = { hearts: '#ff4444', diamonds: '#ff4444', clubs: '#333', spades: '#333' };
+            return `<div class="bj-card" style="display:inline-block;width:40px;height:56px;background:#fff;border:2px solid #333;border-radius:5px;margin:2px;text-align:center;padding-top:5px;">
+                <div style="font-size:14px;font-weight:bold;color:${suitColors[card.suit]};">${card.value}</div>
+                <div style="font-size:18px;color:${suitColors[card.suit]};">${suitSymbols[card.suit]}</div>
+            </div>`;
+        }
+
+        function updateBlackjackUI() {
+            const popup = document.getElementById('blackjackPopup');
+            if (!popup || !blackjackState.active) return;
+
+            const dealerArea = document.getElementById('bjDealerCards');
+            const playersArea = document.getElementById('bjPlayersArea');
+            const bettingControls = document.getElementById('bjBettingControls');
+            const playingControls = document.getElementById('bjPlayingControls');
+            const resultMsg = document.getElementById('bjResultMessage');
+            const betAmountEl = document.getElementById('bjBetAmount');
+            const myChipsEl = document.getElementById('bjMyChips');
+
+            // Find my player
+            const myPlayer = blackjackState.players.find(p => p.id === blackjackState.myPlayerId);
+
+            // Update my chips display
+            if (myChipsEl && myPlayer) {
+                myChipsEl.textContent = myPlayer.chips.toLocaleString();
+            }
+            if (betAmountEl) {
+                betAmountEl.textContent = blackjackState.currentBet;
+            }
+
+            // Update dealer cards
+            if (dealerArea) {
+                dealerArea.innerHTML = blackjackState.dealerHand.map(c => getCardDisplay(c)).join('');
+            }
+
+            // Update players area
+            if (playersArea) {
+                let html = '';
+                for (const player of blackjackState.players) {
+                    const isMe = player.id === blackjackState.myPlayerId;
+                    // Calculate hand value properly with aces
+                    let handValue = 0;
+                    let aces = 0;
+                    for (const c of player.hand) {
+                        if (c.hidden) continue;
+                        if (c.value === 'A') {
+                            aces++;
+                            handValue += 11;
+                        } else if (['K', 'Q', 'J'].includes(c.value)) {
+                            handValue += 10;
+                        } else {
+                            handValue += parseInt(c.value);
+                        }
+                    }
+                    while (handValue > 21 && aces > 0) {
+                        handValue -= 10;
+                        aces--;
+                    }
+
+                    html += `<div class="bj-player ${isMe ? 'is-me' : ''}" style="background:${isMe ? 'rgba(201,162,39,0.2)' : 'rgba(255,255,255,0.1)'}; padding:10px; border-radius:8px; margin:5px; display:inline-block; min-width:120px; vertical-align:top;">
+                        <div style="font-weight:bold; color:${isMe ? '#c9a227' : '#fff'};">${player.name} ${isMe ? '(You)' : ''}</div>
+                        <div style="font-size:12px; color:#aaa;">Chips: ${player.chips.toLocaleString()} | Bet: ${player.bet}</div>
+                        <div style="margin:5px 0;">${player.hand.map(c => getCardDisplay(c)).join('')}</div>
+                        <div style="font-size:14px; color:#ffd700;">Status: ${player.status} ${player.hand.length > 0 ? `(${handValue})` : ''}</div>
+                    </div>`;
+                }
+                playersArea.innerHTML = html;
+            }
+
+            // Show/hide controls based on phase
+            const isBetting = blackjackState.phase === 'betting' || blackjackState.phase === 'waiting';
+            const isPlaying = blackjackState.phase === 'playing' && myPlayer && myPlayer.status === 'playing';
+
+            if (bettingControls) {
+                bettingControls.style.display = isBetting ? 'flex' : 'none';
+            }
+            if (playingControls) {
+                playingControls.style.display = isPlaying ? 'flex' : 'none';
+            }
+
+            // Show result message
+            if (resultMsg) {
+                if (blackjackState.phase === 'payout' && myPlayer) {
+                    const statusMessages = {
+                        'win': 'You Win!',
+                        'blackjack': 'Blackjack! You Win!',
+                        'lose': 'You Lose',
+                        'bust': 'Bust! You Lose',
+                        'push': 'Push - Bet Returned'
+                    };
+                    resultMsg.textContent = statusMessages[myPlayer.status] || '';
+                    resultMsg.style.display = 'block';
+                    resultMsg.style.color = myPlayer.status === 'win' || myPlayer.status === 'blackjack' ? '#4eff4e' :
+                                           myPlayer.status === 'push' ? '#ffff4e' : '#ff4e4e';
+                } else {
+                    resultMsg.style.display = 'none';
+                }
+            }
+        }
+
+        window.adjustBet = function(amount) {
+            const myPlayer = blackjackState.players.find(p => p.id === blackjackState.myPlayerId);
+            const maxBet = myPlayer ? myPlayer.chips : 10000;
+            blackjackState.currentBet = Math.max(10, Math.min(maxBet, blackjackState.currentBet + amount));
+            const betAmountEl = document.getElementById('bjBetAmount');
+            if (betAmountEl) betAmountEl.textContent = blackjackState.currentBet;
+        };
+
+        window.placeBet = function() {
+            sendBlackjackAction('bet', { amount: blackjackState.currentBet });
+        };
+
+        window.blackjackHit = function() {
+            sendBlackjackAction('hit');
+        };
+
+        window.blackjackStand = function() {
+            sendBlackjackAction('stand');
+        };
+
+        window.leaveBlackjack = function() {
+            sendBlackjackAction('leave');
+            blackjackState.active = false;
+            const popup = document.getElementById('blackjackPopup');
+            if (popup) popup.style.display = 'none';
+            document.exitPointerLock();
+        };
+
+        function joinBlackjackTable(tableId) {
+            blackjackState.active = true;
+            blackjackState.tableId = tableId;
+            blackjackState.myPlayerId = multiplayerPlayerId;
+
+            const popup = document.getElementById('blackjackPopup');
+            if (popup) popup.style.display = 'block';
+
+            sendBlackjackAction('join', { name: multiplayerPlayerName || 'Player' });
+        }
+
+        // Blackjack table positions (add near bar area)
+        let blackjackTables = [
+            { x: -8, z: 5, rotation: 0 }
+        ];
+        let nearBlackjackTable = false;
+
+        function checkBlackjackTableProximity() {
+            if (!camera || blackjackState.active) return;
+
+            const playerPos = camera.position;
+            nearBlackjackTable = false;
+
+            for (const table of blackjackTables) {
+                const dx = playerPos.x - table.x;
+                const dz = playerPos.z - table.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                if (dist < 3) {
+                    nearBlackjackTable = true;
+                    break;
+                }
+            }
+
+            const prompt = document.getElementById('blackjackPrompt');
+            if (prompt) {
+                prompt.style.display = nearBlackjackTable && !farkleGameActive ? 'block' : 'none';
+            }
+        }
+
+        // ========== END BLACKJACK MULTIPLAYER CLIENT ==========
+
+        // Create blackjack table mesh
+        function createBlackjackTableMesh(x, z, rotation = 0) {
+            const group = new THREE.Group();
+
+            // Table base (dark wood)
+            const baseGeom = new THREE.CylinderGeometry(1.2, 1.2, 0.1, 32, 1, false, 0, Math.PI);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x3d2817 });
+            const base = new THREE.Mesh(baseGeom, baseMat);
+            base.position.y = 0.9;
+            base.rotation.y = Math.PI / 2;
+            group.add(base);
+
+            // Felt surface (green)
+            const feltGeom = new THREE.CylinderGeometry(1.1, 1.1, 0.02, 32, 1, false, 0, Math.PI);
+            const feltMat = new THREE.MeshStandardMaterial({ color: 0x1a5c32 });
+            const felt = new THREE.Mesh(feltGeom, feltMat);
+            felt.position.y = 0.96;
+            felt.rotation.y = Math.PI / 2;
+            group.add(felt);
+
+            // Gold trim
+            const trimGeom = new THREE.TorusGeometry(1.15, 0.03, 8, 32, Math.PI);
+            const trimMat = new THREE.MeshStandardMaterial({ color: 0xc9a227, metalness: 0.8, roughness: 0.3 });
+            const trim = new THREE.Mesh(trimGeom, trimMat);
+            trim.position.y = 0.95;
+            trim.rotation.x = Math.PI / 2;
+            group.add(trim);
+
+            // Table leg
+            const legGeom = new THREE.CylinderGeometry(0.15, 0.2, 0.9, 8);
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x3d2817 });
+            const leg = new THREE.Mesh(legGeom, legMat);
+            leg.position.y = 0.45;
+            group.add(leg);
+
+            // Add "BLACKJACK" text label floating above table
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#1a5c32';
+            ctx.fillRect(0, 0, 256, 64);
+            ctx.fillStyle = '#c9a227';
+            ctx.font = 'bold 28px Georgia';
+            ctx.textAlign = 'center';
+            ctx.fillText('BLACKJACK', 128, 42);
+
+            const labelTex = new THREE.CanvasTexture(canvas);
+            const labelGeom = new THREE.PlaneGeometry(1, 0.25);
+            const labelMat = new THREE.MeshBasicMaterial({ map: labelTex, transparent: true });
+            const label = new THREE.Mesh(labelGeom, labelMat);
+            label.position.y = 1.3;
+            label.rotation.x = -0.3;
+            group.add(label);
+
+            group.position.set(x, 0, z);
+            group.rotation.y = rotation;
+            scene.add(group);
+
+            return group;
+        }
+
+        // Create blackjack tables on load
+        let blackjackTableMeshes = [];
+        function initBlackjackTables() {
+            for (const table of blackjackTables) {
+                const mesh = createBlackjackTableMesh(table.x, table.z, table.rotation);
+                blackjackTableMeshes.push(mesh);
+                console.log('[BLACKJACK] Created table at', table.x, table.z);
+            }
+        }
+
+        // Initialize blackjack tables after a short delay (scene needs to be ready)
+        setTimeout(initBlackjackTables, 100);
 
         // Called when player presses E near a Farkle table
         function joinFarkleLobby(table) {
@@ -6762,6 +7127,9 @@
                     farklePromptEl.style.display = 'none';
                 }
             }
+
+            // Show/hide Blackjack prompt when near table
+            checkBlackjackTableProximity();
 
             // Update return door preview position via raycast
             if (settingReturnDoor && returnDoorPreview) {

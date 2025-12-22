@@ -124,11 +124,93 @@ function rollDice(count: number): number[] {
 
 const MAX_PLAYERS = 4;
 
+// ============================================
+// BLACKJACK GAME STATE (Server-Authoritative)
+// ============================================
+
+type BlackjackPhase = 'betting' | 'dealing' | 'playing' | 'dealer_turn' | 'payout' | 'waiting';
+
+interface Card {
+  suit: 'hearts' | 'diamonds' | 'clubs' | 'spades';
+  value: string; // '2'-'10', 'J', 'Q', 'K', 'A'
+  hidden?: boolean;
+}
+
+interface BlackjackPlayer {
+  id: string;
+  name: string;
+  chips: number;
+  bet: number;
+  hand: Card[];
+  status: 'betting' | 'waiting' | 'playing' | 'stand' | 'bust' | 'blackjack' | 'win' | 'lose' | 'push';
+  seat: number;
+}
+
+interface BlackjackGameState {
+  tableId: string;
+  phase: BlackjackPhase;
+  players: BlackjackPlayer[];
+  dealerHand: Card[];
+  deck: Card[];
+  currentPlayerIndex: number;
+  version: number;
+}
+
+// Card utilities
+function createDeck(): Card[] {
+  const suits: Card['suit'][] = ['hearts', 'diamonds', 'clubs', 'spades'];
+  const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  const deck: Card[] = [];
+  for (const suit of suits) {
+    for (const value of values) {
+      deck.push({ suit, value });
+    }
+  }
+  return deck;
+}
+
+function shuffleDeck(deck: Card[]): Card[] {
+  const shuffled = [...deck];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function getCardValue(card: Card): number {
+  if (['J', 'Q', 'K'].includes(card.value)) return 10;
+  if (card.value === 'A') return 11;
+  return parseInt(card.value);
+}
+
+function getHandValue(hand: Card[]): number {
+  let value = 0;
+  let aces = 0;
+  for (const card of hand) {
+    if (card.hidden) continue;
+    value += getCardValue(card);
+    if (card.value === 'A') aces++;
+  }
+  while (value > 21 && aces > 0) {
+    value -= 10;
+    aces--;
+  }
+  return value;
+}
+
+function isBlackjack(hand: Card[]): boolean {
+  return hand.length === 2 && getHandValue(hand) === 21;
+}
+
 export default class Server implements Party.Server {
   players: Map<string, PlayerState> = new Map();
 
   // Farkle games keyed by tableId
   farkleGames: Map<string, FarkleGameState> = new Map();
+
+  // Blackjack games keyed by tableId
+  blackjackGames: Map<string, BlackjackGameState> = new Map();
 
   constructor(readonly room: Party.Room) {}
 
@@ -409,6 +491,299 @@ export default class Server implements Party.Server {
     this.room.broadcast(JSON.stringify(stateMessage));
   }
 
+  // ============================================
+  // BLACKJACK MESSAGE HANDLERS
+  // ============================================
+
+  handleBlackjackMessage(data: any, sender: Party.Connection): void {
+    const tableId = data.tableId;
+    if (!tableId) {
+      sender.send(JSON.stringify({ type: 'blackjack_error', error: 'Missing tableId' }));
+      return;
+    }
+
+    const playerInfo = this.players.get(sender.id);
+    const playerName = playerInfo?.name || `Player${sender.id.slice(0, 4)}`;
+
+    switch (data.action) {
+      case 'join': {
+        let game = this.blackjackGames.get(tableId);
+
+        if (!game) {
+          game = {
+            tableId,
+            phase: 'betting',
+            players: [],
+            dealerHand: [],
+            deck: shuffleDeck(createDeck()),
+            currentPlayerIndex: 0,
+            version: 0
+          };
+          this.blackjackGames.set(tableId, game);
+        }
+
+        // Check if already in game
+        if (game.players.find(p => p.id === sender.id)) {
+          this.broadcastBlackjackState(game);
+          return;
+        }
+
+        // Add player with 10k chips
+        if (game.players.length < 4) {
+          game.players.push({
+            id: sender.id,
+            name: playerName,
+            chips: 10000,
+            bet: 0,
+            hand: [],
+            status: 'betting',
+            seat: game.players.length
+          });
+          game.version++;
+          console.log(`[BLACKJACK] ${playerName} joined table ${tableId} with 10000 chips`);
+          this.broadcastBlackjackState(game);
+        }
+        break;
+      }
+
+      case 'bet': {
+        const game = this.blackjackGames.get(tableId);
+        if (!game || game.phase !== 'betting') return;
+
+        const player = game.players.find(p => p.id === sender.id);
+        if (!player) return;
+
+        const betAmount = Math.min(data.amount || 100, player.chips);
+        if (betAmount <= 0) return;
+
+        player.bet = betAmount;
+        player.chips -= betAmount;
+        player.status = 'waiting';
+        game.version++;
+        console.log(`[BLACKJACK] ${player.name} bet ${betAmount}`);
+
+        // Check if all players have bet
+        const allBet = game.players.every(p => p.status === 'waiting');
+        if (allBet && game.players.length > 0) {
+          this.dealBlackjack(game);
+        } else {
+          this.broadcastBlackjackState(game);
+        }
+        break;
+      }
+
+      case 'hit': {
+        const game = this.blackjackGames.get(tableId);
+        if (!game || game.phase !== 'playing') return;
+
+        const player = game.players[game.currentPlayerIndex];
+        if (!player || player.id !== sender.id) return;
+
+        // Deal card to player
+        const card = game.deck.pop();
+        if (card) {
+          player.hand.push(card);
+          const value = getHandValue(player.hand);
+          console.log(`[BLACKJACK] ${player.name} hits - got ${card.value} of ${card.suit} (total: ${value})`);
+
+          if (value > 21) {
+            player.status = 'bust';
+            game.version++;
+            this.nextBlackjackPlayer(game);
+          } else if (value === 21) {
+            player.status = 'stand';
+            game.version++;
+            this.nextBlackjackPlayer(game);
+          } else {
+            game.version++;
+            this.broadcastBlackjackState(game);
+          }
+        }
+        break;
+      }
+
+      case 'stand': {
+        const game = this.blackjackGames.get(tableId);
+        if (!game || game.phase !== 'playing') return;
+
+        const player = game.players[game.currentPlayerIndex];
+        if (!player || player.id !== sender.id) return;
+
+        player.status = 'stand';
+        game.version++;
+        console.log(`[BLACKJACK] ${player.name} stands with ${getHandValue(player.hand)}`);
+        this.nextBlackjackPlayer(game);
+        break;
+      }
+
+      case 'leave': {
+        const game = this.blackjackGames.get(tableId);
+        if (!game) return;
+
+        const playerIndex = game.players.findIndex(p => p.id === sender.id);
+        if (playerIndex !== -1) {
+          const leavingPlayer = game.players[playerIndex];
+          console.log(`[BLACKJACK] ${leavingPlayer.name} left table ${tableId}`);
+          game.players.splice(playerIndex, 1);
+
+          if (game.players.length === 0) {
+            this.blackjackGames.delete(tableId);
+          } else {
+            game.version++;
+            this.broadcastBlackjackState(game);
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  dealBlackjack(game: BlackjackGameState): void {
+    game.phase = 'dealing';
+
+    // Deal 2 cards to each player
+    for (const player of game.players) {
+      player.hand = [game.deck.pop()!, game.deck.pop()!];
+      player.status = 'playing';
+
+      if (isBlackjack(player.hand)) {
+        player.status = 'blackjack';
+      }
+    }
+
+    // Deal 2 cards to dealer (one hidden)
+    game.dealerHand = [
+      game.deck.pop()!,
+      { ...game.deck.pop()!, hidden: true }
+    ];
+
+    game.phase = 'playing';
+    game.currentPlayerIndex = 0;
+
+    // Skip players with blackjack
+    while (game.currentPlayerIndex < game.players.length &&
+           game.players[game.currentPlayerIndex].status === 'blackjack') {
+      game.currentPlayerIndex++;
+    }
+
+    if (game.currentPlayerIndex >= game.players.length) {
+      this.dealerPlay(game);
+    } else {
+      game.version++;
+      this.broadcastBlackjackState(game);
+    }
+  }
+
+  nextBlackjackPlayer(game: BlackjackGameState): void {
+    game.currentPlayerIndex++;
+
+    // Skip players who are done
+    while (game.currentPlayerIndex < game.players.length &&
+           ['bust', 'stand', 'blackjack'].includes(game.players[game.currentPlayerIndex].status)) {
+      game.currentPlayerIndex++;
+    }
+
+    if (game.currentPlayerIndex >= game.players.length) {
+      this.dealerPlay(game);
+    } else {
+      this.broadcastBlackjackState(game);
+    }
+  }
+
+  dealerPlay(game: BlackjackGameState): void {
+    game.phase = 'dealer_turn';
+
+    // Reveal hidden card
+    for (const card of game.dealerHand) {
+      card.hidden = false;
+    }
+
+    // Dealer hits until 17+
+    while (getHandValue(game.dealerHand) < 17) {
+      const card = game.deck.pop();
+      if (card) game.dealerHand.push(card);
+    }
+
+    const dealerValue = getHandValue(game.dealerHand);
+    const dealerBust = dealerValue > 21;
+    console.log(`[BLACKJACK] Dealer has ${dealerValue}${dealerBust ? ' - BUST' : ''}`);
+
+    // Determine winners
+    game.phase = 'payout';
+    for (const player of game.players) {
+      if (player.status === 'bust') {
+        player.status = 'lose';
+      } else if (player.status === 'blackjack') {
+        if (isBlackjack(game.dealerHand)) {
+          player.status = 'push';
+          player.chips += player.bet;
+        } else {
+          player.status = 'win';
+          player.chips += player.bet * 2.5; // Blackjack pays 3:2
+        }
+      } else if (dealerBust) {
+        player.status = 'win';
+        player.chips += player.bet * 2;
+      } else {
+        const playerValue = getHandValue(player.hand);
+        if (playerValue > dealerValue) {
+          player.status = 'win';
+          player.chips += player.bet * 2;
+        } else if (playerValue === dealerValue) {
+          player.status = 'push';
+          player.chips += player.bet;
+        } else {
+          player.status = 'lose';
+        }
+      }
+      console.log(`[BLACKJACK] ${player.name}: ${player.status} (chips: ${player.chips})`);
+    }
+
+    game.version++;
+    this.broadcastBlackjackState(game);
+
+    // Reset for next round after delay
+    setTimeout(() => this.resetBlackjackRound(game), 3000);
+  }
+
+  resetBlackjackRound(game: BlackjackGameState): void {
+    // Remove players with no chips
+    game.players = game.players.filter(p => p.chips > 0);
+
+    if (game.players.length === 0) {
+      this.blackjackGames.delete(game.tableId);
+      return;
+    }
+
+    // Reset for new round
+    game.phase = 'betting';
+    game.dealerHand = [];
+    game.currentPlayerIndex = 0;
+    game.deck = shuffleDeck(createDeck());
+
+    for (const player of game.players) {
+      player.hand = [];
+      player.bet = 0;
+      player.status = 'betting';
+    }
+
+    game.version++;
+    this.broadcastBlackjackState(game);
+  }
+
+  broadcastBlackjackState(game: BlackjackGameState): void {
+    const stateMessage = {
+      type: 'blackjack_state',
+      tableId: game.tableId,
+      phase: game.phase,
+      players: game.players,
+      dealerHand: game.dealerHand,
+      currentPlayerIndex: game.currentPlayerIndex,
+      version: game.version
+    };
+    this.room.broadcast(JSON.stringify(stateMessage));
+  }
+
   onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
     console.log(`Player connecting: ${conn.id} to room: ${this.room.id}`);
 
@@ -498,6 +873,12 @@ export default class Server implements Party.Server {
         case 'farkle': {
           // Route to Farkle handler (server-authoritative)
           this.handleFarkleMessage(data, sender);
+          break;
+        }
+
+        case 'blackjack': {
+          // Route to Blackjack handler (server-authoritative)
+          this.handleBlackjackMessage(data, sender);
           break;
         }
 
