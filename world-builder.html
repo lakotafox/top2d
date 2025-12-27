@@ -21669,16 +21669,25 @@
         let imagesLoaded = 0;
         let gameStarted = false;
 
-        function checkAllImagesLoaded() {
-            showLoading(imagesLoaded, imagesToLoad);
-            if (imagesLoaded >= imagesToLoad && !gameStarted) {
-                console.log('All images loaded, starting game...');
-                gameStarted = true;
+        // Start game after preloading sounds
+        function startGameAfterLoading() {
+            console.log('Images loaded, preloading sounds...');
+            preloadAllSounds(() => {
+                console.log('Sounds preloaded, starting game...');
                 gameStartTime = Date.now();
                 hideLoading();
                 findStartPos();
                 hideAllUI(); // Start with debug UI hidden
                 gameLoop();
+            });
+        }
+
+        function checkAllImagesLoaded() {
+            showLoading(imagesLoaded, imagesToLoad);
+            if (imagesLoaded >= imagesToLoad && !gameStarted) {
+                console.log('All images loaded');
+                gameStarted = true;
+                startGameAfterLoading();
             }
         }
 
@@ -21700,11 +21709,8 @@
             console.warn('No images to load, starting game immediately');
             imagesToLoad = 1;
             imagesLoaded = 1;
-            gameStartTime = Date.now();
-            hideLoading();
-            findStartPos();
-            hideAllUI(); // Start with debug UI hidden
-            gameLoop();
+            gameStarted = true;
+            startGameAfterLoading();
         }
 
         // Fallback timeout - start game after 2 minutes even if some images failed (large projects need more time on iPad)
@@ -21712,11 +21718,7 @@
             if (!gameStarted) {
                 console.warn('Timeout reached, starting game with', imagesLoaded, '/', imagesToLoad, 'images loaded');
                 gameStarted = true;
-                gameStartTime = Date.now();
-                hideLoading();
-                findStartPos();
-                hideAllUI(); // Start with debug UI hidden
-                gameLoop();
+                startGameAfterLoading();
             }
         }, 120000);
 
@@ -22451,6 +22453,16 @@
         console.log('Tile sounds:', Object.keys(tileSounds).length, tileSounds);
         console.log('Player sounds:', playerSoundsData);
 
+        // On mobile (streaming mode), create audioContext early so we can decode sounds as they arrive
+        if (soundsWillStream) {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                console.log('Audio context created for streaming sounds');
+            } catch (e) {
+                console.warn('Could not create audio context for streaming:', e);
+            }
+        }
+
         // === TRIGGER/MAP SYSTEM ===
         // Use outer scope placedTriggers for live sync
         placedTriggers = projectData.placedTriggers || [];
@@ -22498,6 +22510,7 @@
         });
 
         // Listen for streamed sound data from builder (mobile only)
+        // Decode each sound as it arrives to avoid freeze on first play
         if (soundsWillStream) {
             console.log('Waiting for sound data to stream from builder...');
             window.addEventListener('message', function(e) {
@@ -22507,6 +22520,24 @@
                         soundsData[index].data = data;
                         soundsStreamedCount++;
                         console.log('Received sound', index, name, '(' + soundsStreamedCount + '/' + soundsData.length + ')');
+
+                        // Pre-decode this sound in background so it's ready when needed
+                        if (audioContext && data) {
+                            try {
+                                const base64 = data.split(',')[1];
+                                const binary = atob(base64);
+                                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                                const audioBuffer = bytes.buffer.slice(0);
+                                audioContext.decodeAudioData(audioBuffer, (buffer) => {
+                                    soundBuffers[index] = buffer;
+                                    console.log('Pre-decoded streamed sound', index, name);
+                                }, (err) => {
+                                    console.warn('Failed to decode streamed sound', index, err);
+                                });
+                            } catch (err) {
+                                console.warn('Error decoding streamed sound', index, ':', err.message);
+                            }
+                        }
                     }
                 } else if (e.data && e.data.type === 'sounds-complete') {
                     console.log('All sounds received from builder');
@@ -23331,6 +23362,112 @@
                     processDecodeQueue();
                 }, DECODE_DELAY);
             }
+        }
+
+        // Preload all sounds before game starts (shows loading progress)
+        let soundsPreloaded = false;
+        function preloadAllSounds(onComplete) {
+            // No sounds to load - complete immediately
+            if (!soundsData || soundsData.length === 0) {
+                console.log('No sounds to preload');
+                soundsPreloaded = true;
+                if (onComplete) onComplete();
+                return;
+            }
+
+            // Check if sounds have data (mobile streaming may not have data yet)
+            const soundsWithData = soundsData.filter(s => s && s.data);
+            if (soundsWithData.length === 0) {
+                console.log('No sound data available yet (may be streaming)');
+                soundsPreloaded = true;
+                if (onComplete) onComplete();
+                return;
+            }
+
+            // Initialize audio context for decoding
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    console.log('Audio context created for preloading');
+                } catch (e) {
+                    console.warn('Could not create audio context:', e);
+                    soundsPreloaded = true;
+                    if (onComplete) onComplete();
+                    return;
+                }
+            }
+
+            const totalSounds = soundsWithData.length;
+            let loadedCount = 0;
+            let currentIndex = 0;
+
+            // Update loading UI for sounds
+            function updateSoundLoadingUI() {
+                const percent = totalSounds > 0 ? Math.round((loadedCount / totalSounds) * 100) : 0;
+                const loadingBar = document.getElementById('loadingBar');
+                const loadingPercent = document.getElementById('loadingPercent');
+                const loadingText = document.getElementById('loadingText');
+                if (loadingBar) loadingBar.style.width = percent + '%';
+                if (loadingPercent) loadingPercent.textContent = loadedCount + '/' + totalSounds + ' (' + percent + '%)';
+                if (loadingText) loadingText.textContent = 'Loading Sounds...';
+            }
+
+            // Decode one sound at a time
+            function decodeNext() {
+                // Find next sound with data
+                while (currentIndex < soundsData.length && (!soundsData[currentIndex] || !soundsData[currentIndex].data)) {
+                    currentIndex++;
+                }
+
+                if (currentIndex >= soundsData.length) {
+                    // All done
+                    console.log('All sounds preloaded:', loadedCount);
+                    soundsPreloaded = true;
+                    if (onComplete) onComplete();
+                    return;
+                }
+
+                const idx = currentIndex;
+                const sound = soundsData[idx];
+                currentIndex++;
+
+                // Already decoded? Skip
+                if (soundBuffers[idx]) {
+                    loadedCount++;
+                    updateSoundLoadingUI();
+                    setTimeout(decodeNext, 50);
+                    return;
+                }
+
+                try {
+                    const base64 = sound.data.split(',')[1];
+                    const binary = atob(base64);
+                    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                    const audioBuffer = bytes.buffer.slice(0);
+
+                    audioContext.decodeAudioData(audioBuffer, (buffer) => {
+                        soundBuffers[idx] = buffer;
+                        loadedCount++;
+                        console.log('Preloaded sound', idx, sound.name, '(' + loadedCount + '/' + totalSounds + ')');
+                        updateSoundLoadingUI();
+                        // Delay between decodes to prevent overwhelming mobile
+                        setTimeout(decodeNext, 100);
+                    }, (err) => {
+                        console.warn('Failed to decode sound', idx, err);
+                        loadedCount++;
+                        updateSoundLoadingUI();
+                        setTimeout(decodeNext, 100);
+                    });
+                } catch (e) {
+                    console.warn('Error decoding sound', idx, ':', e.message);
+                    loadedCount++;
+                    updateSoundLoadingUI();
+                    setTimeout(decodeNext, 100);
+                }
+            }
+
+            updateSoundLoadingUI();
+            decodeNext();
         }
 
         // Play a sound with optional pitch and length variation (lazy decode on first play)
