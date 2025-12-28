@@ -22510,9 +22510,34 @@
         });
 
         // Listen for streamed sound data from builder (mobile only)
-        // Decode each sound as it arrives to avoid freeze on first play
+        // Decode each sound as it arrives, update loading UI, start game when all done
         if (soundsWillStream) {
             console.log('Waiting for sound data to stream from builder...');
+
+            // Update loading UI for streamed sounds
+            function updateStreamLoadingUI() {
+                const total = soundsData.length;
+                const decoded = soundsDecodedCount;
+                const percent = total > 0 ? Math.round((decoded / total) * 100) : 0;
+                const loadingBar = document.getElementById('loadingBar');
+                const loadingPercent = document.getElementById('loadingPercent');
+                const loadingText = document.getElementById('loadingText');
+                if (loadingBar) loadingBar.style.width = percent + '%';
+                if (loadingPercent) loadingPercent.textContent = decoded + '/' + total + ' (' + percent + '%)';
+                if (loadingText) loadingText.textContent = 'Loading Sounds...';
+            }
+
+            // Check if all sounds are decoded and start game
+            function checkAllSoundsDecoded() {
+                if (soundsDecodedCount >= soundsData.length && soundPreloadCallback) {
+                    console.log('All sounds decoded, starting game...');
+                    soundsPreloaded = true;
+                    const callback = soundPreloadCallback;
+                    soundPreloadCallback = null;
+                    callback();
+                }
+            }
+
             window.addEventListener('message', function(e) {
                 if (e.data && e.data.type === 'sound-data') {
                     const { index, data, name } = e.data;
@@ -22521,7 +22546,7 @@
                         soundsStreamedCount++;
                         console.log('Received sound', index, name, '(' + soundsStreamedCount + '/' + soundsData.length + ')');
 
-                        // Pre-decode this sound in background so it's ready when needed
+                        // Decode this sound and update progress
                         if (audioContext && data) {
                             try {
                                 const base64 = data.split(',')[1];
@@ -22530,13 +22555,27 @@
                                 const audioBuffer = bytes.buffer.slice(0);
                                 audioContext.decodeAudioData(audioBuffer, (buffer) => {
                                     soundBuffers[index] = buffer;
-                                    console.log('Pre-decoded streamed sound', index, name);
+                                    soundsDecodedCount++;
+                                    console.log('Decoded streamed sound', index, name, '(' + soundsDecodedCount + '/' + soundsData.length + ')');
+                                    updateStreamLoadingUI();
+                                    checkAllSoundsDecoded();
                                 }, (err) => {
                                     console.warn('Failed to decode streamed sound', index, err);
+                                    soundsDecodedCount++; // Count as done even if failed
+                                    updateStreamLoadingUI();
+                                    checkAllSoundsDecoded();
                                 });
                             } catch (err) {
                                 console.warn('Error decoding streamed sound', index, ':', err.message);
+                                soundsDecodedCount++; // Count as done even if failed
+                                updateStreamLoadingUI();
+                                checkAllSoundsDecoded();
                             }
+                        } else {
+                            // No audio context or data - count as done
+                            soundsDecodedCount++;
+                            updateStreamLoadingUI();
+                            checkAllSoundsDecoded();
                         }
                     }
                 } else if (e.data && e.data.type === 'sounds-complete') {
@@ -23366,6 +23405,9 @@
 
         // Preload all sounds before game starts (shows loading progress)
         let soundsPreloaded = false;
+        let soundPreloadCallback = null; // Stored callback for when streaming sounds finish
+        let soundsDecodedCount = 0; // Track how many sounds have been decoded (for streaming)
+
         function preloadAllSounds(onComplete) {
             // No sounds to load - complete immediately
             if (!soundsData || soundsData.length === 0) {
@@ -23375,10 +23417,25 @@
                 return;
             }
 
-            // Check if sounds have data (mobile streaming may not have data yet)
+            // Mobile streaming mode - sounds will stream in later
+            // Store callback and wait for streaming to complete
+            if (soundsWillStream) {
+                console.log('Mobile streaming mode - waiting for', soundsData.length, 'sounds to stream...');
+                soundPreloadCallback = onComplete;
+                // Show initial loading UI
+                const loadingText = document.getElementById('loadingText');
+                const loadingPercent = document.getElementById('loadingPercent');
+                const loadingBar = document.getElementById('loadingBar');
+                if (loadingText) loadingText.textContent = 'Loading Sounds...';
+                if (loadingPercent) loadingPercent.textContent = '0/' + soundsData.length + ' (0%)';
+                if (loadingBar) loadingBar.style.width = '0%';
+                return; // Don't start game yet - streaming listener will call callback
+            }
+
+            // Desktop mode - sounds have data, preload them now
             const soundsWithData = soundsData.filter(s => s && s.data);
             if (soundsWithData.length === 0) {
-                console.log('No sound data available yet (may be streaming)');
+                console.log('No sound data available');
                 soundsPreloaded = true;
                 if (onComplete) onComplete();
                 return;
