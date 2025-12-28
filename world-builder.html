@@ -23480,10 +23480,15 @@
                 return;
             }
 
-            // Lazy decode: if buffer not ready, decode it first then play
+            // If sound not decoded yet, skip on mobile (don't freeze trying to decode)
+            // On mobile, sounds decode as they stream in - just wait for next time
             if (!soundBuffers[soundIndex]) {
+                if (soundsWillStream) {
+                    // Mobile streaming mode - skip if not ready yet
+                    return;
+                }
+                // Desktop - decode on demand (shouldn't happen if preload worked)
                 decodeSound(soundIndex, (buffer) => {
-                    // Play after decode completes
                     playSoundBuffer(buffer, volume, pitchVariation, lengthVariation);
                 });
                 return;
