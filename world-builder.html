@@ -23421,14 +23421,23 @@
             // Store callback and wait for streaming to complete
             if (soundsWillStream) {
                 console.log('Mobile streaming mode - waiting for', soundsData.length, 'sounds to stream...');
+
+                // Check if sounds already decoded (race condition - streaming might have finished)
+                if (soundsDecodedCount >= soundsData.length) {
+                    console.log('Sounds already decoded, starting game immediately');
+                    soundsPreloaded = true;
+                    if (onComplete) onComplete();
+                    return;
+                }
+
                 soundPreloadCallback = onComplete;
                 // Show initial loading UI
                 const loadingText = document.getElementById('loadingText');
                 const loadingPercent = document.getElementById('loadingPercent');
                 const loadingBar = document.getElementById('loadingBar');
                 if (loadingText) loadingText.textContent = 'Loading Sounds...';
-                if (loadingPercent) loadingPercent.textContent = '0/' + soundsData.length + ' (0%)';
-                if (loadingBar) loadingBar.style.width = '0%';
+                if (loadingPercent) loadingPercent.textContent = soundsDecodedCount + '/' + soundsData.length + ' (' + Math.round((soundsDecodedCount / soundsData.length) * 100) + '%)';
+                if (loadingBar) loadingBar.style.width = (soundsDecodedCount / soundsData.length * 100) + '%';
                 return; // Don't start game yet - streaming listener will call callback
             }
 
