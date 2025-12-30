@@ -20749,16 +20749,16 @@
                     break;
 
                 case 'updateNpc':
-                    if (typeof placedNpcs !== 'undefined' && edit.index >= 0 && edit.index < placedNpcs.length && edit.npc) {
-                        placedNpcs[edit.index] = edit.npc;
-                        // Update runtime state position if NPC moved
-                        if (npcRuntimeState && npcRuntimeState[edit.index]) {
-                            npcRuntimeState[edit.index].x = edit.npc.x * gridSize;
-                            npcRuntimeState[edit.index].y = edit.npc.y * gridSize;
-                            npcRuntimeState[edit.index].targetX = edit.npc.x * gridSize;
-                            npcRuntimeState[edit.index].targetY = edit.npc.y * gridSize;
+                    // NPC definition updated (template, not placed instance)
+                    if (typeof npcsData !== 'undefined' && edit.index >= 0 && edit.index < npcsData.length && edit.npc) {
+                        npcsData[edit.index] = edit.npc;
+                        // Reload sprite image if changed
+                        if (edit.npc.spriteData && npcImages) {
+                            const img = new Image();
+                            img.src = edit.npc.spriteData;
+                            npcImages[edit.index] = img;
                         }
-                        console.log('[LIVE SYNC] Updated NPC at index', edit.index);
+                        console.log('[LIVE SYNC] Updated NPC definition:', edit.npc.name);
                     }
                     break;
 
