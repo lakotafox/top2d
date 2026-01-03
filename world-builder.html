@@ -2247,6 +2247,25 @@
                         </div>
                     </div>
 
+                    <!-- Quest Start Sound -->
+                    <div style="background:linear-gradient(135deg, #1a2a2a, #2a3a2a); padding:10px; border-radius:6px; margin-bottom:10px; border:2px solid #4a8;">
+                        <div style="display:flex; align-items:center; margin-bottom:8px;">
+                            <span style="font-size:12px; color:#4a8; font-weight:bold; text-shadow:0 0 10px #4a8;">🔊 QUEST START SOUND</span>
+                        </div>
+                        <select id="questStartSound" onchange="updateQuestField('startSound', this.value)" style="width:100%; margin-bottom:6px; font-size:10px;">
+                            <option value="">None</option>
+                            <option value="builtin:1">Quest Start 1</option>
+                            <option value="builtin:2">Quest Start 2</option>
+                            <option value="builtin:3">Quest Start 3</option>
+                        </select>
+                        <div style="display:flex; gap:4px;">
+                            <button onclick="previewQuestStartSound()" class="retro-btn" style="flex:1; padding:4px; font-size:9px; background:#4a8;">▶ Preview</button>
+                            <button onclick="uploadQuestSound()" class="retro-btn" style="flex:1; padding:4px; font-size:9px; background:#2a4;">↑ Custom</button>
+                        </div>
+                        <input type="file" id="questSoundUpload" accept="audio/*" style="display:none;" onchange="handleQuestSoundUpload(event)">
+                        <div id="questCustomSoundName" style="font-size:9px; color:#8f8; margin-top:4px;"></div>
+                    </div>
+
                     <!-- Add Condition -->
                     <div style="background:#1a1a2e; padding:10px; border-radius:4px; margin-bottom:10px;">
                         <label style="font-size:10px; color:#888;">Add Condition:</label>
@@ -3108,6 +3127,13 @@
                                 <input type="number" id="dialogHeight" value="80" min="50" max="200" style="width:100%; padding:4px;" onchange="updateDialogPreview()">
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Type Speed -->
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:10px; color:#aaa; display:block; margin-bottom:4px;">Type Speed: <span id="dialogTypeSpeedVal">30</span> chars/sec</label>
+                        <input type="range" id="dialogTypeSpeed" min="0" max="100" value="30" style="width:100%;" oninput="document.getElementById('dialogTypeSpeedVal').textContent = this.value == 0 ? 'Instant' : this.value">
+                        <div style="font-size:8px; color:#666; margin-top:2px;">0 = instant, higher = faster typing</div>
                     </div>
 
                     <!-- Buttons -->
@@ -15214,6 +15240,28 @@
             document.getElementById('questAutoStart').checked = quest.autoStart || false;
             document.getElementById('questRepeatable').checked = quest.isRepeatable || false;
 
+            // Load quest start sound
+            const soundSelect = document.getElementById('questStartSound');
+            const customSoundLabel = document.getElementById('questCustomSoundName');
+            if (soundSelect) {
+                // Check if it's a custom sound (starts with 'custom:')
+                if (quest.startSound && quest.startSound.startsWith('custom:')) {
+                    // Add custom option if not exists
+                    let customOption = soundSelect.querySelector('option[value^="custom:"]');
+                    if (!customOption) {
+                        customOption = document.createElement('option');
+                        soundSelect.appendChild(customOption);
+                    }
+                    customOption.value = quest.startSound;
+                    customOption.textContent = 'Custom Sound';
+                    soundSelect.value = quest.startSound;
+                    if (customSoundLabel) customSoundLabel.textContent = 'Using custom sound';
+                } else {
+                    soundSelect.value = quest.startSound || '';
+                    if (customSoundLabel) customSoundLabel.textContent = '';
+                }
+            }
+
             // Update NPC display names
             updateQuestNpcDisplayNames();
 
@@ -15303,6 +15351,77 @@
             quest[field] = value;
             broadcastEdit({ editType: 'updateQuest', questId: quest.id, quest: quest });
             if (field === 'name') renderQuestList();
+        }
+
+        // Quest start sound functions
+        const builtinQuestSounds = {
+            'builtin:1': 'reciveitem1.mp3',
+            'builtin:2': 'reciveitem2.mp3',
+            'builtin:3': 'reciveitem3.mp3'
+        };
+        let questSoundPreviewAudio = null;
+
+        function previewQuestStartSound() {
+            const select = document.getElementById('questStartSound');
+            if (!select || !select.value) return;
+
+            // Stop any playing preview
+            if (questSoundPreviewAudio) {
+                questSoundPreviewAudio.pause();
+                questSoundPreviewAudio = null;
+            }
+
+            const soundValue = select.value;
+            if (soundValue.startsWith('builtin:')) {
+                const filename = builtinQuestSounds[soundValue];
+                if (filename) {
+                    questSoundPreviewAudio = new Audio(filename);
+                    questSoundPreviewAudio.volume = 0.7;
+                    questSoundPreviewAudio.play().catch(e => console.log('Preview failed:', e));
+                }
+            } else if (soundValue.startsWith('custom:')) {
+                // Custom sound is base64 data
+                const dataUrl = soundValue.substring(7); // Remove 'custom:' prefix
+                questSoundPreviewAudio = new Audio(dataUrl);
+                questSoundPreviewAudio.volume = 0.7;
+                questSoundPreviewAudio.play().catch(e => console.log('Preview failed:', e));
+            }
+        }
+
+        function uploadQuestSound() {
+            document.getElementById('questSoundUpload').click();
+        }
+
+        function handleQuestSoundUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const dataUrl = e.target.result;
+                const soundValue = 'custom:' + dataUrl;
+
+                // Add custom option to select
+                const select = document.getElementById('questStartSound');
+                let customOption = select.querySelector('option[value^="custom:"]');
+                if (!customOption) {
+                    customOption = document.createElement('option');
+                    select.appendChild(customOption);
+                }
+                customOption.value = soundValue;
+                customOption.textContent = 'Custom: ' + file.name;
+                select.value = soundValue;
+
+                // Update quest
+                updateQuestField('startSound', soundValue);
+
+                // Update label
+                document.getElementById('questCustomSoundName').textContent = 'Custom: ' + file.name;
+            };
+            reader.readAsDataURL(file);
+
+            // Reset file input
+            event.target.value = '';
         }
 
         function deleteCurrentQuest() {
@@ -19516,6 +19635,8 @@
                 document.getElementById('dialogAccentColor').value = d.colors?.accent || '#ffffff';
                 document.getElementById('dialogWidth').value = d.width || 280;
                 document.getElementById('dialogHeight').value = d.height || 80;
+                document.getElementById('dialogTypeSpeed').value = d.typeSpeed ?? 30;
+                document.getElementById('dialogTypeSpeedVal').textContent = d.typeSpeed == 0 ? 'Instant' : (d.typeSpeed ?? 30);
                 dialogEditorPages = d.pages ? JSON.parse(JSON.stringify(d.pages)) : [{ speaker: '', text: '' }];
             } else {
                 // New dialog
@@ -19524,6 +19645,8 @@
                 applyDialogStylePreset(1);
                 document.getElementById('dialogWidth').value = 280;
                 document.getElementById('dialogHeight').value = 80;
+                document.getElementById('dialogTypeSpeed').value = 30;
+                document.getElementById('dialogTypeSpeedVal').textContent = '30';
                 dialogEditorPages = [{ speaker: '', text: '' }];
             }
 
@@ -19689,6 +19812,7 @@
                 style: style,
                 width: parseInt(document.getElementById('dialogWidth').value) || 280,
                 height: parseInt(document.getElementById('dialogHeight').value) || 80,
+                typeSpeed: parseInt(document.getElementById('dialogTypeSpeed').value) || 30,
                 colors: {
                     background: document.getElementById('dialogBgColor').value,
                     border: document.getElementById('dialogBorderColor').value,
@@ -21447,6 +21571,33 @@
             state.status = QUEST_STATUS.ACTIVE;
             console.log('[QUEST] Accepted quest:', quest.name);
             showQuestNotification('started', quest.name);
+
+            // Play quest start sound if set
+            playQuestStartSound(quest);
+        }
+
+        // Built-in quest sound URLs
+        const builtinQuestSoundUrls = {
+            'builtin:1': 'reciveitem1.mp3',
+            'builtin:2': 'reciveitem2.mp3',
+            'builtin:3': 'reciveitem3.mp3'
+        };
+
+        function playQuestStartSound(quest) {
+            if (!quest.startSound) return;
+
+            let audioSrc = null;
+            if (quest.startSound.startsWith('builtin:')) {
+                audioSrc = builtinQuestSoundUrls[quest.startSound];
+            } else if (quest.startSound.startsWith('custom:')) {
+                audioSrc = quest.startSound.substring(7); // Remove 'custom:' prefix
+            }
+
+            if (audioSrc) {
+                const audio = new Audio(audioSrc);
+                audio.volume = 0.7;
+                audio.play().catch(e => console.log('[QUEST] Sound play failed:', e));
+            }
         }
 
         function getActiveQuest() {
@@ -24976,6 +25127,13 @@ Item Receive Display:
         // === DIALOG INTERACTION SYSTEM ===
         let activeDialog = null; // { dialog, pageIndex, npc }
         let dialogCooldown = 0; // Prevent rapid re-trigger
+        // Typewriter effect state
+        let dialogTypingState = {
+            charsShown: 0,
+            complete: true,
+            lastTypeTime: 0,
+            fullText: ''
+        };
 
         function checkDialogInteraction() {
             if (activeDialog || dialogCooldown > 0) return false;
@@ -25183,6 +25341,8 @@ Item Receive Display:
 
         function showDialog(dialog, npc) {
             activeDialog = { dialog, pageIndex: 0, npc };
+            // Reset typewriter state for new dialog
+            resetDialogTyping();
             // Pause NPC movement while talking
             if (npc) {
                 // Find the NPC's runtime state and set pause flag there
@@ -25198,13 +25358,63 @@ Item Receive Display:
             renderDialogBox();
         }
 
+        function resetDialogTyping() {
+            const page = activeDialog?.dialog?.pages?.[activeDialog?.pageIndex];
+            const typeSpeed = activeDialog?.dialog?.typeSpeed ?? 30;
+            dialogTypingState = {
+                charsShown: typeSpeed === 0 ? 999999 : 0, // Instant if speed is 0
+                complete: typeSpeed === 0,
+                lastTypeTime: performance.now(),
+                fullText: page?.text || ''
+            };
+        }
+
+        function updateDialogTyping() {
+            if (!activeDialog || dialogTypingState.complete) return;
+
+            const typeSpeed = activeDialog.dialog.typeSpeed ?? 30;
+            if (typeSpeed === 0) {
+                dialogTypingState.complete = true;
+                dialogTypingState.charsShown = dialogTypingState.fullText.length;
+                return;
+            }
+
+            const now = performance.now();
+            const msPerChar = 1000 / typeSpeed;
+            const elapsed = now - dialogTypingState.lastTypeTime;
+
+            if (elapsed >= msPerChar) {
+                const charsToAdd = Math.floor(elapsed / msPerChar);
+                dialogTypingState.charsShown += charsToAdd;
+                dialogTypingState.lastTypeTime = now;
+
+                if (dialogTypingState.charsShown >= dialogTypingState.fullText.length) {
+                    dialogTypingState.charsShown = dialogTypingState.fullText.length;
+                    dialogTypingState.complete = true;
+                }
+
+                // Re-render to show new characters
+                renderDialogBox();
+            }
+        }
+
         function advanceDialog() {
             if (!activeDialog) return;
 
+            // If still typing, complete instantly first
+            if (!dialogTypingState.complete) {
+                dialogTypingState.charsShown = dialogTypingState.fullText.length;
+                dialogTypingState.complete = true;
+                renderDialogBox();
+                return;
+            }
+
+            // Typing complete, advance to next page
             activeDialog.pageIndex++;
             if (activeDialog.pageIndex >= activeDialog.dialog.pages.length) {
                 closeDialog();
             } else {
+                resetDialogTyping(); // Reset typing for new page
                 renderDialogBox();
             }
         }
@@ -25299,13 +25509,29 @@ Item Receive Display:
             box.style.borderRadius = (preset.radius || 0) + 'px';
             box.style.color = dialog.colors?.text || preset.text;
 
-            // Build content
+            // Build content with typewriter effect
             let html = '';
             if (page.speaker) {
                 html += '<div style="color:' + (dialog.colors?.accent || preset.accent) + '; font-weight:bold; margin-bottom:8px;">' + page.speaker + '</div>';
             }
-            html += '<div style="line-height:1.5;">' + page.text + '</div>';
-            html += '<div style="text-align:right; margin-top:10px; font-size:10px; color:#888;">[A] ' + (activeDialog.pageIndex + 1) + '/' + dialog.pages.length + '</div>';
+
+            // Show partial text based on typing state
+            const fullText = page.text || '';
+            const displayText = fullText.substring(0, dialogTypingState.charsShown);
+            const typingCursor = dialogTypingState.complete ? '' : '<span style="animation:blink 0.5s infinite;">▌</span>';
+            html += '<div style="line-height:1.5;">' + displayText + typingCursor + '</div>';
+
+            // Show different prompt based on typing state
+            const prompt = dialogTypingState.complete ? '[A]' : '[A] skip';
+            html += '<div style="text-align:right; margin-top:10px; font-size:10px; color:#888;">' + prompt + ' ' + (activeDialog.pageIndex + 1) + '/' + dialog.pages.length + '</div>';
+
+            // Add blink animation style if not present
+            if (!document.getElementById('dialogBlinkStyle')) {
+                const style = document.createElement('style');
+                style.id = 'dialogBlinkStyle';
+                style.textContent = '@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }';
+                document.head.appendChild(style);
+            }
 
             box.innerHTML = html;
             box.style.display = 'block';
@@ -27654,6 +27880,9 @@ Item Receive Display:
 
             // Dialog cooldown
             if (dialogCooldown > 0) dialogCooldown--;
+
+            // Update dialog typewriter effect
+            updateDialogTyping();
 
             if (!isTransitioning || transitionPhase === 'fadeIn' || transitionPhase === 'forceWalk') {
                 // Allow player to be visible during forced walk but don't allow input
