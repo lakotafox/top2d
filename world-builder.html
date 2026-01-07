@@ -3612,7 +3612,7 @@
 
                 <!-- Items For Sale -->
                 <div style="margin-bottom:15px; background:#1a2a1a; padding:10px; border-radius:4px; border:1px solid #4a8;">
-                    <label style="font-size:12px; color:#4f8; font-weight:bold; display:block; margin-bottom:8px;">🏷️ Items For Sale</label>
+                    <label style="font-size:12px; color:#4f8; font-weight:bold; display:block; margin-bottom:8px;">Items For Sale</label>
                     <div id="shopInventoryList" style="max-height:120px; overflow-y:auto; margin-bottom:8px; min-height:40px;">
                         <div style="color:#666; font-size:11px; text-align:center; padding:10px;">No items for sale yet</div>
                     </div>
@@ -3621,21 +3621,21 @@
                             <option value="">(Select item)</option>
                         </select>
                         <div style="display:flex; align-items:center; gap:3px;">
-                            <span style="font-size:10px; color:#fa0;">💰</span>
+                            <span style="font-size:10px; color:#fa0;">Price:</span>
                             <input type="number" id="shopAddItemPrice" style="width:55px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="1" value="10" title="Price">
                         </div>
                         <div style="display:flex; align-items:center; gap:3px;">
-                            <span style="font-size:10px; color:#888;">📦</span>
-                            <input type="number" id="shopAddItemStock" style="width:50px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="-1" value="-1" title="Stock (-1=∞)">
+                            <span style="font-size:10px; color:#888;">Stock:</span>
+                            <input type="number" id="shopAddItemStock" style="width:50px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="-1" value="-1" title="Stock (-1 = unlimited)">
                         </div>
                         <button onclick="shopAddInventoryItem()" style="padding:6px 12px; background:#4a4; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">Add</button>
                     </div>
-                    <div style="font-size:9px; color:#666; margin-top:4px;">💰 = price to buy | 📦 = stock (-1 = unlimited)</div>
+                    <div style="font-size:9px; color:#666; margin-top:4px;">Stock: -1 = unlimited</div>
                 </div>
 
                 <!-- Buy List -->
                 <div style="background:#2a1a1a; padding:10px; border-radius:4px; border:1px solid #a64;">
-                    <label style="font-size:12px; color:#f84; font-weight:bold; display:block; margin-bottom:8px;">💵 Items Shop Will Buy</label>
+                    <label style="font-size:12px; color:#f84; font-weight:bold; display:block; margin-bottom:8px;">Items Shop Will Buy</label>
                     <div id="shopBuyListDisplay" style="max-height:100px; overflow-y:auto; margin-bottom:8px; min-height:40px;">
                         <div style="color:#666; font-size:11px; text-align:center; padding:10px;">Shop uses default rate for all items</div>
                     </div>
@@ -3644,18 +3644,18 @@
                             <option value="">(Select item)</option>
                         </select>
                         <div style="display:flex; align-items:center; gap:3px;">
-                            <span style="font-size:10px; color:#4a8;">💵</span>
-                            <input type="number" id="shopBuyItemPrice" style="width:55px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="1" value="5" title="Sell price">
+                            <span style="font-size:10px; color:#4a8;">Pays:</span>
+                            <input type="number" id="shopBuyItemPrice" style="width:55px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="1" value="5" title="Price shop pays">
                         </div>
                         <button onclick="shopAddBuyListItem()" style="padding:6px 12px; background:#844; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">Add</button>
                     </div>
-                    <div style="font-size:9px; color:#666; margin-top:4px;">💵 = price shop pays player for this item</div>
+                    <div style="font-size:9px; color:#666; margin-top:4px;">Price shop pays player for this item</div>
                 </div>
             </div>
 
             <!-- Footer -->
             <div style="padding:12px 15px; border-top:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#1a1a1a;">
-                <button onclick="deleteShopFromEditor()" style="padding:8px 15px; background:#633; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">🗑️ Delete</button>
+                <button onclick="deleteShopFromEditor()" style="padding:8px 15px; background:#633; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">Delete</button>
                 <div style="display:flex; gap:8px;">
                     <button onclick="closeShopEditor()" style="padding:8px 20px; background:#444; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">Cancel</button>
                     <button onclick="saveShopEditor()" style="padding:8px 20px; background:linear-gradient(135deg, #fa0, #c80); color:#000; border:none; border-radius:3px; cursor:pointer; font-weight:bold; font-size:12px;">Save</button>
@@ -7045,6 +7045,42 @@
                         renderMap();
                     } else {
                         removeDialogTileAt(x, y);
+                    }
+                }
+                return;
+            }
+
+            // Shop mode - click NPC to attach shop
+            if (mode === 'shop') {
+                if (e.button === 0) {
+                    const npcIdx = findPlacedNpcAt(x, y);
+                    if (npcIdx >= 0) {
+                        if (selectedShopIndex >= 0) {
+                            // Attach selected shop to this NPC
+                            placedNpcs[npcIdx].shopIndex = selectedShopIndex;
+                            broadcastEdit({
+                                editType: 'updatePlacedNpc',
+                                index: npcIdx,
+                                npc: placedNpcs[npcIdx]
+                            });
+                            updateNpcShopList();
+                            renderMap();
+                        } else {
+                            alert('Select a shop first by clicking it in the list');
+                        }
+                    }
+                } else if (e.button === 2) {
+                    // Right-click: remove shop from NPC
+                    const npcIdx = findPlacedNpcAt(x, y);
+                    if (npcIdx >= 0 && placedNpcs[npcIdx].shopIndex >= 0) {
+                        placedNpcs[npcIdx].shopIndex = -1;
+                        broadcastEdit({
+                            editType: 'updatePlacedNpc',
+                            index: npcIdx,
+                            npc: placedNpcs[npcIdx]
+                        });
+                        updateNpcShopList();
+                        renderMap();
                     }
                 }
                 return;
@@ -16964,7 +17000,7 @@
                 </div>
                 <div style="display:flex; gap:5px;">
                     <button onclick="openShopEditor(selectedShopIndex)" style="flex:1; padding:6px; background:#4a7c59; color:#fff; border:none; border-radius:3px; cursor:pointer;">Edit</button>
-                    <button onclick="deleteShop(selectedShopIndex)" style="padding:6px 10px; background:#a55; color:#fff; border:none; border-radius:3px; cursor:pointer;">🗑️</button>
+                    <button onclick="deleteShop(selectedShopIndex)" style="padding:6px 10px; background:#a55; color:#fff; border:none; border-radius:3px; cursor:pointer;">X</button>
                 </div>
                 <div style="margin-top:8px; font-size:10px; color:#aaa;">
                     Click an NPC to attach this shop
