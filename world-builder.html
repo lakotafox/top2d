@@ -1683,6 +1683,14 @@
                                         <input type="range" id="npcSlowdownDuration" min="0" max="2" value="0.5" step="0.25" onchange="updateNpcEnemy()" style="width:100%;">
                                     </div>
                                 </div>
+                                <!-- Drop Items on Death -->
+                                <div style="margin-top:8px; padding:6px; background:#2a1a2a; border:1px solid #a4a; border-radius:4px;">
+                                    <label style="font-size:10px; color:#a8a; display:block; margin-bottom:4px;">Drop Items on Death:</label>
+                                    <div id="npcDropItemsList" style="min-height:20px; margin-bottom:5px;">
+                                        <span style="color:#666; font-size:9px;">No drops configured</span>
+                                    </div>
+                                    <button onclick="addNpcDropItem()" class="retro-btn" style="font-size:8px; padding:3px 6px; background:#a4a;">+ Add Drop</button>
+                                </div>
                                 <div style="font-size:9px; color:#888; margin-top:5px;">
                                     <span id="npcAttackModeDesc">Touch: deals damage on contact. Lunge: dashes at player when in range.</span>
                                 </div>
@@ -1733,6 +1741,13 @@
                     <input type="range" id="staticObjScaleSlider" min="0.25" max="3" step="0.25" value="1"
                            oninput="updateStaticObjScale(this.value)" style="width:100%;">
                     <p style="font-size:9px; color:#666; margin-top:5px;">Click map to place. Right-click to remove.</p>
+                </div>
+
+                <!-- Edit Static Object on Map -->
+                <div style="margin-bottom:10px;">
+                    <button id="editStaticObjOnMapBtn" class="retro-btn" onclick="toggleEditStaticObjMode()" style="width:100%; background:#4a7c59;">
+                        Edit Static Object Collision
+                    </button>
                 </div>
 
                 <hr style="margin:15px 0; border-color:#444;">
@@ -2249,18 +2264,19 @@
 
                     <!-- Quest Start Sound -->
                     <div style="background:linear-gradient(135deg, #1a2a2a, #2a3a2a); padding:10px; border-radius:6px; margin-bottom:10px; border:2px solid #4a8;">
-                        <div style="display:flex; align-items:center; margin-bottom:8px;">
-                            <span style="font-size:12px; color:#4a8; font-weight:bold; text-shadow:0 0 10px #4a8;">🔊 QUEST START SOUND</span>
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                            <span style="font-size:11px; color:#4a8; font-weight:bold;">START SOUND</span>
+                            <button onclick="uploadQuestSound()" class="retro-btn" style="padding:2px 6px; font-size:9px; background:#2a4;">+ Add</button>
                         </div>
-                        <select id="questStartSound" onchange="updateQuestField('startSound', this.value)" style="width:100%; margin-bottom:6px; font-size:10px;">
-                            <option value="">None</option>
+                        <select id="questStartSound" onchange="updateQuestField('startSoundIndex', this.value)" style="width:100%; margin-bottom:6px; font-size:10px;">
+                            <option value="-1">None</option>
                         </select>
                         <div style="display:flex; gap:4px;">
                             <button onclick="previewQuestStartSound()" class="retro-btn" style="flex:1; padding:4px; font-size:9px; background:#4a8;">▶ Preview</button>
-                            <button onclick="uploadQuestSound()" class="retro-btn" style="flex:1; padding:4px; font-size:9px; background:#2a4;">↑ Upload Sound</button>
+                            <button onclick="deleteQuestSound()" class="retro-btn" style="padding:4px 8px; font-size:9px; background:#844;">✕</button>
                         </div>
                         <input type="file" id="questSoundUpload" accept="audio/*" style="display:none;" onchange="handleQuestSoundUpload(event)">
-                        <div id="questCustomSoundName" style="font-size:9px; color:#8f8; margin-top:4px;"></div>
+                        <div id="questSoundCount" style="font-size:8px; color:#888; margin-top:4px;"></div>
                     </div>
 
                     <!-- Add Condition -->
@@ -2449,13 +2465,15 @@
                 <!-- Step 2: Frame Size -->
                 <div id="npcFrameSection" style="margin-bottom:15px; display:none;">
                     <h3>2. Frame Size</h3>
-                    <div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px;">
-                        <button onclick="npcSetFrameSize(16,16)" style="padding:4px 8px; font-size:11px;">16x16</button>
-                        <button onclick="npcSetFrameSize(16,32)" style="padding:4px 8px; font-size:11px;">16x32</button>
-                        <button onclick="npcSetFrameSize(32,32)" style="padding:4px 8px; font-size:11px;">32x32</button>
-                        <button onclick="npcSetFrameSize(32,64)" style="padding:4px 8px; font-size:11px;">32x64</button>
-                        <button onclick="npcSetFrameSize(48,48)" style="padding:4px 8px; font-size:11px;">48x48</button>
-                        <button onclick="npcResetGrid()" style="padding:4px 8px; font-size:11px; background:#a55;">Reset</button>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <div style="flex:1;">
+                            <label style="font-size:11px; color:#888;">Width:</label>
+                            <input type="number" id="npcFrameW" value="16" min="8" max="256" onchange="npcSetFrameSizeFromInput()" style="width:100%;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:11px; color:#888;">Height:</label>
+                            <input type="number" id="npcFrameH" value="32" min="8" max="256" onchange="npcSetFrameSizeFromInput()" style="width:100%;">
+                        </div>
                     </div>
                     <div style="font-size:11px; color:#888;" id="npcGridInfo"></div>
                 </div>
@@ -2512,20 +2530,27 @@
                 <div id="npcShadowSection" style="margin-bottom:15px; display:none;">
                     <h3>6. Shadow</h3>
                     <div style="margin-bottom:8px;">
-                        <label style="font-size:10px; color:#888;">X Offset: <span id="npcShadowOffsetXVal">0</span>px</label>
-                        <input type="range" id="npcShadowOffsetXSlider" min="-20" max="20" value="0" oninput="updateNpcShadowPreview()" style="width:100%;">
+                        <label style="font-size:10px; color:#888; cursor:pointer;">
+                            <input type="checkbox" id="npcNoShadow" onchange="updateNpcShadowPreview()"> No Shadow
+                        </label>
                     </div>
-                    <div style="margin-bottom:8px;">
-                        <label style="font-size:10px; color:#888;">Y Offset: <span id="npcShadowOffsetVal">4</span>px</label>
-                        <input type="range" id="npcShadowOffsetSlider" min="0" max="20" value="4" oninput="updateNpcShadowPreview()" style="width:100%;">
-                    </div>
-                    <div style="margin-bottom:8px;">
-                        <label style="font-size:10px; color:#888;">Width: <span id="npcShadowWidthVal">35</span>%</label>
-                        <input type="range" id="npcShadowWidthSlider" min="10" max="60" value="35" oninput="updateNpcShadowPreview()" style="width:100%;">
-                    </div>
-                    <div style="margin-bottom:8px;">
-                        <label style="font-size:10px; color:#888;">Height: <span id="npcShadowHeightVal">12</span>%</label>
-                        <input type="range" id="npcShadowHeightSlider" min="5" max="25" value="12" oninput="updateNpcShadowPreview()" style="width:100%;">
+                    <div id="npcShadowControls">
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:10px; color:#888;">X Offset: <span id="npcShadowOffsetXVal">0</span>px</label>
+                            <input type="range" id="npcShadowOffsetXSlider" min="-20" max="20" value="0" oninput="updateNpcShadowPreview()" style="width:100%;">
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:10px; color:#888;">Y Offset: <span id="npcShadowOffsetVal">4</span>px</label>
+                            <input type="range" id="npcShadowOffsetSlider" min="0" max="20" value="4" oninput="updateNpcShadowPreview()" style="width:100%;">
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:10px; color:#888;">Width: <span id="npcShadowWidthVal">35</span>%</label>
+                            <input type="range" id="npcShadowWidthSlider" min="10" max="60" value="35" oninput="updateNpcShadowPreview()" style="width:100%;">
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:10px; color:#888;">Height: <span id="npcShadowHeightVal">12</span>%</label>
+                            <input type="range" id="npcShadowHeightSlider" min="5" max="25" value="12" oninput="updateNpcShadowPreview()" style="width:100%;">
+                        </div>
                     </div>
                     <p style="font-size:9px; color:#555;">Adjust shadow position and size under NPC sprite.</p>
                 </div>
@@ -2570,6 +2595,11 @@
                                     </div>
                                     <div style="display:flex; align-items:center; gap:5px; margin-top:5px;">
                                         <label style="color:#888; cursor:pointer;"><input type="checkbox" id="npcPingPong" onchange="npcUpdatePingPong()"> Ping-Pong</label>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:5px; margin-top:5px;">
+                                        <span style="color:#888;">Preview:</span>
+                                        <input type="range" id="npcPreviewScale" min="0.5" max="3" step="0.25" value="1" style="width:60px;" oninput="npcUpdatePreviewScale()">
+                                        <span id="npcPreviewScaleLabel" style="color:#4af; min-width:30px;">1x</span>
                                     </div>
                                 </div>
                             </div>
@@ -2898,13 +2928,15 @@
                 <!-- Step 2: Frame Size -->
                 <div id="playerFrameSection" style="margin-bottom:15px; display:none;">
                     <h3>2. Frame Size</h3>
-                    <div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px;">
-                        <button onclick="playerSetFrameSize(16,16)" style="padding:4px 8px; font-size:11px;">16x16</button>
-                        <button onclick="playerSetFrameSize(16,32)" style="padding:4px 8px; font-size:11px;">16x32</button>
-                        <button onclick="playerSetFrameSize(32,32)" style="padding:4px 8px; font-size:11px;">32x32</button>
-                        <button onclick="playerSetFrameSize(32,64)" style="padding:4px 8px; font-size:11px;">32x64</button>
-                        <button onclick="playerSetFrameSize(64,64)" style="padding:4px 8px; font-size:11px;">64x64</button>
-                        <button onclick="playerResetGrid()" style="padding:4px 8px; font-size:11px; background:#a55;">Reset</button>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <div style="flex:1;">
+                            <label style="font-size:11px; color:#888;">Width:</label>
+                            <input type="number" id="playerFrameW" value="64" min="8" max="256" onchange="playerSetFrameSizeFromInput()" style="width:100%;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:11px; color:#888;">Height:</label>
+                            <input type="number" id="playerFrameH" value="64" min="8" max="256" onchange="playerSetFrameSizeFromInput()" style="width:100%;">
+                        </div>
                     </div>
                     <div style="font-size:11px; color:#888;" id="playerGridInfo"></div>
                 </div>
@@ -3397,10 +3429,18 @@
                     <input type="text" id="itemNameInput" placeholder="e.g. chest, pot, crate" style="width:100%;">
                 </div>
 
+                <!-- Step 5: Max Stack (for inventory) -->
+                <div id="itemStackSection" style="margin-bottom:20px; display:none;">
+                    <h3>5. Max Stack</h3>
+                    <p style="font-size:10px; color:#666; margin-bottom:8px;">How many can stack in one inventory slot</p>
+                    <input type="number" id="itemMaxStack" value="99" min="1" max="999" style="width:100%;">
+                </div>
+
                 <!-- Actions -->
                 <div style="margin-top:auto;">
-                    <button onclick="itemSave()" style="width:100%; background:#4f8; color:#000; margin-bottom:10px;">Save Item</button>
-                    <button onclick="itemCancel()" style="width:100%; background:#a55;">Cancel</button>
+                    <button onclick="itemSave()" style="width:100%; background:#4f8; color:#000; margin-bottom:5px;">Save Item</button>
+                    <button onclick="itemSaveAndContinue()" style="width:100%; background:#48a; color:#fff; margin-bottom:5px;">Save & Create Another</button>
+                    <button onclick="itemCancel()" style="width:100%; background:#a55;">Done</button>
                 </div>
             </div>
 
@@ -3693,10 +3733,11 @@
 
         // Static Objects System (tiles saved as reusable props)
         let staticObjects = [];           // { name, spriteData, width, height, tilesetIndex, sourceTiles, sourceOrigin, _spriteImg }
-        let placedStaticObjects = [];     // { objIndex, x, y, mapName, scale }
+        let placedStaticObjects = [];     // { objIndex, x, y, mapName, scale, collisionBox: {x, y, w, h} }
         let currentStaticObjIndex = -1;
         let staticObjPlacementScale = 1.0;
         let createObjectMode = false;
+        let editStaticObjOnMapMode = false; // Edit mode for clicking placed static objects to edit collision
 
         // Items System (interactive props like chests)
         let items = []; // Array of item definitions { name, spriteData, frameWidth, frameHeight, frames: [{x,y,w,h},...], fps, idleFrame }
@@ -3779,6 +3820,9 @@
         };
         let previewAudio = null; // For sound preview playback
         let selectedTileSoundKey = null; // Currently selected tile sound for editing
+
+        // Quest Sounds Library - separate from ambient/action sounds
+        let questSounds = []; // Array of { name, data }
 
         // Lighting System (Classic 2D - no WebGL)
         let lightingSettings = {
@@ -5334,13 +5378,24 @@
 
         function setMode(m) {
             mode = m;
-            // Turn off edit mode when switching away from animProp
-            if (m !== 'animProp' && editAnimPropOnMapMode) {
-                editAnimPropOnMapMode = false;
-                const btn = document.getElementById('editAnimPropOnMapBtn');
-                if (btn) {
-                    btn.classList.remove('active');
-                    btn.textContent = 'Edit Object on Map';
+            // Turn off edit modes when switching away from animProp
+            if (m !== 'animProp') {
+                if (editAnimPropOnMapMode) {
+                    editAnimPropOnMapMode = false;
+                    const btn = document.getElementById('editAnimPropOnMapBtn');
+                    if (btn) {
+                        btn.classList.remove('active');
+                        btn.textContent = 'Edit Object on Map';
+                    }
+                }
+                if (editStaticObjOnMapMode) {
+                    editStaticObjOnMapMode = false;
+                    const btn = document.getElementById('editStaticObjOnMapBtn');
+                    if (btn) {
+                        btn.classList.remove('active');
+                        btn.style.background = '#4a7c59';
+                        btn.textContent = 'Edit Static Object Collision';
+                    }
                 }
             }
             // Sidebar tabs
@@ -6614,8 +6669,16 @@
 
             // Animated prop mode - click to place, right-click to remove (no dragging)
             if (mode === 'animProp') {
+                // Static object edit mode - click to edit collision box
+                if (editStaticObjOnMapMode && e.button === 0) {
+                    const staticObjInfo = findStaticObjAt(x, y);
+                    if (staticObjInfo) {
+                        openStaticObjEditPopup(staticObjInfo);
+                        return;
+                    }
+                }
                 // Static object placement/removal takes priority
-                if (currentStaticObjIndex >= 0 && staticObjects[currentStaticObjIndex]) {
+                if (currentStaticObjIndex >= 0 && staticObjects[currentStaticObjIndex] && !editStaticObjOnMapMode) {
                     if (e.button === 0) {
                         placeStaticObjectAt(x, y);
                     } else if (e.button === 2) {
@@ -8487,24 +8550,29 @@
                             const drawW = tileSize * npcScale;
                             const drawH = tileSize * npcScale;
 
-                            // Draw NPC shadow
-                            const shadowOffsetX = npc.shadowOffsetX ?? 0;
-                            const shadowOffsetY = npc.shadowOffsetY ?? 4;
-                            const shadowWidthRatio = npc.shadowWidth ?? 0.35;
-                            const shadowHeightRatio = npc.shadowHeight ?? 0.12;
-                            mapCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                            mapCtx.beginPath();
-                            mapCtx.ellipse(
-                                px + tileSize / 2 + shadowOffsetX,
-                                py + tileSize - shadowOffsetY,
-                                drawW * shadowWidthRatio,
-                                drawW * shadowHeightRatio,
-                                0, 0, Math.PI * 2
-                            );
-                            mapCtx.fill();
                             // Center larger/smaller NPCs on the tile
                             const offsetX = (tileSize - drawW) / 2;
                             const offsetY = tileSize - drawH; // Anchor at bottom
+                            const drawX = px + offsetX;
+                            const drawY = py + offsetY;
+
+                            // Draw NPC shadow (unless noShadow is set) - matches game rendering
+                            if (!npc.noShadow) {
+                                const shadowOffsetX = npc.shadowOffsetX ?? 0;
+                                const shadowOffsetY = npc.shadowOffsetY ?? 4;
+                                const shadowWidthRatio = npc.shadowWidth ?? 0.35;
+                                const shadowHeightRatio = npc.shadowHeight ?? 0.12;
+                                mapCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                                mapCtx.beginPath();
+                                mapCtx.ellipse(
+                                    drawX + drawW / 2 + shadowOffsetX,
+                                    drawY + drawH - shadowOffsetY,
+                                    drawW * shadowWidthRatio,
+                                    drawW * shadowHeightRatio,
+                                    0, 0, Math.PI * 2
+                                );
+                                mapCtx.fill();
+                            }
 
                             // Determine which animation key is being used for mirror check
                             let animKey = 'walkDown';
@@ -8702,6 +8770,31 @@
                     mapCtx.strokeStyle = '#4a7c59';
                     mapCtx.lineWidth = 2;
                     mapCtx.strokeRect(drawX, drawY, drawW, drawH);
+
+                    // In edit mode, show collision box overlay
+                    if (editStaticObjOnMapMode) {
+                        const cb = placed.collisionBox;
+                        if (cb && cb.w > 0 && cb.h > 0) {
+                            // Draw collision box
+                            const boxScale = tileSize / gridSize;
+                            const cbDrawX = drawX + cb.x * boxScale;
+                            const cbDrawY = drawY + cb.y * boxScale;
+                            const cbDrawW = cb.w * boxScale;
+                            const cbDrawH = cb.h * boxScale;
+
+                            mapCtx.fillStyle = 'rgba(79, 255, 136, 0.3)';
+                            mapCtx.fillRect(cbDrawX, cbDrawY, cbDrawW, cbDrawH);
+                            mapCtx.strokeStyle = '#4f8';
+                            mapCtx.setLineDash([4, 2]);
+                            mapCtx.strokeRect(cbDrawX, cbDrawY, cbDrawW, cbDrawH);
+                            mapCtx.setLineDash([]);
+                        } else if (!cb) {
+                            // No custom collision - show full object as collision (semi-transparent)
+                            mapCtx.fillStyle = 'rgba(255, 200, 100, 0.2)';
+                            mapCtx.fillRect(drawX, drawY, drawW, drawH);
+                        }
+                        // cb.w/h = 0 means no collision, show nothing
+                    }
                 }
             });
 
@@ -9686,6 +9779,9 @@
                         document.getElementById('npcShadowWidthVal').textContent = shadowWidth;
                         document.getElementById('npcShadowHeightSlider').value = shadowHeight;
                         document.getElementById('npcShadowHeightVal').textContent = shadowHeight;
+                        // Load noShadow setting
+                        document.getElementById('npcNoShadow').checked = npc.noShadow || false;
+                        document.getElementById('npcShadowControls').style.display = npc.noShadow ? 'none' : 'block';
                         // Load collision insets (or migrate from old formats)
                         if (npc.collisionInsets) {
                             npcCollisionInsets = { ...npc.collisionInsets };
@@ -9755,6 +9851,10 @@
                 document.getElementById('npcShadowWidthVal').textContent = '35';
                 document.getElementById('npcShadowHeightSlider').value = 12;
                 document.getElementById('npcShadowHeightVal').textContent = '12';
+                document.getElementById('npcNoShadow').checked = false;
+                document.getElementById('npcShadowControls').style.display = 'block';
+                document.getElementById('npcPreviewScale').value = 1;
+                document.getElementById('npcPreviewScaleLabel').textContent = '1x';
                 // Clear canvases
                 const previewCtx = document.getElementById('npcLivePreview').getContext('2d');
                 previewCtx.clearRect(0, 0, 96, 96);
@@ -9802,6 +9902,23 @@
         function npcSetFrameSize(w, h) {
             npcEditorFrameW = w;
             npcEditorFrameH = h;
+            // Sync input fields
+            const wInput = document.getElementById('npcFrameW');
+            const hInput = document.getElementById('npcFrameH');
+            if (wInput) wInput.value = w;
+            if (hInput) hInput.value = h;
+            npcUpdateGrid();
+            npcDrawCanvas();
+        }
+
+        function npcSetFrameSizeFromInput() {
+            const w = parseInt(document.getElementById('npcFrameW').value) || 16;
+            const h = parseInt(document.getElementById('npcFrameH').value) || 16;
+            npcEditorFrameW = Math.max(8, Math.min(256, w));
+            npcEditorFrameH = Math.max(8, Math.min(256, h));
+            // Sync back in case of clamping
+            document.getElementById('npcFrameW').value = npcEditorFrameW;
+            document.getElementById('npcFrameH').value = npcEditorFrameH;
             npcUpdateGrid();
             npcDrawCanvas();
         }
@@ -9809,6 +9926,11 @@
         function npcResetGrid() {
             npcEditorFrameW = 32;
             npcEditorFrameH = 32;
+            // Sync input fields
+            const wInput = document.getElementById('npcFrameW');
+            const hInput = document.getElementById('npcFrameH');
+            if (wInput) wInput.value = 32;
+            if (hInput) hInput.value = 32;
             npcUpdateGrid();
             npcDrawCanvas();
         }
@@ -10322,7 +10444,18 @@
             npcStartPreview();
         }
 
+        function npcUpdatePreviewScale() {
+            const scale = parseFloat(document.getElementById('npcPreviewScale').value) || 1;
+            document.getElementById('npcPreviewScaleLabel').textContent = scale + 'x';
+            // Preview will update on next frame
+        }
+
         function updateNpcShadowPreview() {
+            // Hide/show shadow controls based on noShadow checkbox
+            const noShadow = document.getElementById('npcNoShadow')?.checked;
+            const controls = document.getElementById('npcShadowControls');
+            if (controls) controls.style.display = noShadow ? 'none' : 'block';
+
             // Update slider labels
             const offsetXVal = document.getElementById('npcShadowOffsetXSlider').value;
             const offsetVal = document.getElementById('npcShadowOffsetSlider').value;
@@ -10357,27 +10490,36 @@
 
                 if (frames.length > 0) {
                     const frame = frames[npcPreviewFrame];
-                    const scale = Math.min(96 / frame.w, 96 / frame.h);
-                    const dw = frame.w * scale;
-                    const dh = frame.h * scale;
+                    // Get user preview scale (simulates NPC scale on map)
+                    const previewScale = parseFloat(document.getElementById('npcPreviewScale')?.value || 1);
+                    // Base scale to fit in canvas
+                    const baseScale = Math.min(96 / (frame.w * previewScale), 96 / (frame.h * previewScale));
+                    const scale = baseScale;
+                    const dw = frame.w * scale * previewScale;
+                    const dh = frame.h * scale * previewScale;
                     const dx = (96 - dw) / 2;
-                    const dy = (96 - dh) / 2;
+                    // Bottom-aligned like in game
+                    const dy = 96 - dh - 4;
 
-                    // Draw shadow preview using current slider values
-                    const shadowOffsetX = parseInt(document.getElementById('npcShadowOffsetXSlider').value) || 0;
-                    const shadowOffsetY = parseInt(document.getElementById('npcShadowOffsetSlider').value) || 4;
-                    const shadowWidthRatio = (parseInt(document.getElementById('npcShadowWidthSlider').value) || 35) / 100;
-                    const shadowHeightRatio = (parseInt(document.getElementById('npcShadowHeightSlider').value) || 12) / 100;
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                    ctx.beginPath();
-                    ctx.ellipse(
-                        dx + dw / 2 + shadowOffsetX * scale,
-                        dy + dh - shadowOffsetY * scale,
-                        dw * shadowWidthRatio,
-                        dw * shadowHeightRatio,
-                        0, 0, Math.PI * 2
-                    );
-                    ctx.fill();
+                    // Draw shadow preview (matches game rendering)
+                    const noShadow = document.getElementById('npcNoShadow')?.checked;
+                    if (!noShadow) {
+                        const shadowOffsetX = parseInt(document.getElementById('npcShadowOffsetXSlider').value) || 0;
+                        const shadowOffsetY = parseInt(document.getElementById('npcShadowOffsetSlider').value) || 4;
+                        const shadowWidthRatio = (parseInt(document.getElementById('npcShadowWidthSlider').value) || 35) / 100;
+                        const shadowHeightRatio = (parseInt(document.getElementById('npcShadowHeightSlider').value) || 12) / 100;
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                        ctx.beginPath();
+                        // Shadow size scales with NPC, offset doesn't (matches game)
+                        ctx.ellipse(
+                            dx + dw / 2 + shadowOffsetX * scale,
+                            dy + dh - shadowOffsetY * scale,
+                            dw * shadowWidthRatio,
+                            dw * shadowHeightRatio,
+                            0, 0, Math.PI * 2
+                        );
+                        ctx.fill();
+                    }
 
                     // Apply mirror transform if enabled
                     if (isMirrored) {
@@ -10677,6 +10819,7 @@
             const fps = parseInt(document.getElementById('npcSpeedSlider').value) || 8;
 
             // Read shadow settings from sliders
+            const noShadow = document.getElementById('npcNoShadow')?.checked || false;
             const shadowOffsetX = parseInt(document.getElementById('npcShadowOffsetXSlider').value) || 0;
             const shadowOffsetY = parseInt(document.getElementById('npcShadowOffsetSlider').value) || 4;
             const shadowWidth = (parseInt(document.getElementById('npcShadowWidthSlider').value) || 35) / 100;
@@ -10692,6 +10835,7 @@
                 fps: fps,
                 pingPong: npcPingPong,
                 collisionInsets: npcCollisionInsets ? { ...npcCollisionInsets } : null,
+                noShadow: noShadow,
                 shadowOffsetX: shadowOffsetX,
                 shadowOffsetY: shadowOffsetY,
                 shadowWidth: shadowWidth,
@@ -11052,6 +11196,11 @@
         function playerSetFrameSize(w, h) {
             playerEditorFrameW = w;
             playerEditorFrameH = h;
+            // Sync input fields
+            const wInput = document.getElementById('playerFrameW');
+            const hInput = document.getElementById('playerFrameH');
+            if (wInput) wInput.value = w;
+            if (hInput) hInput.value = h;
             playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [] };
             playerAnimMirrors = {};
             playerUpdateGrid();
@@ -11059,6 +11208,17 @@
             playerUpdateAnimButtons();
             playerUpdateMirrorButton();
             playerUpdateFramesList();
+        }
+
+        function playerSetFrameSizeFromInput() {
+            const w = parseInt(document.getElementById('playerFrameW').value) || 16;
+            const h = parseInt(document.getElementById('playerFrameH').value) || 16;
+            const clampedW = Math.max(8, Math.min(256, w));
+            const clampedH = Math.max(8, Math.min(256, h));
+            // Sync back in case of clamping
+            document.getElementById('playerFrameW').value = clampedW;
+            document.getElementById('playerFrameH').value = clampedH;
+            playerSetFrameSize(clampedW, clampedH);
         }
 
         function playerResetGrid() {
@@ -12262,6 +12422,9 @@
                 document.getElementById('npcSlowdownDuration').value = placed.slowdownDuration !== undefined ? placed.slowdownDuration : 0.5;
                 document.getElementById('npcSlowdownDurationValue').textContent = (placed.slowdownDuration !== undefined ? placed.slowdownDuration : 0.5).toFixed(2) + 's';
 
+                // Load drop items
+                renderNpcDropItems();
+
                 // Load trigger and speed settings
                 document.getElementById('npcTriggerType').value = placed.trigger || 'loop';
                 document.getElementById('npcWalkSpeed').value = placed.speed || 3;
@@ -12425,6 +12588,107 @@
         function updateNpcPlacementScaleDisplay() {
             const scale = parseFloat(document.getElementById('npcPlacementScale').value) || 1;
             document.getElementById('npcPlacementScaleValue').textContent = scale.toFixed(1) + 'x';
+        }
+
+        // === NPC DROP ITEMS SYSTEM ===
+        function renderNpcDropItems() {
+            const container = document.getElementById('npcDropItemsList');
+            if (!container) return;
+
+            if (selectedPlacedNpcIndex < 0) {
+                container.innerHTML = '<span style="color:#666; font-size:9px;">No NPC selected</span>';
+                return;
+            }
+
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            const dropItems = placed.dropItems || [];
+
+            if (dropItems.length === 0) {
+                container.innerHTML = '<span style="color:#666; font-size:9px;">No drops configured</span>';
+                return;
+            }
+
+            container.innerHTML = dropItems.map((drop, i) => {
+                const item = items[drop.itemIndex];
+                const itemName = item ? item.name : 'Unknown';
+                const qty = drop.quantity || 1;
+                return `<div style="display:inline-flex; align-items:center; background:#3a2a3a; padding:2px 6px; margin:2px; border-radius:3px; font-size:9px;">
+                    <span style="color:#a8a;">Give: ${itemName}${qty > 1 ? ' x' + qty : ''}</span>
+                    <button onclick="removeNpcDropItem(${i})" style="margin-left:5px; background:#a55; border:none; color:#fff; padding:1px 4px; cursor:pointer; font-size:8px;">×</button>
+                </div>`;
+            }).join('');
+        }
+
+        function addNpcDropItem() {
+            if (selectedPlacedNpcIndex < 0) return;
+            if (items.length === 0) {
+                alert('No items defined. Create items first in the Items tab.');
+                return;
+            }
+
+            // Create item selection popup
+            const popup = document.createElement('div');
+            popup.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#222; border:2px solid #a4a; padding:15px; z-index:10000; border-radius:8px; max-height:80vh; overflow:auto;';
+            popup.innerHTML = `
+                <div style="color:#a8a; margin-bottom:10px; font-weight:bold;">Select Drop Item:</div>
+                <div style="display:flex; align-items:center; margin-bottom:10px;">
+                    <label style="color:#888; font-size:10px; margin-right:5px;">Quantity:</label>
+                    <input type="number" id="dropItemQuantity" value="1" min="1" max="99" style="width:50px; background:#333; color:#fff; border:1px solid #555; padding:3px;">
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:5px; max-width:300px;">
+                    ${items.map((item, i) => `
+                        <div onclick="selectNpcDropItem(${i})" style="background:#333; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:10px; color:#fff; border:1px solid #555;">
+                            ${item.name}
+                        </div>
+                    `).join('')}
+                </div>
+                <button onclick="this.parentElement.remove()" style="margin-top:10px; background:#555; color:#fff; border:none; padding:5px 15px; cursor:pointer;">Cancel</button>
+            `;
+            document.body.appendChild(popup);
+            window.currentDropItemPopup = popup;
+        }
+
+        function selectNpcDropItem(itemIndex) {
+            if (selectedPlacedNpcIndex < 0) return;
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+
+            if (!placed.dropItems) placed.dropItems = [];
+
+            const quantityInput = document.getElementById('dropItemQuantity');
+            const quantity = parseInt(quantityInput?.value) || 1;
+
+            placed.dropItems.push({ itemIndex: itemIndex, quantity: quantity });
+            renderNpcDropItems();
+
+            // Broadcast to live sync
+            broadcastEdit({
+                editType: 'updatePlacedNpc',
+                index: selectedPlacedNpcIndex,
+                npc: placed
+            });
+
+            // Close popup
+            if (window.currentDropItemPopup) {
+                window.currentDropItemPopup.remove();
+                window.currentDropItemPopup = null;
+            }
+        }
+
+        function removeNpcDropItem(index) {
+            if (selectedPlacedNpcIndex < 0) return;
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+
+            if (placed.dropItems && index >= 0 && index < placed.dropItems.length) {
+                placed.dropItems.splice(index, 1);
+                renderNpcDropItems();
+
+                // Broadcast to live sync
+                broadcastEdit({
+                    editType: 'updatePlacedNpc',
+                    index: selectedPlacedNpcIndex,
+                    npc: placed
+                });
+            }
         }
 
         function hideNpcPathPanel() {
@@ -13990,10 +14254,12 @@
                         document.getElementById('itemFrameSection').style.display = 'block';
                         document.getElementById('itemIdleSection').style.display = 'block';
                         document.getElementById('itemNameSection').style.display = 'block';
+                        document.getElementById('itemStackSection').style.display = 'block';
                         itemDrawCanvas();
                         itemUpdateFramesList();
                         itemUpdateIdleDropdown();
                         document.getElementById('itemIdleFrame').value = item.idleFrame || 0;
+                        document.getElementById('itemMaxStack').value = item.maxStack || 99;
                     };
                     itemEditorImage.src = item.spriteData;
                     document.getElementById('itemFileName').textContent = 'Sprite loaded';
@@ -14011,6 +14277,8 @@
                 document.getElementById('itemFrameSection').style.display = 'none';
                 document.getElementById('itemIdleSection').style.display = 'none';
                 document.getElementById('itemNameSection').style.display = 'none';
+                document.getElementById('itemStackSection').style.display = 'none';
+                document.getElementById('itemMaxStack').value = 99;
                 const previewCtx = document.getElementById('itemLivePreview').getContext('2d');
                 previewCtx.clearRect(0, 0, 48, 48);
                 const editorCanvas = document.getElementById('itemEditorCanvas');
@@ -14042,6 +14310,7 @@
                     document.getElementById('itemFrameSection').style.display = 'block';
                     document.getElementById('itemIdleSection').style.display = 'block';
                     document.getElementById('itemNameSection').style.display = 'block';
+                    document.getElementById('itemStackSection').style.display = 'block';
 
                     // Auto-suggest frame size
                     const w = itemEditorImage.naturalWidth;
@@ -14281,15 +14550,18 @@
             const name = document.getElementById('itemNameInput').value.trim() || 'Item ' + (items.length + 1);
             const fps = parseInt(document.getElementById('itemSpeedSlider').value) || 8;
             const idleFrame = parseInt(document.getElementById('itemIdleFrame').value) || 0;
+            const maxStack = parseInt(document.getElementById('itemMaxStack').value) || 99;
 
             const itemData = {
+                id: itemEditorEditingIndex >= 0 ? (items[itemEditorEditingIndex].id || 'item_' + itemEditorEditingIndex) : ('item_' + items.length),
                 name: name,
                 spriteData: itemEditorData,
                 frameWidth: itemEditorFrameW,
                 frameHeight: itemEditorFrameH,
                 frames: JSON.parse(JSON.stringify(itemFrames)),
                 fps: fps,
-                idleFrame: idleFrame
+                idleFrame: idleFrame,
+                maxStack: maxStack
             };
 
             if (itemEditorEditingIndex >= 0) {
@@ -14311,6 +14583,47 @@
             itemStopPreview();
             document.getElementById('itemModal').classList.remove('visible');
             stopEditing(); // Clear editing lock
+        }
+
+        // Save item and keep modal open to create another from same sprite sheet
+        function itemSaveAndContinue() {
+            if (!itemEditorData || itemFrames.length === 0) {
+                alert('Please load a sprite sheet and select animation frames.');
+                return;
+            }
+
+            const name = document.getElementById('itemNameInput').value.trim() || 'Item ' + (items.length + 1);
+            const fps = parseInt(document.getElementById('itemSpeedSlider').value) || 8;
+            const idleFrame = parseInt(document.getElementById('itemIdleFrame').value) || 0;
+            const maxStack = parseInt(document.getElementById('itemMaxStack').value) || 99;
+
+            const itemData = {
+                id: 'item_' + items.length,
+                name: name,
+                spriteData: itemEditorData,
+                frameWidth: itemEditorFrameW,
+                frameHeight: itemEditorFrameH,
+                frames: JSON.parse(JSON.stringify(itemFrames)),
+                fps: fps,
+                idleFrame: idleFrame,
+                maxStack: maxStack
+            };
+
+            // Always add as new item (not editing)
+            items.push(itemData);
+            broadcastEdit({ editType: 'addItem', item: itemData });
+            updateItemList();
+
+            // Reset for next item - keep sprite sheet loaded
+            document.getElementById('itemNameInput').value = 'Item ' + (items.length + 1);
+            document.getElementById('itemIdleFrame').value = 0;
+            document.getElementById('itemMaxStack').value = 99;
+            itemFrames = []; // Clear selected frames
+            itemEditorEditingIndex = -1; // Always creating new items now
+            itemStopPreview();
+            itemDrawCanvas(); // Redraw to show cleared selection
+
+            console.log('[ITEM] Saved "' + name + '", ready to create another');
         }
 
         function updateItemLayerDropdown() {
@@ -14893,6 +15206,245 @@
             renderMap();
         }
 
+        // ===== STATIC OBJECT EDIT MODE =====
+        function toggleEditStaticObjMode() {
+            editStaticObjOnMapMode = !editStaticObjOnMapMode;
+            const btn = document.getElementById('editStaticObjOnMapBtn');
+            if (editStaticObjOnMapMode) {
+                btn.classList.add('active');
+                btn.style.background = '#8fc99a';
+                btn.textContent = '✓ Click Static Object to Edit';
+                // Deselect current object to prevent placing while editing
+                currentStaticObjIndex = -1;
+                updateStaticObjectsList();
+            } else {
+                btn.classList.remove('active');
+                btn.style.background = '#4a7c59';
+                btn.textContent = 'Edit Static Object Collision';
+            }
+            renderMap();
+        }
+
+        // Find placed static object at map position
+        function findStaticObjAt(gridX, gridY) {
+            // Search from top to bottom (last placed = on top)
+            for (let i = placedStaticObjects.length - 1; i >= 0; i--) {
+                const placed = placedStaticObjects[i];
+                if (placed.mapName !== currentMapName) continue;
+
+                const obj = staticObjects[placed.objIndex];
+                if (!obj) continue;
+
+                const scale = placed.scale || 1;
+                const w = obj.width * scale;
+                const h = obj.height * scale;
+
+                if (gridX >= placed.x && gridX < placed.x + w &&
+                    gridY >= placed.y && gridY < placed.y + h) {
+                    return { placed, index: i };
+                }
+            }
+            return null;
+        }
+
+        // Open popup to edit placed static object collision box
+        function openStaticObjEditPopup(placedInfo) {
+            const { placed, index } = placedInfo;
+            const obj = staticObjects[placed.objIndex];
+            if (!obj) return;
+
+            const scale = placed.scale || 1;
+            const pixelW = obj.width * gridSize * scale;
+            const pixelH = obj.height * gridSize * scale;
+
+            // Get current collision box or default to full object
+            const cb = placed.collisionBox || { x: 0, y: 0, w: pixelW, h: pixelH };
+
+            const popup = document.createElement('div');
+            popup.id = 'staticObjEditPopup';
+            popup.style.cssText = 'position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#2a3a2a; padding:20px; border-radius:8px; border:2px solid #4a7c59; z-index:10000; width:450px; max-width:90vw;';
+
+            let html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">';
+            html += '<div style="color:#4a7c59; font-weight:bold; font-size:14px;">Edit Collision: ' + obj.name + '</div>';
+            html += '<button onclick="closeStaticObjEditPopup()" style="background:none; border:none; color:#888; font-size:18px; cursor:pointer;">&times;</button>';
+            html += '</div>';
+
+            // Object preview and collision editor
+            html += '<div style="display:flex; gap:20px;">';
+
+            // Left: Visual preview with collision box overlay
+            html += '<div style="flex:0 0 150px;">';
+            html += '<canvas id="staticObjCollisionPreview" width="150" height="150" style="border:1px solid #4a7c59; background:#1a1a2a;"></canvas>';
+            html += '<p style="font-size:9px; color:#888; margin-top:5px; text-align:center;">Green = collision box</p>';
+            html += '</div>';
+
+            // Right: Collision box inputs
+            html += '<div style="flex:1;">';
+            html += '<p style="font-size:11px; color:#aaa; margin-bottom:10px;">Object size: ' + pixelW + ' x ' + pixelH + ' px</p>';
+
+            html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">';
+            html += '<div><label style="color:#aaa; font-size:10px;">X Offset:</label>';
+            html += '<input type="number" id="cbX" value="' + cb.x + '" min="0" max="' + pixelW + '" style="width:100%; padding:5px; background:#1a2a1a; color:#4f8; border:1px solid #4a7c59; border-radius:3px;" onchange="updateStaticObjCollisionPreview()"></div>';
+            html += '<div><label style="color:#aaa; font-size:10px;">Y Offset:</label>';
+            html += '<input type="number" id="cbY" value="' + cb.y + '" min="0" max="' + pixelH + '" style="width:100%; padding:5px; background:#1a2a1a; color:#4f8; border:1px solid #4a7c59; border-radius:3px;" onchange="updateStaticObjCollisionPreview()"></div>';
+            html += '<div><label style="color:#aaa; font-size:10px;">Width:</label>';
+            html += '<input type="number" id="cbW" value="' + cb.w + '" min="1" max="' + pixelW + '" style="width:100%; padding:5px; background:#1a2a1a; color:#4f8; border:1px solid #4a7c59; border-radius:3px;" onchange="updateStaticObjCollisionPreview()"></div>';
+            html += '<div><label style="color:#aaa; font-size:10px;">Height:</label>';
+            html += '<input type="number" id="cbH" value="' + cb.h + '" min="1" max="' + pixelH + '" style="width:100%; padding:5px; background:#1a2a1a; color:#4f8; border:1px solid #4a7c59; border-radius:3px;" onchange="updateStaticObjCollisionPreview()"></div>';
+            html += '</div>';
+
+            // Preset buttons
+            html += '<div style="display:flex; gap:5px; margin-bottom:15px;">';
+            html += '<button onclick="setStaticObjCollisionPreset(\'full\')" style="flex:1; padding:5px; font-size:10px; background:#333; color:#aaa; border:1px solid #555; border-radius:3px;">Full Size</button>';
+            html += '<button onclick="setStaticObjCollisionPreset(\'bottom\')" style="flex:1; padding:5px; font-size:10px; background:#333; color:#aaa; border:1px solid #555; border-radius:3px;">Bottom Half</button>';
+            html += '<button onclick="setStaticObjCollisionPreset(\'none\')" style="flex:1; padding:5px; font-size:10px; background:#333; color:#aaa; border:1px solid #555; border-radius:3px;">No Collision</button>';
+            html += '</div>';
+
+            html += '</div>'; // End right column
+            html += '</div>'; // End flex container
+
+            // Save/Cancel buttons
+            html += '<div style="display:flex; gap:10px; margin-top:15px;">';
+            html += '<button onclick="saveStaticObjCollision(' + index + ')" style="flex:1; padding:8px; background:#4a7c59; color:#fff; border:none; border-radius:4px; cursor:pointer;">Save</button>';
+            html += '<button onclick="closeStaticObjEditPopup()" style="flex:1; padding:8px; background:#555; color:#fff; border:none; border-radius:4px; cursor:pointer;">Cancel</button>';
+            html += '</div>';
+
+            popup.innerHTML = html;
+
+            // Add backdrop
+            const backdrop = document.createElement('div');
+            backdrop.id = 'staticObjEditBackdrop';
+            backdrop.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999;';
+            backdrop.onclick = closeStaticObjEditPopup;
+
+            document.body.appendChild(backdrop);
+            document.body.appendChild(popup);
+
+            // Store reference for preview updates
+            window._editingStaticObj = { placed, index, obj };
+
+            // Draw initial preview
+            setTimeout(() => updateStaticObjCollisionPreview(), 50);
+        }
+
+        function updateStaticObjCollisionPreview() {
+            const canvas = document.getElementById('staticObjCollisionPreview');
+            if (!canvas || !window._editingStaticObj) return;
+
+            const ctx = canvas.getContext('2d');
+            const { placed, obj } = window._editingStaticObj;
+            const scale = placed.scale || 1;
+            const pixelW = obj.width * gridSize * scale;
+            const pixelH = obj.height * gridSize * scale;
+
+            // Clear canvas
+            ctx.fillStyle = '#1a1a2a';
+            ctx.fillRect(0, 0, 150, 150);
+
+            // Calculate preview scale to fit canvas
+            const previewScale = Math.min(140 / pixelW, 140 / pixelH);
+            const offsetX = (150 - pixelW * previewScale) / 2;
+            const offsetY = (150 - pixelH * previewScale) / 2;
+
+            // Draw object sprite
+            ctx.imageSmoothingEnabled = false;
+            if (obj._spriteImg && obj._spriteImg.complete) {
+                ctx.drawImage(
+                    obj._spriteImg,
+                    0, 0, obj.width * gridSize, obj.height * gridSize,
+                    offsetX, offsetY, pixelW * previewScale, pixelH * previewScale
+                );
+            }
+
+            // Get collision values
+            const cbX = parseInt(document.getElementById('cbX').value) || 0;
+            const cbY = parseInt(document.getElementById('cbY').value) || 0;
+            const cbW = parseInt(document.getElementById('cbW').value) || pixelW;
+            const cbH = parseInt(document.getElementById('cbH').value) || pixelH;
+
+            // Draw collision box overlay
+            ctx.strokeStyle = '#4f8';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 2]);
+            ctx.strokeRect(
+                offsetX + cbX * previewScale,
+                offsetY + cbY * previewScale,
+                cbW * previewScale,
+                cbH * previewScale
+            );
+            ctx.setLineDash([]);
+
+            // Fill with semi-transparent green
+            ctx.fillStyle = 'rgba(79, 255, 136, 0.2)';
+            ctx.fillRect(
+                offsetX + cbX * previewScale,
+                offsetY + cbY * previewScale,
+                cbW * previewScale,
+                cbH * previewScale
+            );
+        }
+
+        function setStaticObjCollisionPreset(preset) {
+            if (!window._editingStaticObj) return;
+            const { placed, obj } = window._editingStaticObj;
+            const scale = placed.scale || 1;
+            const pixelW = obj.width * gridSize * scale;
+            const pixelH = obj.height * gridSize * scale;
+
+            switch (preset) {
+                case 'full':
+                    document.getElementById('cbX').value = 0;
+                    document.getElementById('cbY').value = 0;
+                    document.getElementById('cbW').value = pixelW;
+                    document.getElementById('cbH').value = pixelH;
+                    break;
+                case 'bottom':
+                    document.getElementById('cbX').value = 0;
+                    document.getElementById('cbY').value = Math.floor(pixelH / 2);
+                    document.getElementById('cbW').value = pixelW;
+                    document.getElementById('cbH').value = Math.floor(pixelH / 2);
+                    break;
+                case 'none':
+                    document.getElementById('cbX').value = 0;
+                    document.getElementById('cbY').value = 0;
+                    document.getElementById('cbW').value = 0;
+                    document.getElementById('cbH').value = 0;
+                    break;
+            }
+            updateStaticObjCollisionPreview();
+        }
+
+        function saveStaticObjCollision(index) {
+            if (index < 0 || index >= placedStaticObjects.length) return;
+
+            const cbX = parseInt(document.getElementById('cbX').value) || 0;
+            const cbY = parseInt(document.getElementById('cbY').value) || 0;
+            const cbW = parseInt(document.getElementById('cbW').value) || 0;
+            const cbH = parseInt(document.getElementById('cbH').value) || 0;
+
+            // Save collision box to placed object
+            placedStaticObjects[index].collisionBox = { x: cbX, y: cbY, w: cbW, h: cbH };
+
+            // Broadcast to co-op
+            broadcastEdit({
+                editType: 'updateStaticObjCollision',
+                index: index,
+                collisionBox: { x: cbX, y: cbY, w: cbW, h: cbH },
+                mapName: currentMapName
+            });
+
+            closeStaticObjEditPopup();
+            renderMap();
+        }
+
+        function closeStaticObjEditPopup() {
+            const popup = document.getElementById('staticObjEditPopup');
+            const backdrop = document.getElementById('staticObjEditBackdrop');
+            if (popup) popup.remove();
+            if (backdrop) backdrop.remove();
+            delete window._editingStaticObj;
+        }
+
         function updateAnimPropListDisplay() {
             const container = document.getElementById('animPropList');
             if (!container) return;
@@ -15033,8 +15585,13 @@
         }
 
         function selectStaticObject(index) {
-            currentStaticObjIndex = index;
-            currentAnimPropIndex = -1; // Deselect animated props
+            // Toggle - clicking same one deselects
+            if (currentStaticObjIndex === index) {
+                currentStaticObjIndex = -1;
+            } else {
+                currentStaticObjIndex = index;
+                currentAnimPropIndex = -1; // Deselect animated props
+            }
 
             updateStaticObjectsList();
             updateAnimPropListDisplay();
@@ -15042,7 +15599,7 @@
             // Show/hide placement controls
             const controls = document.getElementById('staticObjPlacementControls');
             if (controls) {
-                controls.style.display = (index >= 0) ? 'block' : 'none';
+                controls.style.display = (currentStaticObjIndex >= 0) ? 'block' : 'none';
             }
         }
 
@@ -15237,27 +15794,8 @@
             document.getElementById('questAutoStart').checked = quest.autoStart || false;
             document.getElementById('questRepeatable').checked = quest.isRepeatable || false;
 
-            // Load quest start sound
-            const soundSelect = document.getElementById('questStartSound');
-            const customSoundLabel = document.getElementById('questCustomSoundName');
-            if (soundSelect) {
-                // Check if it's a custom sound (starts with 'custom:')
-                if (quest.startSound && quest.startSound.startsWith('custom:')) {
-                    // Add custom option if not exists
-                    let customOption = soundSelect.querySelector('option[value^="custom:"]');
-                    if (!customOption) {
-                        customOption = document.createElement('option');
-                        soundSelect.appendChild(customOption);
-                    }
-                    customOption.value = quest.startSound;
-                    customOption.textContent = 'Custom Sound';
-                    soundSelect.value = quest.startSound;
-                    if (customSoundLabel) customSoundLabel.textContent = 'Using custom sound';
-                } else {
-                    soundSelect.value = quest.startSound || '';
-                    if (customSoundLabel) customSoundLabel.textContent = '';
-                }
-            }
+            // Load quest start sound from library
+            updateQuestSoundDropdown();
 
             // Update NPC display names
             updateQuestNpcDisplayNames();
@@ -15350,12 +15888,37 @@
             if (field === 'name') renderQuestList();
         }
 
-        // Quest start sound functions
+        // Quest start sound library functions
         let questSoundPreviewAudio = null;
+
+        function updateQuestSoundDropdown() {
+            const select = document.getElementById('questStartSound');
+            if (!select) return;
+
+            // Build options from questSounds library
+            let options = '<option value="-1">None</option>';
+            questSounds.forEach((sound, i) => {
+                options += '<option value="' + i + '">' + sound.name + '</option>';
+            });
+            select.innerHTML = options;
+
+            // Set current quest's sound index
+            const quest = quests[selectedQuestIndex];
+            if (quest && quest.startSoundIndex !== undefined && quest.startSoundIndex >= 0) {
+                select.value = quest.startSoundIndex;
+            }
+
+            // Update count label
+            const countEl = document.getElementById('questSoundCount');
+            if (countEl) {
+                countEl.textContent = questSounds.length + ' sound(s) in library';
+            }
+        }
 
         function previewQuestStartSound() {
             const select = document.getElementById('questStartSound');
-            if (!select || !select.value) return;
+            const index = parseInt(select?.value);
+            if (index < 0 || index >= questSounds.length) return;
 
             // Stop any playing preview
             if (questSoundPreviewAudio) {
@@ -15363,11 +15926,9 @@
                 questSoundPreviewAudio = null;
             }
 
-            const soundValue = select.value;
-            if (soundValue.startsWith('custom:')) {
-                // Custom sound is base64 data
-                const dataUrl = soundValue.substring(7); // Remove 'custom:' prefix
-                questSoundPreviewAudio = new Audio(dataUrl);
+            const sound = questSounds[index];
+            if (sound && sound.data) {
+                questSoundPreviewAudio = new Audio(sound.data);
                 questSoundPreviewAudio.volume = 0.7;
                 questSoundPreviewAudio.play().catch(e => console.log('Preview failed:', e));
             }
@@ -15384,29 +15945,54 @@
             const reader = new FileReader();
             reader.onload = (e) => {
                 const dataUrl = e.target.result;
-                const soundValue = 'custom:' + dataUrl;
+                const name = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
 
-                // Add custom option to select
-                const select = document.getElementById('questStartSound');
-                let customOption = select.querySelector('option[value^="custom:"]');
-                if (!customOption) {
-                    customOption = document.createElement('option');
-                    select.appendChild(customOption);
-                }
-                customOption.value = soundValue;
-                customOption.textContent = 'Custom: ' + file.name;
-                select.value = soundValue;
+                // Add to library
+                questSounds.push({ name: name, data: dataUrl });
+                const newIndex = questSounds.length - 1;
 
-                // Update quest
-                updateQuestField('startSound', soundValue);
+                // Broadcast to other builders
+                broadcastEdit({ editType: 'addQuestSound', sound: { name: name, data: dataUrl } });
 
-                // Update label
-                document.getElementById('questCustomSoundName').textContent = 'Custom: ' + file.name;
+                // Update dropdown and select new sound
+                updateQuestSoundDropdown();
+                document.getElementById('questStartSound').value = newIndex;
+                updateQuestField('startSoundIndex', newIndex);
+
+                console.log('[QUEST SOUND] Added:', name);
             };
             reader.readAsDataURL(file);
 
             // Reset file input
             event.target.value = '';
+        }
+
+        function deleteQuestSound() {
+            const select = document.getElementById('questStartSound');
+            const index = parseInt(select?.value);
+            if (index < 0 || index >= questSounds.length) return;
+
+            const soundName = questSounds[index].name;
+            if (!confirm('Delete sound "' + soundName + '" from library?')) return;
+
+            // Remove from library
+            questSounds.splice(index, 1);
+
+            // Broadcast deletion
+            broadcastEdit({ editType: 'deleteQuestSound', index: index });
+
+            // Update all quests that used this or higher indices
+            quests.forEach(quest => {
+                if (quest.startSoundIndex === index) {
+                    quest.startSoundIndex = -1;
+                } else if (quest.startSoundIndex > index) {
+                    quest.startSoundIndex--;
+                }
+            });
+
+            // Update UI
+            updateQuestSoundDropdown();
+            console.log('[QUEST SOUND] Deleted:', soundName);
         }
 
         function deleteCurrentQuest() {
@@ -15631,20 +16217,40 @@
             if (!container) return;
 
             const quest = quests[selectedQuestIndex];
-            const giveItems = quest?.onComplete?.giveItems || [];
+            let giveItems = quest?.onComplete?.giveItems || [];
+
+            // Normalize old format (array of strings) to new format (array of objects with quantity)
+            giveItems = normalizeQuestRewards(giveItems);
 
             if (giveItems.length === 0) {
                 container.innerHTML = '<div style="color:#666; font-size:10px;">No rewards</div>';
                 return;
             }
 
-            container.innerHTML = giveItems.map((itemId, i) => {
+            container.innerHTML = giveItems.map((reward, i) => {
+                const itemId = typeof reward === 'string' ? reward : reward.itemId;
+                const quantity = typeof reward === 'object' ? (reward.quantity || 1) : 1;
                 const item = items.find(it => it.id === itemId) || { name: 'Unknown Item' };
-                return '<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:#2a3a2a; border-radius:3px; font-size:10px;">' +
-                    '<span style="color:#4f8;">Give: ' + (item.name || itemId) + '</span>' +
-                    '<button onclick="removeQuestReward(' + i + ')" style="padding:2px 6px; font-size:9px; background:#a55;">×</button>' +
-                '</div>';
+                return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:#2a3a2a; border-radius:3px; font-size:10px;">
+                    <span style="color:#4f8;">Give: ${item.name || itemId}</span>
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <span style="color:#888;">x</span>
+                        <input type="number" value="${quantity}" min="1" max="99" style="width:40px; background:#333; color:#fff; border:1px solid #555; padding:2px; font-size:10px;" onchange="updateQuestRewardQuantity(${i}, this.value)">
+                        <button onclick="removeQuestReward(${i})" style="padding:2px 6px; font-size:9px; background:#a55;">×</button>
+                    </div>
+                </div>`;
             }).join('');
+        }
+
+        // Normalize old format rewards to new format
+        function normalizeQuestRewards(giveItems) {
+            if (!giveItems || giveItems.length === 0) return [];
+            return giveItems.map(item => {
+                if (typeof item === 'string') {
+                    return { itemId: item, quantity: 1 };
+                }
+                return item;
+            });
         }
 
         function addQuestReward() {
@@ -15654,9 +16260,13 @@
                 return;
             }
 
-            // Show item picker popup
-            let html = '<div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#222; padding:20px; border-radius:8px; border:2px solid #4f8; z-index:10000;">';
+            // Show item picker popup with quantity input
+            let html = '<div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#222; padding:20px; border-radius:8px; border:2px solid #4f8; z-index:10000; max-height:80vh; overflow:auto;">';
             html += '<h3 style="margin:0 0 10px 0; color:#4f8;">Select Item to Give</h3>';
+            html += '<div style="margin-bottom:10px; display:flex; align-items:center; gap:5px;">';
+            html += '<label style="color:#888; font-size:10px;">Quantity:</label>';
+            html += '<input type="number" id="rewardQuantityInput" value="1" min="1" max="99" style="width:50px; background:#333; color:#fff; border:1px solid #555; padding:3px;">';
+            html += '</div>';
             items.forEach((item, i) => {
                 const itemId = item.id || 'item_' + i;
                 if (!item.id) item.id = itemId;
@@ -15676,10 +16286,31 @@
             const quest = quests[selectedQuestIndex];
             if (!quest.onComplete) quest.onComplete = {};
             if (!quest.onComplete.giveItems) quest.onComplete.giveItems = [];
-            quest.onComplete.giveItems.push(itemId);
+
+            // Get quantity from input
+            const quantityInput = document.getElementById('rewardQuantityInput');
+            const quantity = parseInt(quantityInput?.value) || 1;
+
+            // Normalize existing rewards and add new one
+            quest.onComplete.giveItems = normalizeQuestRewards(quest.onComplete.giveItems);
+            quest.onComplete.giveItems.push({ itemId: itemId, quantity: quantity });
+
             broadcastEdit({ editType: 'updateQuest', questId: quest.id, quest: quest });
             closeItemPickerPopup();
             renderQuestRewards();
+        }
+
+        function updateQuestRewardQuantity(index, value) {
+            if (selectedQuestIndex < 0) return;
+            const quest = quests[selectedQuestIndex];
+            if (!quest.onComplete?.giveItems) return;
+
+            // Normalize and update quantity
+            quest.onComplete.giveItems = normalizeQuestRewards(quest.onComplete.giveItems);
+            if (quest.onComplete.giveItems[index]) {
+                quest.onComplete.giveItems[index].quantity = parseInt(value) || 1;
+                broadcastEdit({ editType: 'updateQuest', questId: quest.id, quest: quest });
+            }
         }
 
         function removeQuestReward(index) {
@@ -16076,6 +16707,8 @@
                 sounds: soundsData,
                 tileSounds,
                 playerSounds,
+                // Quest sounds library
+                questSounds: questSounds.map(s => ({ name: s.name, data: s.data })),
                 // Save lighting data
                 lightingSettings,
                 pointLights,
@@ -16239,6 +16872,8 @@
                 sounds: soundsData,
                 tileSounds,
                 playerSounds,
+                // Quest sounds library
+                questSounds: questSounds.map(s => ({ name: s.name, data: s.data })),
                 // Save lighting data
                 lightingSettings,
                 pointLights,
@@ -17266,6 +17901,15 @@
                     console.log('[BUILDER MP] Remote static object placement removed');
                     break;
 
+                case 'updateStaticObjCollision':
+                    // Another builder updated a static object's collision box
+                    if (edit.index >= 0 && edit.index < placedStaticObjects.length) {
+                        placedStaticObjects[edit.index].collisionBox = edit.collisionBox;
+                        renderMap();
+                        console.log('[BUILDER MP] Remote static object collision updated:', edit.index);
+                    }
+                    break;
+
                 case 'updateAnimProp':
                     // Another builder updated an animated prop
                     if (edit.index >= 0 && edit.index < animatedProps.length) {
@@ -17653,6 +18297,32 @@
                             renderQuestList();
                             console.log('[BUILDER MP] Remote quest deleted:', edit.questId);
                         }
+                    }
+                    break;
+
+                case 'addQuestSound':
+                    // Another builder added a quest sound to library
+                    if (edit.sound) {
+                        questSounds.push({ name: edit.sound.name, data: edit.sound.data });
+                        updateQuestSoundDropdown();
+                        console.log('[BUILDER MP] Quest sound added:', edit.sound.name);
+                    }
+                    break;
+
+                case 'deleteQuestSound':
+                    // Another builder deleted a quest sound
+                    if (edit.index >= 0 && edit.index < questSounds.length) {
+                        questSounds.splice(edit.index, 1);
+                        // Update quests that used this sound
+                        quests.forEach(quest => {
+                            if (quest.startSoundIndex === edit.index) {
+                                quest.startSoundIndex = -1;
+                            } else if (quest.startSoundIndex > edit.index) {
+                                quest.startSoundIndex--;
+                            }
+                        });
+                        updateQuestSoundDropdown();
+                        console.log('[BUILDER MP] Quest sound deleted at index:', edit.index);
                     }
                     break;
 
@@ -18469,6 +19139,14 @@
                 updatePlayerSoundAssignments();
             }
 
+            // Load quest sounds library
+            if (p.questSounds && p.questSounds.length > 0) {
+                console.log('Loading', p.questSounds.length, 'quest sounds');
+                questSounds = p.questSounds.map(s => ({ name: s.name, data: s.data }));
+            } else {
+                questSounds = [];
+            }
+
             // Load lighting settings
             if (p.lightingSettings) {
                 lightingSettings = {
@@ -18518,13 +19196,15 @@
             if (p.items && p.items.length > 0) {
                 p.items.forEach((itemData, i) => {
                     items[i] = {
+                        id: itemData.id || ('item_' + i), // Ensure ID exists
                         name: itemData.name,
                         spriteData: itemData.spriteData,
                         frameWidth: itemData.frameWidth || 16,
                         frameHeight: itemData.frameHeight || 16,
                         frames: itemData.frames || [],
                         fps: itemData.fps || 8,
-                        idleFrame: itemData.idleFrame || 0
+                        idleFrame: itemData.idleFrame || 0,
+                        maxStack: itemData.maxStack || 99
                     };
                     // Preload sprite image
                     if (itemData.spriteData) {
@@ -18586,6 +19266,10 @@
                             if (Object.keys(maps).length === 0) {
                                 saveCurrentMapState();
                                 console.log('Initialized maps object with current data');
+                            } else if (maps[currentMapName]) {
+                                // Load current map's state (including cameraBounds)
+                                loadMapState(maps[currentMapName]);
+                                console.log('Loaded current map state for:', currentMapName);
                             }
 
                             updateTilesetDropdown();
@@ -18596,6 +19280,7 @@
                             updateAnimPropListDisplay();
                             updateMapDropdowns();
                             updateTriggerList();
+                            updateCameraBoundsInfo();
                         }
                     };
                     img.src = tsData.data;
@@ -18613,6 +19298,10 @@
                     if (Object.keys(maps).length === 0) {
                         saveCurrentMapState();
                         console.log('Initialized maps object with current data');
+                    } else if (maps[currentMapName]) {
+                        // Load current map's state (including cameraBounds)
+                        loadMapState(maps[currentMapName]);
+                        console.log('Loaded current map state for:', currentMapName);
                     }
 
                     updateTilesetDropdown();
@@ -18623,6 +19312,7 @@
                     updateAnimPropListDisplay();
                     updateMapDropdowns();
                     updateTriggerList();
+                    updateCameraBoundsInfo();
                 };
                 img.src = p.tilesetData;
             } else {
@@ -19832,6 +20522,10 @@
 
             closeDialogEditor();
             updateDialogList();
+            // Refresh quest dialog dropdowns in case name changed
+            if (typeof updateQuestDialogDropdowns === 'function') {
+                updateQuestDialogDropdowns();
+            }
             console.log('[DIALOG] Saved dialog:', name);
         }
 
@@ -20714,8 +21408,12 @@
         let cameraBounds = null;
         let currentGameMap = 'main';
 
+        // Animated tile registry - caches locations of animated tiles for performance
+        let animatedTileRegistry = [];
+
         // ===== QUEST SYSTEM RUNTIME =====
         let questsData = [];  // Loaded from projectData
+        let questSoundsData = [];  // Quest sounds library
         let playerInventory = {};  // { [itemId]: quantity }
         let gameProgress = {
             npcsSpokenTo: {},       // { [npcUid]: true }
@@ -20793,7 +21491,7 @@
             console.log('[LIVE SYNC] Applying:', editType, fromMultiplayer ? '(from MP)' : '(from builder)');
 
             // Relay builder edits to other multiplayer players
-            if (!fromMultiplayer && mpSocket && mpConnected) {
+            if (!fromMultiplayer && typeof mpSocket !== 'undefined' && mpSocket && mpConnected) {
                 mpSocket.send(JSON.stringify({
                     type: 'builderEdit',
                     edit: edit
@@ -20811,12 +21509,28 @@
                         if (!layers[edit.layer][edit.y]) layers[edit.layer][edit.y] = [];
                         layers[edit.layer][edit.y][edit.x] = edit.cell;
                         liveSyncNeedsRedraw = true;
+                        // Update animated tile registry if this is an origin animTile
+                        if (edit.cell && edit.cell.type === 'animTile' &&
+                            ((edit.cell.offsetX || 0) === 0 && (edit.cell.offsetY || 0) === 0)) {
+                            // Add to registry if not already there
+                            const exists = animatedTileRegistry.some(e =>
+                                e.li === edit.layer && e.x === edit.x && e.y === edit.y);
+                            if (!exists) {
+                                animatedTileRegistry.push({ li: edit.layer, x: edit.x, y: edit.y });
+                            }
+                        }
                     }
                     break;
 
                 case 'eraseTile':
                     if (edit.mapName === gameMapName || !edit.mapName) {
                         if (layers[edit.layer] && layers[edit.layer][edit.y]) {
+                            // Remove from animated tile registry if it was an animTile
+                            const oldCell = layers[edit.layer][edit.y][edit.x];
+                            if (oldCell && oldCell.type === 'animTile') {
+                                animatedTileRegistry = animatedTileRegistry.filter(e =>
+                                    !(e.li === edit.layer && e.x === edit.x && e.y === edit.y));
+                            }
                             layers[edit.layer][edit.y][edit.x] = null;
                             liveSyncNeedsRedraw = true;
                         }
@@ -21057,6 +21771,41 @@
                             }
                         });
                         liveSyncNeedsRedraw = true;
+                    }
+                    break;
+
+                case 'placeStaticObj':
+                    // Place new static object
+                    if (edit.placed && typeof placedStaticObjectsData !== 'undefined') {
+                        placedStaticObjectsData.push(edit.placed);
+                        console.log('[LIVE SYNC] Placed static object at', edit.placed.x, edit.placed.y);
+                        liveSyncNeedsRedraw = true;
+                    }
+                    break;
+
+                case 'removeStaticObjPlacement':
+                    // Remove static object placement
+                    if (typeof placedStaticObjectsData !== 'undefined') {
+                        const beforeLen = placedStaticObjectsData.length;
+                        for (let i = placedStaticObjectsData.length - 1; i >= 0; i--) {
+                            const p = placedStaticObjectsData[i];
+                            if (p.x === edit.x && p.y === edit.y && p.mapName === edit.mapName) {
+                                placedStaticObjectsData.splice(i, 1);
+                                break;
+                            }
+                        }
+                        if (placedStaticObjectsData.length < beforeLen) {
+                            console.log('[LIVE SYNC] Removed static object at', edit.x, edit.y);
+                            liveSyncNeedsRedraw = true;
+                        }
+                    }
+                    break;
+
+                case 'updateStaticObjCollision':
+                    // Update static object collision box
+                    if (typeof placedStaticObjectsData !== 'undefined' && edit.index >= 0 && edit.index < placedStaticObjectsData.length) {
+                        placedStaticObjectsData[edit.index].collisionBox = edit.collisionBox;
+                        console.log('[LIVE SYNC] Updated static object collision at index', edit.index);
                     }
                     break;
 
@@ -21535,10 +22284,23 @@
             // Apply rewards
             if (quest.onComplete) {
                 if (quest.onComplete.giveItems) {
-                    quest.onComplete.giveItems.forEach(itemId => addToInventory(itemId, 1));
+                    quest.onComplete.giveItems.forEach(reward => {
+                        // Handle both old format (string) and new format (object with quantity)
+                        const itemId = typeof reward === 'string' ? reward : reward.itemId;
+                        const quantity = typeof reward === 'object' ? (reward.quantity || 1) : 1;
+                        const idx = itemIdToIndex(itemId);
+                        if (idx >= 0) {
+                            for (let i = 0; i < quantity; i++) {
+                                addToInventory(idx, 1);
+                            }
+                        }
+                    });
                 }
                 if (quest.onComplete.removeItems) {
-                    quest.onComplete.removeItems.forEach(itemId => removeFromInventory(itemId, 1));
+                    quest.onComplete.removeItems.forEach(itemId => {
+                        const idx = itemIdToIndex(itemId);
+                        if (idx >= 0) removeFromInventory(idx, 1);
+                    });
                 }
             }
 
@@ -21562,12 +22324,14 @@
         }
 
         function playQuestStartSound(quest) {
-            if (!quest.startSound) return;
+            // Use startSoundIndex to reference questSounds library
+            const soundIndex = quest.startSoundIndex;
+            if (soundIndex === undefined || soundIndex < 0) return;
+            if (!questSoundsData || soundIndex >= questSoundsData.length) return;
 
-            // Custom sounds are stored as 'custom:' + base64 data URL
-            if (quest.startSound.startsWith('custom:')) {
-                const dataUrl = quest.startSound.substring(7); // Remove 'custom:' prefix
-                const audio = new Audio(dataUrl);
+            const sound = questSoundsData[soundIndex];
+            if (sound && sound.data) {
+                const audio = new Audio(sound.data);
                 audio.volume = 0.7;
                 audio.play().catch(e => console.log('[QUEST] Sound play failed:', e));
             }
@@ -21697,6 +22461,27 @@
             content.innerHTML = html;
         }
 
+        // Build registry of animated tile locations (called once on load and when map changes)
+        function buildAnimatedTileRegistry() {
+            animatedTileRegistry = [];
+            for (let li = 0; li < layers.length; li++) {
+                const layer = layers[li];
+                if (!layer) continue;
+                for (let y = 0; y < mapRows; y++) {
+                    if (!layer[y]) continue;
+                    for (let x = 0; x < mapCols; x++) {
+                        const cell = layer[y][x];
+                        // Only track origin tiles (offsetX/offsetY both 0 or undefined)
+                        if (cell && cell.type === 'animTile' &&
+                            ((cell.offsetX || 0) === 0 && (cell.offsetY || 0) === 0)) {
+                            animatedTileRegistry.push({ li, x, y });
+                        }
+                    }
+                }
+            }
+            console.log('[PERF] Built animated tile registry:', animatedTileRegistry.length, 'entries');
+        }
+
         function initGame() {
         console.log('Initializing game with project data:', projectData);
 
@@ -21782,6 +22567,7 @@
 
         // Quest system data
         questsData = projectData.quests || [];
+        questSoundsData = projectData.questSounds || [];
         initializeQuestStates();
         // Update quest tracker after a short delay to ensure UI elements exist
         setTimeout(updateQuestTracker, 100);
@@ -21800,6 +22586,7 @@
                 hideLoading();
                 findStartPos();
                 hideAllUI(); // Start with debug UI hidden
+                buildAnimatedTileRegistry(); // Cache animated tile locations for performance
                 gameLoop();
             }
         }
@@ -21826,6 +22613,7 @@
             hideLoading();
             findStartPos();
             hideAllUI(); // Start with debug UI hidden
+            buildAnimatedTileRegistry(); // Cache animated tile locations for performance
             gameLoop();
         }
 
@@ -21838,6 +22626,7 @@
                 hideLoading();
                 findStartPos();
                 hideAllUI(); // Start with debug UI hidden
+                buildAnimatedTileRegistry(); // Cache animated tile locations for performance
                 gameLoop();
             }
         }, 120000);
@@ -22117,6 +22906,10 @@
         let initialSpawnY = 100;
         let initialSpawnMap = '';
 
+        // Dropped items on the ground (from enemy deaths, etc.)
+        // Each: { itemIndex, x, y, vx, vy, bounces, settled, timer, scale }
+        let droppedItems = [];
+
         // Damage player function
         function damagePlayer(amount) {
             if (player.invincible || player.health <= 0) return;
@@ -22266,7 +23059,158 @@
                 if (placed.uid) {
                     onEnemyDefeated(placed.uid);
                 }
+                // Drop items on death
+                if (placed.dropItems && placed.dropItems.length > 0) {
+                    dropItemsFromEnemy(placed, state);
+                }
             }
+        }
+
+        // Drop items from defeated enemy - spawn on ground
+        function dropItemsFromEnemy(placed, state) {
+            // Calculate NPC's world position (center)
+            const dropX = state.x * TILE_SCALE + (placed.frameWidth || 16) * TILE_SCALE / 2;
+            const dropY = state.y * TILE_SCALE + (placed.frameHeight || 16) * TILE_SCALE / 2;
+
+            placed.dropItems.forEach(drop => {
+                const itemIndex = drop.itemIndex;
+                const quantity = drop.quantity || 1;
+
+                if (itemIndex >= 0 && itemIndex < itemsData.length) {
+                    // Spawn each item on the ground with random velocity
+                    for (let i = 0; i < quantity; i++) {
+                        // Random angle and speed for scatter effect - wide spread
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = 6 + Math.random() * 6; // Even faster for more spread
+                        const vx = Math.cos(angle) * speed;
+                        const vy = Math.sin(angle) * speed * 0.7;
+
+                        droppedItems.push({
+                            itemIndex: itemIndex,
+                            x: dropX + (Math.random() - 0.5) * 30,
+                            y: dropY + (Math.random() - 0.5) * 30,
+                            vx: vx,
+                            vy: vy,
+                            vz: -3 - Math.random() * 2, // Less upward pop
+                            z: 0, // Height off ground
+                            bounces: 0,
+                            settled: false,
+                            timer: 0,
+                            scale: 0.8 + Math.random() * 0.2, // Slight scale variation
+                            bobOffset: Math.random() * Math.PI * 2 // Random bob phase
+                        });
+
+                        const itemName = itemsData[itemIndex]?.name || 'Item';
+                        console.log('[DROP] Spawned:', itemName, 'at', dropX.toFixed(0), dropY.toFixed(0));
+                    }
+                }
+            });
+        }
+
+        // Update dropped items physics
+        function updateDroppedItems() {
+            const gravity = 0.35;
+            const friction = 0.92; // Less friction = items spread further
+            const bounceDecay = 0.4;
+            const pickupRange = 8 * TILE_SCALE; // Small pickup range - must walk close
+
+            for (let i = droppedItems.length - 1; i >= 0; i--) {
+                const item = droppedItems[i];
+                item.timer++;
+
+                if (!item.settled) {
+                    // Apply physics
+                    item.vz += gravity; // Gravity pulls down (z decreases)
+                    item.z -= item.vz;
+                    item.x += item.vx;
+                    item.y += item.vy;
+
+                    // Friction on horizontal movement
+                    item.vx *= friction;
+                    item.vy *= friction;
+
+                    // Bounce when hitting ground
+                    if (item.z <= 0) {
+                        item.z = 0;
+                        item.bounces++;
+                        if (item.bounces < 3 && Math.abs(item.vz) > 1) {
+                            item.vz = -item.vz * bounceDecay;
+                        } else {
+                            item.vz = 0;
+                            item.settled = true;
+                        }
+                    }
+                }
+
+                // Check if player is close enough to pick up (after brief delay)
+                if (item.timer > 30) { // 0.5 second delay before pickable
+                    const dx = player.x + player.width / 2 - item.x;
+                    const dy = player.y + player.height / 2 - item.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < pickupRange) {
+                        // Pick up the item
+                        const added = addToInventory(item.itemIndex, 1);
+                        if (added) {
+                            const itemName = itemsData[item.itemIndex]?.name || 'Item';
+                            console.log('[PICKUP] Collected:', itemName);
+                            droppedItems.splice(i, 1);
+                        }
+                    }
+                }
+
+                // Remove items after 60 seconds
+                if (item.timer > 3600) {
+                    droppedItems.splice(i, 1);
+                }
+            }
+        }
+
+        // Render dropped items on ground
+        function renderDroppedItems(ctx, cameraX, cameraY) {
+            droppedItems.forEach(item => {
+                const itemData = itemsData[item.itemIndex];
+                if (!itemData) return;
+
+                // Get the item's sprite image
+                const img = itemImages[item.itemIndex];
+                if (!img || !img.complete) return;
+
+                // Get first frame of animation
+                const frames = itemData.frames || [];
+                if (frames.length === 0) return;
+                const frame = frames[0];
+
+                const screenX = item.x - cameraX;
+                const screenY = item.y - cameraY - item.z; // Subtract z for height
+
+                // Bob up and down when settled
+                let bobY = 0;
+                if (item.settled) {
+                    bobY = Math.sin(item.timer * 0.08 + item.bobOffset) * 3;
+                }
+
+                // Scale - use smaller scale for dropped items
+                const scale = item.scale * TILE_SCALE * 0.5; // Half size
+                const drawW = (frame.w || 16) * scale;
+                const drawH = (frame.h || 16) * scale;
+
+                // Draw small shadow
+                const shadowAlpha = Math.max(0.1, 0.3 - item.z / 100);
+                ctx.fillStyle = 'rgba(0, 0, 0, ' + shadowAlpha + ')';
+                ctx.beginPath();
+                ctx.ellipse(screenX, screenY + drawH / 2, drawW / 2.5, 3, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw item sprite
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(
+                    img,
+                    frame.x || 0, frame.y || 0, frame.w || 16, frame.h || 16,
+                    screenX - drawW / 2, screenY - drawH / 2 + bobY,
+                    drawW, drawH
+                );
+            });
         }
 
         // Check player attack hitbox against NPCs using cone/triangle shape
@@ -22612,6 +23556,161 @@
             };
         });
         console.log('Items:', itemsData.length, 'Placed items:', placedItemsData.length);
+
+        // === INVENTORY SYSTEM ===
+        const INVENTORY_SIZE = 40;  // Total slots (4 rows x 10 columns)
+        const HOTBAR_SIZE = 10;     // First 10 slots shown in HUD
+        const SLOT_SIZE = 40;       // Pixel size of each slot in UI
+        let inventorySlots = [];    // Array of { itemIndex, quantity } or null
+        let cursorItem = null;      // Item held on cursor: { itemIndex, quantity } or null
+        let inventoryOpen = false;  // Is full inventory popup open
+        let selectedHotbarSlot = 0; // Currently selected hotbar slot (0-9)
+
+        // Initialize empty inventory slots
+        function initInventory() {
+            inventorySlots = [];
+            for (let i = 0; i < INVENTORY_SIZE; i++) {
+                inventorySlots.push(null);
+            }
+            cursorItem = null;
+            inventoryOpen = false;
+            selectedHotbarSlot = 0;
+            console.log('[INVENTORY] Initialized with', INVENTORY_SIZE, 'slots');
+        }
+
+        // Get max stack size for an item (default 99)
+        function getMaxStack(itemIndex) {
+            const item = itemsData[itemIndex];
+            return item?.maxStack || 99;
+        }
+
+        // Find slot with existing stack that has room
+        function getStackableSlot(itemIndex) {
+            const maxStack = getMaxStack(itemIndex);
+            for (let i = 0; i < inventorySlots.length; i++) {
+                const slot = inventorySlots[i];
+                if (slot && slot.itemIndex === itemIndex && slot.quantity < maxStack) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        // Find first empty slot
+        function getEmptySlot() {
+            for (let i = 0; i < inventorySlots.length; i++) {
+                if (inventorySlots[i] === null) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        // Add item to inventory - returns true if successful
+        function addToInventory(itemIndex, quantity = 1) {
+            const maxStack = getMaxStack(itemIndex);
+            let remaining = quantity;
+
+            // First, try to stack with existing items
+            while (remaining > 0) {
+                const stackSlot = getStackableSlot(itemIndex);
+                if (stackSlot >= 0) {
+                    const slot = inventorySlots[stackSlot];
+                    const canAdd = Math.min(remaining, maxStack - slot.quantity);
+                    slot.quantity += canAdd;
+                    remaining -= canAdd;
+                } else {
+                    break;
+                }
+            }
+
+            // Then, put remaining in empty slots
+            while (remaining > 0) {
+                const emptySlot = getEmptySlot();
+                if (emptySlot >= 0) {
+                    const toAdd = Math.min(remaining, maxStack);
+                    inventorySlots[emptySlot] = { itemIndex: itemIndex, quantity: toAdd };
+                    remaining -= toAdd;
+                } else {
+                    console.log('[INVENTORY] Full! Could not add', remaining, 'items');
+                    return false; // Inventory full
+                }
+            }
+
+            const item = itemsData[itemIndex];
+            console.log('[INVENTORY] Added', quantity, 'x', item?.name || 'Item ' + itemIndex);
+            return true;
+        }
+
+        // Remove items from a specific slot
+        function removeFromSlot(slotIndex, quantity = 1) {
+            if (slotIndex < 0 || slotIndex >= inventorySlots.length) return false;
+            const slot = inventorySlots[slotIndex];
+            if (!slot) return false;
+
+            slot.quantity -= quantity;
+            if (slot.quantity <= 0) {
+                inventorySlots[slotIndex] = null;
+            }
+            return true;
+        }
+
+        // Get item in selected hotbar slot
+        function getSelectedItem() {
+            if (selectedHotbarSlot < 0 || selectedHotbarSlot >= HOTBAR_SIZE) return null;
+            return inventorySlots[selectedHotbarSlot];
+        }
+
+        // Remove item by itemIndex (for quest rewards) - removes from first stack found
+        function removeFromInventory(itemIndex, quantity = 1) {
+            let remaining = quantity;
+            for (let i = 0; i < inventorySlots.length && remaining > 0; i++) {
+                const slot = inventorySlots[i];
+                if (slot && slot.itemIndex === itemIndex) {
+                    const toRemove = Math.min(remaining, slot.quantity);
+                    slot.quantity -= toRemove;
+                    remaining -= toRemove;
+                    if (slot.quantity <= 0) {
+                        inventorySlots[i] = null;
+                    }
+                }
+            }
+            return remaining === 0;
+        }
+
+        // Check if player has item in inventory
+        function hasItem(itemIndex, quantity = 1) {
+            let count = 0;
+            for (const slot of inventorySlots) {
+                if (slot && slot.itemIndex === itemIndex) {
+                    count += slot.quantity;
+                    if (count >= quantity) return true;
+                }
+            }
+            return false;
+        }
+
+        // Convert itemId (string like "item_0") to numeric index
+        function itemIdToIndex(itemId) {
+            if (typeof itemId === 'number') return itemId;
+            if (typeof itemId === 'string') {
+                // Try "item_N" format first
+                if (itemId.startsWith('item_')) {
+                    return parseInt(itemId.substring(5));
+                }
+                // Try direct number string
+                const parsed = parseInt(itemId);
+                if (!isNaN(parsed)) return parsed;
+                // Search by id property
+                for (let i = 0; i < itemsData.length; i++) {
+                    if (itemsData[i].id === itemId) return i;
+                }
+            }
+            return -1;
+        }
+
+        // Initialize inventory on game start
+        initInventory();
 
         // Debug: log all received triggers
         console.log('=== TEST GAME RECEIVED TRIGGERS ===');
@@ -23420,39 +24519,38 @@
             const { idx, callback } = decodeQueue.shift();
             const sound = soundsData[idx];
 
-            try {
-                const base64 = sound.data.split(',')[1];
-                const binary = atob(base64);
-                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-                const audioBuffer = bytes.buffer.slice(0);
+            // Use fetch with data URL for fully async base64 conversion (non-blocking)
+            fetch(sound.data)
+                .then(res => res.arrayBuffer())
+                .then(audioBuffer => {
+                    audioContext.decodeAudioData(audioBuffer, (buffer) => {
+                        soundBuffers[idx] = buffer;
+                        soundsDecoding[idx] = false;
+                        console.log('Sound', idx, sound.name, 'decoded (' + decodeQueue.length + ' in queue)');
+                        if (callback) callback(buffer);
 
-                audioContext.decodeAudioData(audioBuffer, (buffer) => {
-                    soundBuffers[idx] = buffer;
-                    soundsDecoding[idx] = false;
-                    console.log('Sound', idx, sound.name, 'decoded (' + decodeQueue.length + ' in queue)');
-                    if (callback) callback(buffer);
-
-                    // Wait before processing next sound
-                    setTimeout(() => {
-                        isDecoding = false;
-                        processDecodeQueue();
-                    }, DECODE_DELAY);
-                }, (err) => {
-                    console.error('Failed to decode sound', idx, err);
+                        // Wait before processing next sound
+                        setTimeout(() => {
+                            isDecoding = false;
+                            processDecodeQueue();
+                        }, DECODE_DELAY);
+                    }, (err) => {
+                        console.error('Failed to decode sound', idx, err);
+                        soundsDecoding[idx] = false;
+                        setTimeout(() => {
+                            isDecoding = false;
+                            processDecodeQueue();
+                        }, DECODE_DELAY);
+                    });
+                })
+                .catch(e => {
+                    console.error('Error fetching sound', idx, ':', e.message);
                     soundsDecoding[idx] = false;
                     setTimeout(() => {
                         isDecoding = false;
                         processDecodeQueue();
                     }, DECODE_DELAY);
                 });
-            } catch (e) {
-                console.error('Error decoding sound', idx, ':', e.message);
-                soundsDecoding[idx] = false;
-                setTimeout(() => {
-                    isDecoding = false;
-                    processDecodeQueue();
-                }, DECODE_DELAY);
-            }
         }
 
         // Play a sound with optional pitch and length variation (lazy decode on first play)
@@ -23536,14 +24634,18 @@
                     [sx, sy] = key.split(',').map(Number);
                 }
                 const ts = tileSounds[key];
-                let soundBuffer = soundBuffers[ts.soundIndex];
 
-                // Lazy decode: if not loaded yet, trigger decode (will be available next frame)
-                if (!soundBuffer && ts.soundIndex >= 0 && ts.soundIndex < soundsData.length) {
-                    decodeSound(ts.soundIndex);
-                    return;
+                // Looping sounds use HTML Audio (streaming) - no need to decode buffer
+                // Non-looping sounds need buffer for Web Audio API
+                if (!ts.loop) {
+                    let soundBuffer = soundBuffers[ts.soundIndex];
+                    // Lazy decode: if not loaded yet, trigger decode (will be available next frame)
+                    if (!soundBuffer && ts.soundIndex >= 0 && ts.soundIndex < soundsData.length) {
+                        decodeSound(ts.soundIndex);
+                        return;
+                    }
+                    if (!soundBuffer) return;
                 }
-                if (!soundBuffer) return;
 
                 // Calculate distance from player (in tiles)
                 const dx = playerTileX - sx;
@@ -23569,24 +24671,24 @@
                     }
                 }
 
-                // Start sound if not playing yet (for looping sounds, keep them running)
+                // Start sound if not playing yet (for looping sounds, use HTML Audio for streaming)
                 if (!ambientSounds[key]?.playing && ts.loop) {
-                    const source = audioContext.createBufferSource();
-                    source.buffer = soundBuffer;
-                    source.loop = true;
-
-                    const gainNode = audioContext.createGain();
-                    gainNode.gain.value = 0; // Start silent
-
-                    source.connect(gainNode);
-                    gainNode.connect(audioContext.destination);
-                    source.start();
-
-                    ambientSounds[key] = { source, gainNode, playing: true };
+                    // Use HTML5 Audio for looping sounds - streams instead of buffering entire file
+                    // This is critical for large ambient sounds (e.g. 30-min fire sound)
+                    const sound = soundsData[ts.soundIndex];
+                    if (sound && sound.data) {
+                        const audio = new Audio(sound.data);
+                        audio.loop = true;
+                        audio.volume = 0; // Start silent
+                        audio.play().catch(e => console.warn('Audio play failed:', e));
+                        ambientSounds[key] = { audio, playing: true, useHtmlAudio: true };
+                    }
                 }
 
                 // For non-looping sounds, only start when in range
                 if (!ambientSounds[key]?.playing && !ts.loop && targetVolume > 0) {
+                    const soundBuffer = soundBuffers[ts.soundIndex];
+                    if (!soundBuffer) return;
                     const source = audioContext.createBufferSource();
                     source.buffer = soundBuffer;
                     source.loop = false;
@@ -23608,12 +24710,17 @@
                 }
 
                 // Smoothly adjust volume for playing sounds
-                if (ambientSounds[key]?.playing && ambientSounds[key].gainNode) {
-                    const gain = ambientSounds[key].gainNode.gain;
-                    // Use linearRampToValueAtTime for smooth transitions
-                    gain.cancelScheduledValues(audioContext.currentTime);
-                    gain.setValueAtTime(gain.value, audioContext.currentTime);
-                    gain.linearRampToValueAtTime(Math.max(0, targetVolume), audioContext.currentTime + fadeTime);
+                if (ambientSounds[key]?.playing) {
+                    if (ambientSounds[key].useHtmlAudio && ambientSounds[key].audio) {
+                        // HTML Audio - direct volume control (no smooth ramping but much faster)
+                        ambientSounds[key].audio.volume = Math.max(0, Math.min(1, targetVolume));
+                    } else if (ambientSounds[key].gainNode) {
+                        const gain = ambientSounds[key].gainNode.gain;
+                        // Use linearRampToValueAtTime for smooth transitions
+                        gain.cancelScheduledValues(audioContext.currentTime);
+                        gain.setValueAtTime(gain.value, audioContext.currentTime);
+                        gain.linearRampToValueAtTime(Math.max(0, targetVolume), audioContext.currentTime + fadeTime);
+                    }
                 }
             });
         }
@@ -23943,6 +25050,7 @@ Item Receive Display:
                                 layers = mapData.layers || layers;
                                 mapCols = mapData.mapCols || mapCols;
                                 mapRows = mapData.mapRows || mapRows;
+                                buildAnimatedTileRegistry(); // Rebuild for new map
                             }
                         }
                         // Spawn at the door position
@@ -24017,10 +25125,30 @@ Item Receive Display:
         document.addEventListener('keydown', e => {
             keys[e.key] = true;
 
-            if (e.key === 'Escape') window.close();
+            if (e.key === 'Escape') {
+                if (inventoryOpen) {
+                    inventoryOpen = false;
+                    cursorItem = null;
+                } else {
+                    window.close();
+                }
+                return;
+            }
             if (e.key === 'c' || e.key === 'C') showCollision = !showCollision;
             if (e.key === 'h' || e.key === 'H') toggleAllUI();
             if (e.key === 'q' || e.key === 'Q') toggleQuestLog();
+            // Inventory toggle (I key)
+            if (e.key === 'i' || e.key === 'I') {
+                inventoryOpen = !inventoryOpen;
+                if (!inventoryOpen) cursorItem = null; // Drop cursor item when closing
+            }
+            // Hotbar selection (1-9, 0)
+            if (e.key >= '1' && e.key <= '9') {
+                selectedHotbarSlot = parseInt(e.key) - 1;
+            }
+            if (e.key === '0') {
+                selectedHotbarSlot = 9;
+            }
             // Interact key (A) - for dialogs, doors, and NPCs
             if ((e.key === 'a' || e.key === 'A') && !player.attacking) {
                 handleInteract();
@@ -24040,6 +25168,89 @@ Item Receive Display:
             }
         });
         document.addEventListener('keyup', e => keys[e.key] = false);
+
+        // Mouse tracking for inventory
+        let mouseX = 0, mouseY = 0;
+        canvas.addEventListener('mousemove', e => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+
+        // Click handling for inventory
+        canvas.addEventListener('click', e => {
+            if (!inventoryOpen) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            // Calculate inventory popup position (same as in drawInventoryPopup)
+            const cols = 10;
+            const rows = 4;
+            const padding = 20;
+            const invWidth = cols * SLOT_SIZE + (cols - 1) * 2 + padding * 2;
+            const invHeight = rows * SLOT_SIZE + (rows - 1) * 2 + padding * 2 + 30;
+            const invX = (canvas.width - invWidth) / 2;
+            const invY = (canvas.height - invHeight) / 2;
+
+            // Check if click is in a slot
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const slotIdx = row * cols + col;
+                    const slotX = invX + padding + col * (SLOT_SIZE + 2);
+                    const slotY = invY + padding + 30 + row * (SLOT_SIZE + 2);
+
+                    if (clickX >= slotX && clickX < slotX + SLOT_SIZE &&
+                        clickY >= slotY && clickY < slotY + SLOT_SIZE) {
+                        // Clicked on this slot
+                        handleInventoryClick(slotIdx);
+                        return;
+                    }
+                }
+            }
+        });
+
+        // Handle inventory slot click
+        function handleInventoryClick(slotIdx) {
+            const clickedSlot = inventorySlots[slotIdx];
+
+            if (cursorItem === null) {
+                // Pick up item from slot
+                if (clickedSlot) {
+                    cursorItem = { ...clickedSlot };
+                    inventorySlots[slotIdx] = null;
+                }
+            } else {
+                // Have item on cursor
+                if (clickedSlot === null) {
+                    // Empty slot - place item
+                    inventorySlots[slotIdx] = { ...cursorItem };
+                    cursorItem = null;
+                } else if (clickedSlot.itemIndex === cursorItem.itemIndex) {
+                    // Same item - try to stack
+                    const maxStack = getMaxStack(cursorItem.itemIndex);
+                    const canAdd = Math.min(cursorItem.quantity, maxStack - clickedSlot.quantity);
+                    if (canAdd > 0) {
+                        clickedSlot.quantity += canAdd;
+                        cursorItem.quantity -= canAdd;
+                        if (cursorItem.quantity <= 0) {
+                            cursorItem = null;
+                        }
+                    } else {
+                        // Stack full - swap
+                        const temp = { ...clickedSlot };
+                        inventorySlots[slotIdx] = { ...cursorItem };
+                        cursorItem = temp;
+                    }
+                } else {
+                    // Different item - swap
+                    const temp = { ...clickedSlot };
+                    inventorySlots[slotIdx] = { ...cursorItem };
+                    cursorItem = temp;
+                }
+            }
+        }
 
         // Virtual Joystick controls - appears where user touches left half
         const joystickBase = document.getElementById('joystickBase');
@@ -24478,6 +25689,10 @@ Item Receive Display:
 
             if (elapsed >= totalDurationMs || isPauseComplete) {
                 console.log('[RECEIVE ITEM] Animation complete');
+                // Add item to inventory
+                if (receivingItemData.itemIndex !== undefined) {
+                    addToInventory(receivingItemData.itemIndex, 1);
+                }
                 isReceivingItem = false;
                 receivingItemData = null;
             }
@@ -24544,7 +25759,7 @@ Item Receive Display:
                     return true;
                 }
 
-                // Check static objects for collision (simple bounding box)
+                // Check static objects for collision (per-instance collision box)
                 for (let i = 0; i < placedStaticObjectsData.length; i++) {
                     const placed = placedStaticObjectsData[i];
                     if (placed.mapName && placed.mapName !== currentGameMap) continue;
@@ -24558,10 +25773,28 @@ Item Receive Display:
                     const objPixelW = obj.width * tileSize * scale;
                     const objPixelH = obj.height * tileSize * scale;
 
-                    // Simple bounding box collision (whole object is solid)
-                    // TODO: Later add per-object collision box editing
-                    if (point.x >= objPixelX && point.x < objPixelX + objPixelW &&
-                        point.y >= objPixelY && point.y < objPixelY + objPixelH) {
+                    // Use per-instance collision box if defined, otherwise use full object bounds
+                    let collisionX, collisionY, collisionW, collisionH;
+                    if (placed.collisionBox) {
+                        const cb = placed.collisionBox;
+                        // Skip if collision is set to zero size (no collision)
+                        if (cb.w <= 0 || cb.h <= 0) continue;
+                        // Collision box is relative to object origin, scale it
+                        const boxScale = tileSize / gridSize;
+                        collisionX = objPixelX + cb.x * boxScale;
+                        collisionY = objPixelY + cb.y * boxScale;
+                        collisionW = cb.w * boxScale;
+                        collisionH = cb.h * boxScale;
+                    } else {
+                        // Default: full object bounds
+                        collisionX = objPixelX;
+                        collisionY = objPixelY;
+                        collisionW = objPixelW;
+                        collisionH = objPixelH;
+                    }
+
+                    if (point.x >= collisionX && point.x < collisionX + collisionW &&
+                        point.y >= collisionY && point.y < collisionY + collisionH) {
                         return true;
                     }
                 }
@@ -24743,11 +25976,14 @@ Item Receive Display:
         }
 
         function update() {
+            const updatePerfStart = performance.now();
+            let updatePerfLog = '';
+
             let dx = 0, dy = 0;
             player.moving = false;
 
-            // Check if player can move (based on attack movement setting and receive item state)
-            let canMove = !player.attacking && !isReceivingItem;
+            // Check if player can move (based on attack movement setting, receive item state, and inventory)
+            let canMove = !player.attacking && !isReceivingItem && !inventoryOpen;
             let moveMultiplier = 1;
 
             if (player.attacking && playerAttackMovement !== 'stop') {
@@ -24788,6 +26024,7 @@ Item Receive Display:
             let movedY = false;
 
             // Check tile collision AND NPC collision
+            const collT0 = performance.now();
             if (dx !== 0 && !checkCollision(player.x + dx, collisionY, player.width, collisionHeight) &&
                 !checkNPCCollision(player.x + dx, collisionY, player.width, collisionHeight)) {
                 player.x += dx;
@@ -24798,6 +26035,8 @@ Item Receive Display:
                 player.y += dy;
                 movedY = true;
             }
+            const collT1 = performance.now();
+            if (collT1 - collT0 > 5) updatePerfLog += ' collision:' + (collT1-collT0).toFixed(0);
 
             // If player tried to move but was blocked in all directions, force idle
             if (player.moving && !movedX && !movedY) {
@@ -24831,79 +26070,69 @@ Item Receive Display:
                 player.frame = (player.frame + 1) % 4;
             }
 
-            // Update animated tile animations - scan layers for animTile cells
-            for (let li = 0; li < layers.length; li++) {
-                const layer = layers[li];
-                if (!layer) continue;
+            // Update animated tile animations - use cached registry (MUCH faster than scanning all tiles)
+            const animT0 = performance.now();
+            for (const entry of animatedTileRegistry) {
+                const cell = layers[entry.li]?.[entry.y]?.[entry.x];
+                if (!cell || cell.type !== 'animTile') continue;
 
-                for (let y = 0; y < mapRows; y++) {
-                    if (!layer[y]) continue;
-                    for (let x = 0; x < mapCols; x++) {
-                        const cell = layer[y][x];
-                        if (!cell || cell.type !== 'animTile') continue;
+                const propData = animatedPropsData[cell.propIndex];
+                if (!propData || !propData.frames || propData.frames.length <= 1) continue;
+                if (propData.type !== 'loop') continue;
 
-                        const propData = animatedPropsData[cell.propIndex];
-                        if (!propData || !propData.frames || propData.frames.length <= 1) continue;
-                        if (propData.type !== 'loop') continue;
+                // Use origin position for animation state key
+                const key = entry.x + ',' + entry.y + ',' + entry.li;
 
-                        // Use origin tile position for multi-tile prop sync
-                        const originX = x - (cell.offsetX || 0);
-                        const originY = y - (cell.offsetY || 0);
-                        const key = originX + ',' + originY + ',' + li;
+                if (!animPropFrameTimers[key]) {
+                    animPropFrameTimers[key] = { frame: 0, timer: 0, waiting: false, waitTimer: 0, playCount: 0 };
+                }
+                const state = animPropFrameTimers[key];
+                const instanceSpeed = cell.instanceSpeed || 1;
+                const fps = (propData.fps || 8) * instanceSpeed;
+                const frameDelay = Math.round(60 / fps);
+                // Use instance settings if set, otherwise prop defaults
+                const playMode = cell.instancePlayMode || propData.playMode || 'loop';
+                const waitTime = ((cell.instanceWaitTime !== undefined ? cell.instanceWaitTime : propData.waitTime) || 2) * 60;
+                const targetPlayCount = cell.instancePlayCount || 1;
 
-                        // Only process animation once per prop (at origin tile)
-                        if (cell.offsetX === 0 && cell.offsetY === 0 || (!cell.offsetX && !cell.offsetY)) {
-                            if (!animPropFrameTimers[key]) {
-                                animPropFrameTimers[key] = { frame: 0, timer: 0, waiting: false, waitTimer: 0, playCount: 0 };
-                            }
-                            const state = animPropFrameTimers[key];
-                            const instanceSpeed = cell.instanceSpeed || 1;
-                            const fps = (propData.fps || 8) * instanceSpeed;
-                            const frameDelay = Math.round(60 / fps);
-                            // Use instance settings if set, otherwise prop defaults
-                            const playMode = cell.instancePlayMode || propData.playMode || 'loop';
-                            const waitTime = ((cell.instanceWaitTime !== undefined ? cell.instanceWaitTime : propData.waitTime) || 2) * 60;
-                            const targetPlayCount = cell.instancePlayCount || 1;
+                // Handle timed mode - wait between animation cycles
+                if (playMode === 'timed' && state.waiting) {
+                    state.waitTimer++;
+                    if (state.waitTimer >= waitTime) {
+                        state.waiting = false;
+                        state.waitTimer = 0;
+                        state.frame = 0;
+                        state.playCount = 0;
+                    }
+                } else {
+                    state.timer++;
+                    if (state.timer >= frameDelay) {
+                        state.timer = 0;
+                        state.frame++;
 
-                            // Handle timed mode - wait between animation cycles
-                            if (playMode === 'timed' && state.waiting) {
-                                state.waitTimer++;
-                                if (state.waitTimer >= waitTime) {
-                                    state.waiting = false;
-                                    state.waitTimer = 0;
+                        // Handle end of animation
+                        if (state.frame >= propData.frames.length) {
+                            if (playMode === 'loop') {
+                                state.frame = 0; // Loop forever
+                            } else if (playMode === 'timed') {
+                                state.playCount++;
+                                if (state.playCount >= targetPlayCount) {
+                                    // Played enough times, now wait
                                     state.frame = 0;
-                                    state.playCount = 0;
+                                    state.waiting = true;
+                                    state.waitTimer = 0;
+                                } else {
+                                    state.frame = 0; // Play again
                                 }
                             } else {
-                                state.timer++;
-                                if (state.timer >= frameDelay) {
-                                    state.timer = 0;
-                                    state.frame++;
-
-                                    // Handle end of animation
-                                    if (state.frame >= propData.frames.length) {
-                                        if (playMode === 'loop') {
-                                            state.frame = 0; // Loop forever
-                                        } else if (playMode === 'timed') {
-                                            state.playCount++;
-                                            if (state.playCount >= targetPlayCount) {
-                                                // Played enough times, now wait
-                                                state.frame = 0;
-                                                state.waiting = true;
-                                                state.waitTimer = 0;
-                                            } else {
-                                                state.frame = 0; // Play again
-                                            }
-                                        } else {
-                                            state.frame = 0; // Default: loop
-                                        }
-                                    }
-                                }
+                                state.frame = 0; // Default: loop
                             }
                         }
                     }
                 }
             }
+            const animT1 = performance.now();
+            if (animT1 - animT0 > 5) updatePerfLog += ' animTiles:' + (animT1-animT0).toFixed(0);
 
             // Attack timer and animation
             if (player.attacking) {
@@ -24991,7 +26220,10 @@ Item Receive Display:
             }
 
             // === UPDATE NPCs ===
+            const npcT0 = performance.now();
             updateNPCs();
+            const npcT1 = performance.now();
+            if (npcT1 - npcT0 > 10) updatePerfLog += ' NPCs:' + (npcT1-npcT0).toFixed(0);
 
             // === SOUND UPDATES ===
             // Play walk sounds when moving
@@ -25009,7 +26241,10 @@ Item Receive Display:
             }
 
             // Update ambient sounds based on proximity
+            const soundT0 = performance.now();
             updateAmbientSounds();
+            const soundT1 = performance.now();
+            if (soundT1 - soundT0 > 5) updatePerfLog += ' sounds:' + (soundT1-soundT0).toFixed(0);
 
             // === MULTIPLAYER UPDATES ===
             // Send position update to server
@@ -25029,6 +26264,12 @@ Item Receive Display:
                     other.frame = (other.frame + 1) % 4;
                 }
             });
+
+            // Log slow update sections
+            const updateTotalTime = performance.now() - updatePerfStart;
+            if (updateTotalTime > 16) {
+                console.log('[UPDATE PERF]' + updatePerfLog + ' total:' + updateTotalTime.toFixed(0) + 'ms');
+            }
         }
 
         // === MAP TRANSITION SYSTEM ===
@@ -25435,14 +26676,23 @@ Item Receive Display:
             if (quest.onComplete) {
                 // Give items
                 if (quest.onComplete.giveItems && quest.onComplete.giveItems.length > 0) {
-                    quest.onComplete.giveItems.forEach(itemIndex => {
-                        addToInventory(parseInt(itemIndex), 1);
+                    quest.onComplete.giveItems.forEach(reward => {
+                        // Handle both old format (string) and new format (object with quantity)
+                        const itemId = typeof reward === 'string' ? reward : reward.itemId;
+                        const quantity = typeof reward === 'object' ? (reward.quantity || 1) : 1;
+                        const idx = itemIdToIndex(itemId);
+                        if (idx >= 0) {
+                            for (let i = 0; i < quantity; i++) {
+                                addToInventory(idx, 1);
+                            }
+                        }
                     });
                 }
                 // Remove items
                 if (quest.onComplete.removeItems && quest.onComplete.removeItems.length > 0) {
-                    quest.onComplete.removeItems.forEach(itemIndex => {
-                        removeFromInventory(parseInt(itemIndex), 1);
+                    quest.onComplete.removeItems.forEach(itemId => {
+                        const idx = itemIdToIndex(itemId);
+                        if (idx >= 0) removeFromInventory(idx, 1);
                     });
                 }
             }
@@ -25665,11 +26915,14 @@ Item Receive Display:
 
             // Stop all ambient sounds from previous map
             Object.keys(ambientSounds).forEach(key => {
-                if (ambientSounds[key]?.source) {
-                    try {
+                try {
+                    if (ambientSounds[key]?.useHtmlAudio && ambientSounds[key].audio) {
+                        ambientSounds[key].audio.pause();
+                        ambientSounds[key].audio.src = ''; // Release memory
+                    } else if (ambientSounds[key]?.source) {
                         ambientSounds[key].source.stop();
-                    } catch (e) { /* ignore */ }
-                }
+                    }
+                } catch (e) { /* ignore */ }
             });
             ambientSounds = {}; // Clear all ambient sounds
             console.log('[SOUND] Cleared ambient sounds for map transition');
@@ -25680,6 +26933,9 @@ Item Receive Display:
             layers = targetMapData.layers || layers;
             mapCols = targetMapData.mapCols || mapCols;
             mapRows = targetMapData.mapRows || mapRows;
+
+            // Rebuild animated tile registry for new map
+            buildAnimatedTileRegistry();
 
             // Position player at target spawn
             const tileSize = gridSize * TILE_SCALE;
@@ -25871,6 +27127,7 @@ Item Receive Display:
                                 if (mapData) {
                                     layers = mapData.layers || [];
                                     triggers = mapData.triggers || [];
+                                    buildAnimatedTileRegistry(); // Rebuild for new map
                                 }
                             }
 
@@ -25932,18 +27189,40 @@ Item Receive Display:
             const camY = Math.round(camera.y);
 
             // === 3-PASS RENDERING FOR Y-SORTING ===
+            // Performance profiling for render passes
+            const drawPerfStart = performance.now();
+            let drawPerfLog = '';
 
             // PASS 1: Draw ground layer (layer 0) - always behind everything
+            let dp1 = performance.now();
             let tilesDrawn = drawLayer(0, camX, camY, tileSize);
+            let dp1e = performance.now();
+            if (dp1e - dp1 > 3) drawPerfLog += ' L0:' + (dp1e-dp1).toFixed(0) + '(' + tilesDrawn + 'tiles)';
 
             // PASS 2: Y-sort player with tiles from layers 1+
+            let dp2 = performance.now();
             tilesDrawn += drawYSortedEntities(camX, camY, tileSize);
+            let dp2e = performance.now();
+            if (dp2e - dp2 > 5) drawPerfLog += ' Ysort:' + (dp2e-dp2).toFixed(0);
+
+            // PASS 2.5: Draw dropped items on ground
+            renderDroppedItems(ctx, camX, camY);
 
             // PASS 3: Draw canopy overlay (split tile tops)
+            let dp3 = performance.now();
             drawCanopyOverlay(camX, camY, tileSize);
+            let dp3e = performance.now();
+            if (dp3e - dp3 > 3) drawPerfLog += ' canopy:' + (dp3e-dp3).toFixed(0);
 
             // PASS 4: Redraw higher layer content that canopy covered
+            let dp4 = performance.now();
             redrawHigherLayerContent(camX, camY, tileSize);
+            let dp4e = performance.now();
+            if (dp4e - dp4 > 3) drawPerfLog += ' redraw:' + (dp4e-dp4).toFixed(0);
+
+            if (drawPerfLog && (performance.now() - drawPerfStart) > 20) {
+                console.log('[DRAW PERF]' + drawPerfLog);
+            }
 
             // PASS 5: Draw collision debug on top of everything (so canopy doesn't hide it)
             if (showCollision) {
@@ -26242,10 +27521,202 @@ Item Receive Display:
                     ctx.fillText('AnimTiles: ' + (animCounts.length > 0 ? animCounts.join(', ') : 'none') + ' | Press L to toggle', 10, debugY);
                 }
             }
+
+            // Draw inventory UI (always on top)
+            drawHotbar();
+            if (inventoryOpen) {
+                drawInventoryPopup();
+            }
+        }
+
+        // Draw hotbar at bottom of screen
+        function drawHotbar() {
+            const hotbarWidth = HOTBAR_SIZE * SLOT_SIZE + (HOTBAR_SIZE - 1) * 2; // slots + gaps
+            const hotbarX = (canvas.width - hotbarWidth) / 2;
+            const hotbarY = canvas.height - SLOT_SIZE - 10;
+
+            // Background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(hotbarX - 5, hotbarY - 5, hotbarWidth + 10, SLOT_SIZE + 10);
+
+            for (let i = 0; i < HOTBAR_SIZE; i++) {
+                const slotX = hotbarX + i * (SLOT_SIZE + 2);
+                const slot = inventorySlots[i];
+
+                // Slot background
+                if (i === selectedHotbarSlot) {
+                    ctx.fillStyle = '#555';
+                    ctx.strokeStyle = '#fff';
+                } else {
+                    ctx.fillStyle = '#333';
+                    ctx.strokeStyle = '#666';
+                }
+                ctx.fillRect(slotX, hotbarY, SLOT_SIZE, SLOT_SIZE);
+                ctx.strokeRect(slotX, hotbarY, SLOT_SIZE, SLOT_SIZE);
+
+                // Draw item if slot has one
+                if (slot) {
+                    const item = itemsData[slot.itemIndex];
+                    const img = itemImages[slot.itemIndex];
+                    if (item && img && img.complete) {
+                        // Draw item sprite (idle frame)
+                        const frame = item.frames[item.idleFrame || 0];
+                        if (frame) {
+                            const scale = Math.min((SLOT_SIZE - 4) / frame.w, (SLOT_SIZE - 4) / frame.h);
+                            const drawW = frame.w * scale;
+                            const drawH = frame.h * scale;
+                            const drawX = slotX + (SLOT_SIZE - drawW) / 2;
+                            const drawY = hotbarY + (SLOT_SIZE - drawH) / 2;
+                            ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
+                        }
+                    }
+
+                    // Draw quantity if > 1
+                    if (slot.quantity > 1) {
+                        ctx.fillStyle = '#fff';
+                        ctx.strokeStyle = '#000';
+                        ctx.font = 'bold 12px monospace';
+                        ctx.textAlign = 'right';
+                        ctx.textBaseline = 'bottom';
+                        ctx.lineWidth = 2;
+                        ctx.strokeText(slot.quantity, slotX + SLOT_SIZE - 2, hotbarY + SLOT_SIZE - 2);
+                        ctx.fillText(slot.quantity, slotX + SLOT_SIZE - 2, hotbarY + SLOT_SIZE - 2);
+                    }
+                }
+
+                // Slot number (1-9, 0)
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(i === 9 ? '0' : (i + 1).toString(), slotX + 2, hotbarY + 2);
+            }
+        }
+
+        // Draw full inventory popup
+        function drawInventoryPopup() {
+            const cols = 10;
+            const rows = 4;
+            const padding = 20;
+            const invWidth = cols * SLOT_SIZE + (cols - 1) * 2 + padding * 2;
+            const invHeight = rows * SLOT_SIZE + (rows - 1) * 2 + padding * 2 + 30; // +30 for title
+            const invX = (canvas.width - invWidth) / 2;
+            const invY = (canvas.height - invHeight) / 2;
+
+            // Darken background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Inventory panel
+            ctx.fillStyle = 'rgba(30, 30, 40, 0.95)';
+            ctx.fillRect(invX, invY, invWidth, invHeight);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(invX, invY, invWidth, invHeight);
+
+            // Title
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('INVENTORY', canvas.width / 2, invY + 10);
+
+            // Draw slots
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const slotIdx = row * cols + col;
+                    const slotX = invX + padding + col * (SLOT_SIZE + 2);
+                    const slotY = invY + padding + 30 + row * (SLOT_SIZE + 2);
+                    const slot = inventorySlots[slotIdx];
+
+                    // Slot background - highlight hotbar slots
+                    if (slotIdx < HOTBAR_SIZE) {
+                        ctx.fillStyle = slotIdx === selectedHotbarSlot ? '#555' : '#3a3a4a';
+                    } else {
+                        ctx.fillStyle = '#333';
+                    }
+                    ctx.fillRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+                    ctx.strokeStyle = slotIdx < HOTBAR_SIZE ? '#888' : '#555';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+
+                    // Draw item if slot has one
+                    if (slot) {
+                        const item = itemsData[slot.itemIndex];
+                        const img = itemImages[slot.itemIndex];
+                        if (item && img && img.complete) {
+                            const frame = item.frames[item.idleFrame || 0];
+                            if (frame) {
+                                const scale = Math.min((SLOT_SIZE - 4) / frame.w, (SLOT_SIZE - 4) / frame.h);
+                                const drawW = frame.w * scale;
+                                const drawH = frame.h * scale;
+                                const drawX = slotX + (SLOT_SIZE - drawW) / 2;
+                                const drawY = slotY + (SLOT_SIZE - drawH) / 2;
+                                ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
+                            }
+                        }
+
+                        // Draw quantity
+                        if (slot.quantity > 1) {
+                            ctx.fillStyle = '#fff';
+                            ctx.strokeStyle = '#000';
+                            ctx.font = 'bold 12px monospace';
+                            ctx.textAlign = 'right';
+                            ctx.textBaseline = 'bottom';
+                            ctx.lineWidth = 2;
+                            ctx.strokeText(slot.quantity, slotX + SLOT_SIZE - 2, slotY + SLOT_SIZE - 2);
+                            ctx.fillText(slot.quantity, slotX + SLOT_SIZE - 2, slotY + SLOT_SIZE - 2);
+                        }
+                    }
+                }
+            }
+
+            // Draw cursor item if held
+            if (cursorItem) {
+                const item = itemsData[cursorItem.itemIndex];
+                const img = itemImages[cursorItem.itemIndex];
+                if (item && img && img.complete) {
+                    const frame = item.frames[item.idleFrame || 0];
+                    if (frame) {
+                        const scale = Math.min((SLOT_SIZE - 4) / frame.w, (SLOT_SIZE - 4) / frame.h);
+                        const drawW = frame.w * scale;
+                        const drawH = frame.h * scale;
+                        ctx.globalAlpha = 0.8;
+                        ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h,
+                            mouseX - drawW / 2, mouseY - drawH / 2, drawW, drawH);
+                        ctx.globalAlpha = 1;
+
+                        if (cursorItem.quantity > 1) {
+                            ctx.fillStyle = '#fff';
+                            ctx.strokeStyle = '#000';
+                            ctx.font = 'bold 12px monospace';
+                            ctx.textAlign = 'right';
+                            ctx.textBaseline = 'bottom';
+                            ctx.lineWidth = 2;
+                            ctx.strokeText(cursorItem.quantity, mouseX + SLOT_SIZE/2, mouseY + SLOT_SIZE/2);
+                            ctx.fillText(cursorItem.quantity, mouseX + SLOT_SIZE/2, mouseY + SLOT_SIZE/2);
+                        }
+                    }
+                }
+            }
+
+            // Instructions
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('Click to pick up/swap items | Press I to close', canvas.width / 2, invY + invHeight - 5);
         }
 
         // Helper for drawing tiles with rotation and flip in test game
         function drawTileWithEffects(ctx, img, srcX, srcY, srcSize, destX, destY, destSize, rotation, flipped) {
+            // Fast path: no rotation or flip - skip expensive save/restore
+            if (!rotation && !flipped) {
+                ctx.drawImage(img, srcX, srcY, srcSize, srcSize, destX, destY, destSize, destSize);
+                return;
+            }
+
+            // Slow path: needs transforms
             ctx.save();
             ctx.translate(destX + destSize / 2, destY + destSize / 2);
 
@@ -26265,19 +27736,25 @@ Item Receive Display:
             const layer = layers[li];
             if (!layer) return 0;
 
+            // Calculate visible tile range with generous buffer (10 tiles) to prevent pop-in
+            const buffer = 10;
+            const viewWidth = canvas.width / cameraZoom;
+            const viewHeight = canvas.height / cameraZoom;
+            const startX = Math.max(0, Math.floor(camX / tileSize) - buffer);
+            const endX = Math.min(mapCols, Math.ceil((camX + viewWidth) / tileSize) + buffer);
+            const startY = Math.max(0, Math.floor(camY / tileSize) - buffer);
+            const endY = Math.min(mapRows, Math.ceil((camY + viewHeight) / tileSize) + buffer);
+
             let count = 0;
-            for (let y = 0; y < mapRows; y++) {
+            for (let y = startY; y < endY; y++) {
                 if (!layer[y]) continue;
-                for (let x = 0; x < mapCols; x++) {
+                for (let x = startX; x < endX; x++) {
                     const cell = layer[y][x];
                     if (!cell) continue;
 
                     // Use exact integer positions - no overlap to avoid double-drawing semi-transparent pixels
                     const px = x * tileSize - camX;
                     const py = y * tileSize - camY;
-
-                    // Account for zoom in off-screen check
-                    if (px < -tileSize || px > canvas.width / cameraZoom || py < -tileSize || py > canvas.height / cameraZoom) continue;
 
                     if (cell.type === 'tile') {
                         count++;
@@ -26463,22 +27940,28 @@ Item Receive Display:
             });
 
             // Add tiles from all layers 1+
+            // Calculate visible tile range with generous buffer (10 tiles) to prevent pop-in
+            const buffer = 10;
+            const viewWidth = canvas.width / cameraZoom;
+            const viewHeight = canvas.height / cameraZoom;
+            const startX = Math.max(0, Math.floor(camX / tileSize) - buffer);
+            const endX = Math.min(mapCols, Math.ceil((camX + viewWidth) / tileSize) + buffer);
+            const startY = Math.max(0, Math.floor(camY / tileSize) - buffer);
+            const endY = Math.min(mapRows, Math.ceil((camY + viewHeight) / tileSize) + buffer);
+
             for (let li = 1; li < layers.length; li++) {
                 if (!layerVisibility[li]) continue;
                 const layer = layers[li];
                 if (!layer) continue;
 
-                for (let y = 0; y < mapRows; y++) {
+                for (let y = startY; y < endY; y++) {
                     if (!layer[y]) continue;
-                    for (let x = 0; x < mapCols; x++) {
+                    for (let x = startX; x < endX; x++) {
                         const cell = layer[y][x];
                         if (!cell) continue;
 
                         const px = x * tileSize - camX;
                         const py = y * tileSize - camY;
-
-                        // Skip off-screen tiles
-                        if (px < -tileSize || px > canvas.width / cameraZoom || py < -tileSize || py > canvas.height / cameraZoom) continue;
 
                         // Y is primary, layer is tiebreaker
                         const baseSortY = (y + 1) * 1000 + li;
@@ -26545,15 +28028,24 @@ Item Receive Display:
 
         // Redraw content from higher layers that overlaps with canopy from lower layers
         function redrawHigherLayerContent(camX, camY, tileSize) {
+            // Calculate visible tile range with generous buffer (10 tiles)
+            const buffer = 10;
+            const viewWidth = canvas.width / cameraZoom;
+            const viewHeight = canvas.height / cameraZoom;
+            const startX = Math.max(0, Math.floor(camX / tileSize) - buffer);
+            const endX = Math.min(mapCols, Math.ceil((camX + viewWidth) / tileSize) + buffer);
+            const startY = Math.max(0, Math.floor(camY / tileSize) - buffer);
+            const endY = Math.min(mapRows, Math.ceil((camY + viewHeight) / tileSize) + buffer);
+
             // For each position that has canopy (split line), redraw any higher layer content
             for (let li = 1; li < layers.length; li++) {
                 if (!layerVisibility[li]) continue;
                 const layer = layers[li];
                 if (!layer) continue;
 
-                for (let y = 0; y < mapRows; y++) {
+                for (let y = startY; y < endY; y++) {
                     if (!layer[y]) continue;
-                    for (let x = 0; x < mapCols; x++) {
+                    for (let x = startX; x < endX; x++) {
                         const cell = layer[y][x];
                         if (!cell) continue;
 
@@ -26862,24 +28354,30 @@ Item Receive Display:
         }
 
         function drawCanopyOverlay(camX, camY, tileSize) {
+            // Calculate visible tile range with generous buffer (10 tiles)
+            const buffer = 10;
+            const viewWidth = canvas.width / cameraZoom;
+            const viewHeight = canvas.height / cameraZoom;
+            const startX = Math.max(0, Math.floor(camX / tileSize) - buffer);
+            const endX = Math.min(mapCols, Math.ceil((camX + viewWidth) / tileSize) + buffer);
+            const startY = Math.max(0, Math.floor(camY / tileSize) - buffer);
+            const endY = Math.min(mapRows, Math.ceil((camY + viewHeight) / tileSize) + buffer);
+
             // Draw canopy portions (above split line) for all split tiles
             for (let li = 1; li < layers.length; li++) {
                 if (!layerVisibility[li]) continue;
                 const layer = layers[li];
                 if (!layer) continue;
 
-                for (let y = 0; y < mapRows; y++) {
+                for (let y = startY; y < endY; y++) {
                     if (!layer[y]) continue;
-                    for (let x = 0; x < mapCols; x++) {
+                    for (let x = startX; x < endX; x++) {
                         const cell = layer[y][x];
                         if (!cell) continue;
 
                         const px = x * tileSize - camX;
                         const py = y * tileSize - camY;
                         const scale = tileSize / gridSize;
-
-                        // Skip off-screen
-                        if (px < -tileSize || px > canvas.width / cameraZoom || py < -tileSize || py > canvas.height / cameraZoom) continue;
 
                         if (cell.type === 'tile') {
                             const key = (cell.tilesetIndex || 0) + ':' + cell.x + ',' + cell.y;
@@ -27014,23 +28512,29 @@ Item Receive Display:
         function drawCollisionDebugOverlay(camX, camY, tileSize) {
             const pixelSize = tileSize / gridSize;
 
+            // Calculate visible tile range with generous buffer (10 tiles)
+            const buffer = 10;
+            const viewWidth = canvas.width / cameraZoom;
+            const viewHeight = canvas.height / cameraZoom;
+            const startX = Math.max(0, Math.floor(camX / tileSize) - buffer);
+            const endX = Math.min(mapCols, Math.ceil((camX + viewWidth) / tileSize) + buffer);
+            const startY = Math.max(0, Math.floor(camY / tileSize) - buffer);
+            const endY = Math.min(mapRows, Math.ceil((camY + viewHeight) / tileSize) + buffer);
+
             // Draw collision for all tiles in all layers (on top of canopy)
             for (let li = 0; li < layers.length; li++) {
                 if (!layerVisibility[li]) continue;
                 const layer = layers[li];
                 if (!layer) continue;
 
-                for (let y = 0; y < mapRows; y++) {
+                for (let y = startY; y < endY; y++) {
                     if (!layer[y]) continue;
-                    for (let x = 0; x < mapCols; x++) {
+                    for (let x = startX; x < endX; x++) {
                         const cell = layer[y][x];
                         if (!cell) continue;
 
                         const px = x * tileSize - camX;
                         const py = y * tileSize - camY;
-
-                        // Skip off-screen
-                        if (px < -tileSize || px > canvas.width / cameraZoom || py < -tileSize || py > canvas.height / cameraZoom) continue;
 
                         if (cell.type === 'tile') {
                             const tilesetIdx = cell.tilesetIndex || 0;
@@ -27602,20 +29106,22 @@ Item Receive Display:
             const drawY = sy - offsetY;
 
             // Draw shadow (scales with NPC, uses per-NPC shadow settings)
-            const shadowOffsetX = npc.shadowOffsetX ?? 0;
-            const shadowOffsetY = npc.shadowOffsetY ?? 4;
-            const shadowWidthRatio = npc.shadowWidth ?? 0.35;
-            const shadowHeightRatio = npc.shadowHeight ?? 0.12;
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.beginPath();
-            ctx.ellipse(
-                drawX + drawW / 2 + shadowOffsetX,
-                drawY + drawH - shadowOffsetY,
-                drawW * shadowWidthRatio,
-                drawW * shadowHeightRatio,
-                0, 0, Math.PI * 2
-            );
-            ctx.fill();
+            if (!npc.noShadow) {
+                const shadowOffsetX = npc.shadowOffsetX ?? 0;
+                const shadowOffsetY = npc.shadowOffsetY ?? 4;
+                const shadowWidthRatio = npc.shadowWidth ?? 0.35;
+                const shadowHeightRatio = npc.shadowHeight ?? 0.12;
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.beginPath();
+                ctx.ellipse(
+                    drawX + drawW / 2 + shadowOffsetX,
+                    drawY + drawH - shadowOffsetY,
+                    drawW * shadowWidthRatio,
+                    drawW * shadowHeightRatio,
+                    0, 0, Math.PI * 2
+                );
+                ctx.fill();
+            }
 
             // Handle horizontal flip - either for left fallback OR if animation is marked as mirrored
             const animMirrors = npc.animMirrors || {};
@@ -27855,11 +29361,18 @@ Item Receive Display:
             // Update dialog typewriter effect
             updateDialogTyping();
 
+            // Performance profiling - log slow frames
+            const perfStart = performance.now();
+            let perfLog = '';
+
             if (!isTransitioning || transitionPhase === 'fadeIn' || transitionPhase === 'forceWalk') {
                 // Allow player to be visible during forced walk but don't allow input
                 // Don't update if player is dying or game over
                 if (transitionPhase !== 'forceWalk' && !playerDying && !gameOverShown) {
+                    const t0 = performance.now();
                     update();
+                    const t1 = performance.now();
+                    if (t1 - t0 > 5) perfLog += ' update:' + (t1-t0).toFixed(0);
                 }
                 // Check for walkover triggers after movement (but not during forced walk)
                 if (transitionPhase !== 'forceWalk' && !playerDying && !gameOverShown) {
@@ -27875,9 +29388,20 @@ Item Receive Display:
                 updateAnimPropInteractions();
                 // Update receive item animation
                 updateReceiveItemAnimation();
+                // Update dropped items physics and pickup
+                updateDroppedItems();
             }
+            const t2 = performance.now();
             draw();
+            const t3 = performance.now();
+            if (t3 - t2 > 10) perfLog += ' draw:' + (t3-t2).toFixed(0);
             drawTransitionOverlay();
+
+            const totalTime = performance.now() - perfStart;
+            if (totalTime > 50) {
+                console.log('[PERF SLOW FRAME]' + perfLog + ' total:' + totalTime.toFixed(0) + 'ms');
+            }
+
             requestAnimationFrame(gameLoop);
         }
 
