@@ -25265,9 +25265,11 @@ Item Receive Display:
 
         // Camera
         const camera = { x: 0, y: 0 };
-        // Previous camera position for render interpolation
+        // Previous positions for render interpolation (smooth 120Hz rendering)
         let prevCameraX = 0;
         let prevCameraY = 0;
+        let prevPlayerX = 0;
+        let prevPlayerY = 0;
 
         // Input
         const keys = {};
@@ -29586,9 +29588,11 @@ Item Receive Display:
             while (accumulatedTime >= FIXED_TIMESTEP) {
                 accumulatedTime -= FIXED_TIMESTEP;
 
-                // Save camera position BEFORE this tick (for render interpolation)
+                // Save positions BEFORE this tick (for render interpolation)
                 prevCameraX = camera.x;
                 prevCameraY = camera.y;
+                prevPlayerX = player.x;
+                prevPlayerY = player.y;
 
                 updateDayCycle();
                 updateDeathAnimation();
@@ -29629,12 +29633,20 @@ Item Receive Display:
             }
 
             // === RENDERING (every frame for smooth visuals) ===
-            // Interpolate camera position for smooth rendering between logic ticks
+            // Interpolate positions for smooth rendering between logic ticks
             const renderAlpha = accumulatedTime / FIXED_TIMESTEP;
+
+            // Save actual positions
             const actualCameraX = camera.x;
             const actualCameraY = camera.y;
+            const actualPlayerX = player.x;
+            const actualPlayerY = player.y;
+
+            // Apply interpolation for rendering
             camera.x = prevCameraX + (camera.x - prevCameraX) * renderAlpha;
             camera.y = prevCameraY + (camera.y - prevCameraY) * renderAlpha;
+            player.x = prevPlayerX + (player.x - prevPlayerX) * renderAlpha;
+            player.y = prevPlayerY + (player.y - prevPlayerY) * renderAlpha;
 
             const t2 = performance.now();
             draw();
@@ -29642,9 +29654,11 @@ Item Receive Display:
             if (t3 - t2 > 10) perfLog += ' draw:' + (t3-t2).toFixed(0);
             drawTransitionOverlay();
 
-            // Restore actual camera position for next frame's prev calculation
+            // Restore actual positions for next frame's calculations
             camera.x = actualCameraX;
             camera.y = actualCameraY;
+            player.x = actualPlayerX;
+            player.y = actualPlayerY;
 
             const totalTime = performance.now() - perfStart;
             if (totalTime > 50) {
