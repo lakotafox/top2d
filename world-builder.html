@@ -23236,6 +23236,7 @@
                         if (added) {
                             const itemName = itemsData[item.itemIndex]?.name || 'Item';
                             console.log('[PICKUP] Collected:', itemName);
+                            playPickupSound();
                             droppedItems.splice(i, 1);
                         }
                     }
@@ -23474,6 +23475,9 @@
                             otherPlayers.set(p.id, {
                                 x: p.x, y: p.y,
                                 targetX: p.x, targetY: p.y,
+                                prevX: p.x, prevY: p.y,  // Previous position for velocity calc
+                                vx: 0, vy: 0,           // Estimated velocity
+                                lastUpdateTime: Date.now(),
                                 direction: p.direction || 'down',
                                 animation: p.animation || 'idle',
                                 name: p.name || 'Player',
@@ -23491,6 +23495,9 @@
                         otherPlayers.set(data.player.id, {
                             x: data.player.x, y: data.player.y,
                             targetX: data.player.x, targetY: data.player.y,
+                            prevX: data.player.x, prevY: data.player.y,
+                            vx: 0, vy: 0,
+                            lastUpdateTime: Date.now(),
                             direction: data.player.direction || 'down',
                             animation: data.player.animation || 'idle',
                             name: data.player.name || 'Player',
@@ -23506,9 +23513,24 @@
                     if (data.player && data.player.gameType === 'game2d') {
                         const other = otherPlayers.get(data.player.id);
                         if (other) {
-                            // Set target position (will lerp toward it)
+                            const now = Date.now();
+                            const dt = (now - other.lastUpdateTime) / 1000; // Time since last update in seconds
+
+                            // Calculate velocity from position change
+                            if (dt > 0 && dt < 1) { // Ignore if too long (probably reconnect)
+                                other.vx = (data.player.x - other.prevX) / dt;
+                                other.vy = (data.player.y - other.prevY) / dt;
+                            }
+
+                            // Store previous target as prev position
+                            other.prevX = other.targetX;
+                            other.prevY = other.targetY;
+
+                            // Set new target position
                             other.targetX = data.player.x;
                             other.targetY = data.player.y;
+                            other.lastUpdateTime = now;
+
                             other.direction = data.player.direction || other.direction;
                             other.animation = data.player.animation || other.animation;
                             other.attackFrame = data.player.attackFrame || 0;
@@ -24555,6 +24577,37 @@
         // Walk sound timing
         let lastWalkSoundTime = 0;
 
+        // Item pickup sound (hardcoded file)
+        let pickupSoundBuffer = null;
+        const PICKUP_SOUND_PATH = 'sounds/itempickupblkoop.mp3';
+
+        // Load pickup sound when audio context is ready
+        function loadPickupSound() {
+            if (!audioContext || pickupSoundBuffer) return;
+            fetch(PICKUP_SOUND_PATH)
+                .then(r => r.arrayBuffer())
+                .then(data => audioContext.decodeAudioData(data))
+                .then(buffer => {
+                    pickupSoundBuffer = buffer;
+                    console.log('[SOUND] Pickup sound loaded');
+                })
+                .catch(e => console.warn('[SOUND] Could not load pickup sound:', e));
+        }
+
+        // Play pickup sound with pitch variation
+        function playPickupSound() {
+            if (!audioContext || !pickupSoundBuffer) return;
+            const source = audioContext.createBufferSource();
+            source.buffer = pickupSoundBuffer;
+            // Pitch variation: 0.85 to 1.15 (±15%)
+            source.playbackRate.value = 0.85 + Math.random() * 0.3;
+            const gainNode = audioContext.createGain();
+            gainNode.gain.value = 0.6;
+            source.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            source.start();
+        }
+
         // Ambient sounds currently playing
         let ambientSounds = {}; // "x,y" -> { source, gainNode, playing }
 
@@ -24579,6 +24632,8 @@
             console.log('Sounds available:', soundsData.length);
             console.log('Tile sounds:', Object.keys(tileSounds).length);
             console.log('Player sounds:', playerSoundsData);
+            // Load hardcoded sounds
+            loadPickupSound();
         }
 
         // Queue a sound for decoding (one at a time with delays for iPad)
@@ -26342,12 +26397,26 @@ Item Receive Display:
             // Send position update to server
             sendMpUpdate();
 
-            // Update other players - smooth lerp + animations
-            const lerpSpeed = 0.15; // Smoothing factor (0.1 = smoother, 0.3 = snappier)
+            // Update other players - smooth interpolation with prediction
             otherPlayers.forEach((other, id) => {
-                // Lerp position toward target
-                other.x += (other.targetX - other.x) * lerpSpeed;
-                other.y += (other.targetY - other.y) * lerpSpeed;
+                const now = Date.now();
+                const timeSinceUpdate = (now - other.lastUpdateTime) / 1000; // seconds
+
+                // Predict where player should be based on velocity
+                // Only predict for a short time (0.15s) to avoid overshooting
+                const predictTime = Math.min(timeSinceUpdate, 0.15);
+                const predictedX = other.targetX + (other.vx || 0) * predictTime;
+                const predictedY = other.targetY + (other.vy || 0) * predictTime;
+
+                // Smooth interpolation toward predicted position
+                // Use exponential decay for smoother movement
+                const smoothing = 0.12; // Lower = smoother but laggier, higher = snappier but jerkier
+                other.x += (predictedX - other.x) * smoothing;
+                other.y += (predictedY - other.y) * smoothing;
+
+                // Snap if very close to avoid micro-jitter
+                if (Math.abs(other.x - predictedX) < 0.5) other.x = predictedX;
+                if (Math.abs(other.y - predictedY) < 0.5) other.y = predictedY;
 
                 // Update animation frame
                 other.frameTimer++;
@@ -29449,18 +29518,29 @@ Item Receive Display:
             ctx.drawImage(img, 0, 0, objW, objH, drawX, drawY, drawW, drawH);
         }
 
+        // Fixed timestep for frame-rate independence
+        const FIXED_TIMESTEP = 1000 / 60;  // 16.67ms - game logic runs at 60 FPS
+        const MAX_ACCUMULATED_TIME = FIXED_TIMESTEP * 5;  // Cap at 5 ticks to prevent spiral of death
+        let accumulatedTime = 0;
         let lastFrameTime = 0;
         let perfUpdateCounter = 0;
+
         function gameLoop(timestamp) {
             if (!timestamp) timestamp = performance.now();
-            const deltaTime = lastFrameTime ? timestamp - lastFrameTime : 16.67;
+            const deltaTime = lastFrameTime ? timestamp - lastFrameTime : FIXED_TIMESTEP;
             lastFrameTime = timestamp;
+
+            // Accumulate time for fixed timestep
+            accumulatedTime += deltaTime;
+            if (accumulatedTime > MAX_ACCUMULATED_TIME) {
+                accumulatedTime = MAX_ACCUMULATED_TIME; // Prevent spiral of death
+            }
 
             // Log frame time for network recording (outside perf panel check)
             const currentFps = deltaTime > 0 ? Math.round(1000 / deltaTime) : 60;
             if (networkRecording) logFrameTime(deltaTime, currentFps);
 
-            // Update performance panel
+            // Update performance panel (every render frame)
             if (perfPanelVisible) {
                 perfUpdateCounter++;
                 fpsHistory.push(currentFps);
@@ -29494,46 +29574,54 @@ Item Receive Display:
                 }
             }
 
-            updateDayCycle();
-            updateDeathAnimation();
-            updateTransition(deltaTime);
-
-            // Dialog cooldown
-            if (dialogCooldown > 0) dialogCooldown--;
-
-            // Update dialog typewriter effect
-            updateDialogTyping();
-
             // Performance profiling - log slow frames
             const perfStart = performance.now();
             let perfLog = '';
 
-            if (!isTransitioning || transitionPhase === 'fadeIn' || transitionPhase === 'forceWalk') {
-                // Allow player to be visible during forced walk but don't allow input
-                // Don't update if player is dying or game over
-                if (transitionPhase !== 'forceWalk' && !playerDying && !gameOverShown) {
-                    const t0 = performance.now();
-                    update();
-                    const t1 = performance.now();
-                    if (t1 - t0 > 5) perfLog += ' update:' + (t1-t0).toFixed(0);
+            // === FIXED TIMESTEP GAME LOGIC ===
+            // Run game logic in fixed 16.67ms chunks for consistent behavior on all refresh rates
+            while (accumulatedTime >= FIXED_TIMESTEP) {
+                accumulatedTime -= FIXED_TIMESTEP;
+
+                updateDayCycle();
+                updateDeathAnimation();
+                updateTransition(FIXED_TIMESTEP);
+
+                // Dialog cooldown
+                if (dialogCooldown > 0) dialogCooldown--;
+
+                // Update dialog typewriter effect
+                updateDialogTyping();
+
+                if (!isTransitioning || transitionPhase === 'fadeIn' || transitionPhase === 'forceWalk') {
+                    // Allow player to be visible during forced walk but don't allow input
+                    // Don't update if player is dying or game over
+                    if (transitionPhase !== 'forceWalk' && !playerDying && !gameOverShown) {
+                        const t0 = performance.now();
+                        update();
+                        const t1 = performance.now();
+                        if (t1 - t0 > 5) perfLog += ' update:' + (t1-t0).toFixed(0);
+                    }
+                    // Check for walkover triggers after movement (but not during forced walk)
+                    if (transitionPhase !== 'forceWalk' && !playerDying && !gameOverShown) {
+                        checkWalkoverTriggers();
+                        // Check for auto-trigger dialogs (NPCs with auto trigger)
+                        checkAutoDialogs();
+                        // Track player tile for quest location conditions
+                        checkPlayerTileForQuests();
+                    }
+                    // Update item animations
+                    updateItemAnimations();
+                    // Update interactive animated prop animations
+                    updateAnimPropInteractions();
+                    // Update receive item animation
+                    updateReceiveItemAnimation();
+                    // Update dropped items physics and pickup
+                    updateDroppedItems();
                 }
-                // Check for walkover triggers after movement (but not during forced walk)
-                if (transitionPhase !== 'forceWalk' && !playerDying && !gameOverShown) {
-                    checkWalkoverTriggers();
-                    // Check for auto-trigger dialogs (NPCs with auto trigger)
-                    checkAutoDialogs();
-                    // Track player tile for quest location conditions
-                    checkPlayerTileForQuests();
-                }
-                // Update item animations
-                updateItemAnimations();
-                // Update interactive animated prop animations
-                updateAnimPropInteractions();
-                // Update receive item animation
-                updateReceiveItemAnimation();
-                // Update dropped items physics and pickup
-                updateDroppedItems();
             }
+
+            // === RENDERING (every frame for smooth visuals) ===
             const t2 = performance.now();
             draw();
             const t3 = performance.now();
