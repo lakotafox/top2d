@@ -24105,8 +24105,10 @@
                     if (placed.trigger === 'interact') {
                         // Triggered by player attack - check if player is attacking nearby
                         if (player.attacking) {
-                            const dist = Math.hypot(player.x - state.x, player.y - state.y);
-                            if (dist < gridSize * 2) {
+                            const dx = player.x - state.x, dy = player.y - state.y;
+                            const distSq = dx * dx + dy * dy;
+                            const triggerRadiusSq = (gridSize * 2) * (gridSize * 2);
+                            if (distSq < triggerRadiusSq) {
                                 state.triggered = true;
                             }
                         }
@@ -24147,8 +24149,15 @@
                     const npcScaledX = state.x * TILE_SCALE;
                     const npcScaledY = state.y * TILE_SCALE;
 
-                    // Calculate distance to player (both in scaled coordinates now)
-                    const distToPlayer = Math.hypot(player.x - npcScaledX, player.y - npcScaledY);
+                    // Calculate squared distance to player (both in scaled coordinates now)
+                    // Use squared distances for comparisons to avoid expensive sqrt
+                    const dxToPlayer = player.x - npcScaledX;
+                    const dyToPlayer = player.y - npcScaledY;
+                    const distToPlayerSq = dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer;
+
+                    // Pre-compute squared radii for comparisons
+                    const visionRadiusSq = visionRadius * visionRadius;
+                    const attackRangeSq = attackRange * attackRange;
 
                     // Initialize AI state if not set
                     if (!state.aiState) state.aiState = 'idle';
@@ -24173,7 +24182,8 @@
 
                     // Check for contact damage (Touch mode or during Lunge)
                     const touchDistance = gridSize * TILE_SCALE * 0.6 * npcScale;
-                    if (distToPlayer < touchDistance && state.damageCooldown <= 0) {
+                    const touchDistanceSq = touchDistance * touchDistance;
+                    if (distToPlayerSq < touchDistanceSq && state.damageCooldown <= 0) {
                         if (attackMode === 'touch' || state.aiState === 'lunge') {
                             damagePlayer(damage);
                             state.damageCooldown = cooldownTime;
@@ -24202,16 +24212,17 @@
                     // State machine transitions
                     switch (state.aiState) {
                         case 'idle':
-                            // Check if player is in vision range
-                            if (distToPlayer <= visionRadius) {
+                            // Check if player is in vision range (use squared distance)
+                            if (distToPlayerSq <= visionRadiusSq) {
                                 state.aiState = 'chase';
                                 state.aggroTimer = 0;
                             }
                             break;
 
                         case 'chase':
-                            // Check if player left vision range for too long
-                            if (distToPlayer > visionRadius * 1.5) {
+                            // Check if player left vision range for too long (1.5x = 2.25x squared)
+                            const deaggroRadiusSq = visionRadiusSq * 2.25;
+                            if (distToPlayerSq > deaggroRadiusSq) {
                                 state.aggroTimer++;
                                 if (state.aggroTimer > 180) { // 3 seconds at 60fps
                                     state.aiState = 'return';
@@ -24221,8 +24232,8 @@
                                 state.aggroTimer = 0;
                             }
 
-                            // Lunge mode: start lunge when in attack range
-                            if (attackMode === 'lunge' && distToPlayer <= attackRange && state.damageCooldown <= 0) {
+                            // Lunge mode: start lunge when in attack range (use squared distance)
+                            if (attackMode === 'lunge' && distToPlayerSq <= attackRangeSq && state.damageCooldown <= 0) {
                                 state.aiState = 'lunge';
                                 // Store target in unscaled coords (same as state.x/y)
                                 state.lungeTargetX = player.x / TILE_SCALE;
@@ -24276,7 +24287,7 @@
                             state.attackCooldown++;
                             state.moving = false;
                             if (state.attackCooldown > 45) { // 0.75 second recovery
-                                if (distToPlayer <= visionRadius) {
+                                if (distToPlayerSq <= visionRadiusSq) {
                                     state.aiState = 'chase';
                                 } else {
                                     state.aiState = 'return';
@@ -24286,15 +24297,19 @@
                             break;
 
                         case 'return':
-                            // Check if back at start position
-                            const distToHome = Math.hypot(state.returnX - state.x, state.returnY - state.y);
-                            if (distToHome < chaseSpeed) {
+                            // Check if back at start position (use squared distance)
+                            const dxHome = state.returnX - state.x;
+                            const dyHome = state.returnY - state.y;
+                            const distToHomeSq = dxHome * dxHome + dyHome * dyHome;
+                            const chaseSpeedSq = chaseSpeed * chaseSpeed;
+                            if (distToHomeSq < chaseSpeedSq) {
                                 state.x = state.returnX;
                                 state.y = state.returnY;
                                 state.aiState = 'idle';
                             }
-                            // If player gets close again while returning, chase
-                            if (distToPlayer <= visionRadius * 0.75) {
+                            // If player gets close again while returning, chase (0.75^2 = 0.5625)
+                            const reaggroRadiusSq = visionRadiusSq * 0.5625;
+                            if (distToPlayerSq <= reaggroRadiusSq) {
                                 state.aiState = 'chase';
                             }
                             break;
@@ -24886,8 +24901,9 @@
                 preset = { r: 0, g: 0, b: 20, a: alpha };
             }
 
-            // Skip if no darkness and no player light
-            if (preset.a === 0 && !lighting.playerLight) return;
+            // Skip lighting entirely if darkness is negligible (< 1% alpha) and no player light
+            // This is a huge performance win during daytime!
+            if (preset.a < 0.01 && !lighting.playerLight) return;
 
             // Create/resize offscreen canvas for lighting
             if (!lightCanvas || lightCanvas.width !== canvas.width || lightCanvas.height !== canvas.height) {
@@ -28031,83 +28047,11 @@ Item Receive Display:
 
         // Original Y-sorting: Y position is primary, layer is tiebreaker
         function drawYSortedEntities(camX, camY, tileSize) {
-            const entities = [];
+            // OPTIMIZED: Draw tiles by row order (no sorting needed), interleave moving entities
+            // This avoids creating/sorting a 16k+ element array every frame!
 
-            // Add player
-            const playerGridY = Math.floor((player.y + player.height) / (gridSize * TILE_SCALE));
-            const playerLayer = playerLayerIndex || 1;
-            entities.push({
-                type: 'player',
-                sortY: (playerGridY + 1) * 1000 + playerLayer + 0.5
-            });
-
-            // Add NPCs
-            placedNpcs.forEach((placed, i) => {
-                // Only show NPCs on current map
-                if (placed.mapName && placed.mapName !== currentGameMap) return;
-
-                const state = npcRuntimeState[i];
-                if (!state) return;
-                const npc = npcsData[placed.npcIndex];
-                if (!npc) return;
-
-                // state.y is in grid pixels (unscaled), so divide by gridSize to get tile Y
-                // Add gridSize to get bottom of NPC (feet position) for proper Y-sorting
-                const npcGridY = Math.floor((state.y + gridSize) / gridSize);
-                entities.push({
-                    type: 'npc',
-                    npcIndex: i,
-                    sortY: (npcGridY + 1) * 1000 + playerLayer + 0.4 // Slightly before player at same Y
-                });
-            });
-
-            // Add items (interactive objects like chests)
-            placedItemsData.forEach((placed, i) => {
-                if (placed.mapName && placed.mapName !== currentGameMap) return;
-
-                const item = itemsData[placed.itemIndex];
-                if (!item) return;
-
-                const itemGridY = placed.y + 1; // Bottom of item tile for Y-sorting
-                entities.push({
-                    type: 'item',
-                    itemIndex: i,
-                    sortY: (itemGridY + 1) * 1000 + (placed.layer || 1) + 0.3 // Before NPCs at same Y
-                });
-            });
-
-            // Add static objects (multi-tile props from tilesets)
-            placedStaticObjectsData.forEach((placed, i) => {
-                if (placed.mapName && placed.mapName !== currentGameMap) return;
-
-                const obj = staticObjectsData[placed.objIndex];
-                if (!obj) return;
-
-                // Bottom of object for Y-sorting (height in tiles)
-                const objGridY = placed.y + (obj.height || 1);
-                entities.push({
-                    type: 'staticObj',
-                    placedIndex: i,
-                    sortY: (objGridY + 1) * 1000 + (placed.layer || 1) + 0.2 // Before items at same Y
-                });
-            });
-
-            // Add other multiplayer players (only on same map, not in tavern)
-            otherPlayers.forEach((other, odId) => {
-                // Skip players in tavern or on different map
-                if (other.inTavern || other.currentMap !== currentGameMap) return;
-
-                const otherGridY = Math.floor((other.y + player.height) / (gridSize * TILE_SCALE));
-                entities.push({
-                    type: 'otherPlayer',
-                    playerId: odId,
-                    sortY: (otherGridY + 1) * 1000 + playerLayer + 0.45 // Between NPCs and player
-                });
-            });
-
-            // Add tiles from all layers 1+
-            // Calculate visible tile range with generous buffer (10 tiles) to prevent pop-in
-            const buffer = 10;
+            // Calculate visible tile range (reduced buffer from 10 to 4 for performance)
+            const buffer = 4;
             const viewWidth = canvas.width / cameraZoom;
             const viewHeight = canvas.height / cameraZoom;
             const startX = Math.max(0, Math.floor(camX / tileSize) - buffer);
@@ -28115,78 +28059,152 @@ Item Receive Display:
             const startY = Math.max(0, Math.floor(camY / tileSize) - buffer);
             const endY = Math.min(mapRows, Math.ceil((camY + viewHeight) / tileSize) + buffer);
 
-            for (let li = 1; li < layers.length; li++) {
-                if (!layerVisibility[li]) continue;
-                const layer = layers[li];
-                if (!layer) continue;
+            const playerLayer = playerLayerIndex || 1;
 
-                for (let y = startY; y < endY; y++) {
-                    if (!layer[y]) continue;
+            // Collect only MOVING entities (not tiles!) - much smaller array
+            const movingEntities = [];
+
+            // Add player
+            const playerGridY = Math.floor((player.y + player.height) / (gridSize * TILE_SCALE));
+            movingEntities.push({
+                type: 'player',
+                gridY: playerGridY,
+                subSort: 0.5
+            });
+
+            // Add NPCs on current map
+            for (let i = 0; i < placedNpcs.length; i++) {
+                const placed = placedNpcs[i];
+                if (placed.mapName && placed.mapName !== currentGameMap) continue;
+                const state = npcRuntimeState[i];
+                if (!state) continue;
+                const npc = npcsData[placed.npcIndex];
+                if (!npc) continue;
+
+                const npcGridY = Math.floor((state.y + gridSize) / gridSize);
+                movingEntities.push({
+                    type: 'npc',
+                    npcIndex: i,
+                    gridY: npcGridY,
+                    subSort: 0.4
+                });
+            }
+
+            // Add items on current map
+            for (let i = 0; i < placedItemsData.length; i++) {
+                const placed = placedItemsData[i];
+                if (placed.mapName && placed.mapName !== currentGameMap) continue;
+                const item = itemsData[placed.itemIndex];
+                if (!item) continue;
+
+                movingEntities.push({
+                    type: 'item',
+                    itemIndex: i,
+                    gridY: placed.y + 1,
+                    subSort: 0.3
+                });
+            }
+
+            // Add static objects on current map
+            for (let i = 0; i < placedStaticObjectsData.length; i++) {
+                const placed = placedStaticObjectsData[i];
+                if (placed.mapName && placed.mapName !== currentGameMap) continue;
+                const obj = staticObjectsData[placed.objIndex];
+                if (!obj) continue;
+
+                movingEntities.push({
+                    type: 'staticObj',
+                    placedIndex: i,
+                    gridY: placed.y + (obj.height || 1),
+                    subSort: 0.2
+                });
+            }
+
+            // Add other multiplayer players
+            otherPlayers.forEach((other, odId) => {
+                if (other.inTavern || other.currentMap !== currentGameMap) return;
+                const otherGridY = Math.floor((other.y + player.height) / (gridSize * TILE_SCALE));
+                movingEntities.push({
+                    type: 'otherPlayer',
+                    playerId: odId,
+                    gridY: otherGridY,
+                    subSort: 0.45
+                });
+            });
+
+            // Sort only the moving entities (typically < 50 items, not 16k+)
+            movingEntities.sort((a, b) => {
+                if (a.gridY !== b.gridY) return a.gridY - b.gridY;
+                return a.subSort - b.subSort;
+            });
+
+            // Track which moving entities we've drawn
+            let entityIndex = 0;
+            let count = 0;
+
+            // Draw row by row, interleaving tiles and entities
+            for (let y = startY; y < endY; y++) {
+                // Draw all visible layers at this row (tiles are static, don't need sorting)
+                for (let li = 1; li < layers.length; li++) {
+                    if (!layerVisibility[li]) continue;
+                    const layer = layers[li];
+                    if (!layer || !layer[y]) continue;
+
                     for (let x = startX; x < endX; x++) {
                         const cell = layer[y][x];
                         if (!cell) continue;
 
-                        const px = x * tileSize - camX;
-                        const py = y * tileSize - camY;
-
-                        // Y is primary, layer is tiebreaker
-                        const baseSortY = (y + 1) * 1000 + li;
-
                         if (cell.type === 'tile') {
                             const key = (cell.tilesetIndex || 0) + ':' + cell.x + ',' + cell.y;
                             const splitData = tileSplitLines[key];
-                            const hasSplit = splitData !== undefined && splitData !== null;
-
-                            entities.push({
-                                type: hasSplit ? 'trunk' : 'tile',
-                                cell, x, y, layer: li,
-                                sortY: baseSortY
-                            });
+                            if (splitData !== undefined && splitData !== null) {
+                                drawTileTrunk(cell, x, y, camX, camY, tileSize);
+                            } else {
+                                drawTileFull(cell, x, y, camX, camY, tileSize);
+                            }
+                            count++;
                         } else if (cell.type === 'animTile') {
                             const propData = animatedPropsData[cell.propIndex];
                             const hasSplit = propData && propData.splitLine !== null && propData.splitLine !== undefined &&
                                 (typeof propData.splitLine === 'number' ||
                                  (typeof propData.splitLine === 'object' && Object.keys(propData.splitLine).length > 0));
-
-                            entities.push({
-                                type: hasSplit ? 'animTrunk' : 'animTile',
-                                cell, x, y, layer: li,
-                                sortY: baseSortY
-                            });
+                            if (hasSplit) {
+                                drawAnimTileTrunk(cell, x, y, li, camX, camY, tileSize);
+                            } else {
+                                drawAnimTile(cell, x, y, li, camX, camY, tileSize);
+                            }
+                            count++;
                         }
                     }
                 }
+
+                // After drawing tiles for this row, draw any entities at this Y
+                while (entityIndex < movingEntities.length && movingEntities[entityIndex].gridY <= y) {
+                    const e = movingEntities[entityIndex];
+                    if (e.type === 'player') {
+                        drawPlayer();
+                    } else if (e.type === 'otherPlayer') {
+                        drawOtherPlayer(e.playerId, camX, camY);
+                    } else if (e.type === 'npc') {
+                        drawNPC(e.npcIndex, camX, camY, tileSize);
+                    } else if (e.type === 'item') {
+                        drawItem(e.itemIndex, camX, camY, tileSize);
+                    } else if (e.type === 'staticObj') {
+                        drawStaticObject(e.placedIndex, camX, camY, tileSize);
+                    }
+                    entityIndex++;
+                }
             }
 
-            // Sort by Y, then layer
-            entities.sort((a, b) => a.sortY - b.sortY);
-
-            // Draw in sorted order
-            let count = 0;
-            for (const e of entities) {
-                if (e.type === 'player') {
-                    drawPlayer();
-                } else if (e.type === 'otherPlayer') {
-                    drawOtherPlayer(e.playerId, camX, camY);
-                } else if (e.type === 'npc') {
-                    drawNPC(e.npcIndex, camX, camY, tileSize);
-                } else if (e.type === 'item') {
-                    drawItem(e.itemIndex, camX, camY, tileSize);
-                } else if (e.type === 'staticObj') {
-                    drawStaticObject(e.placedIndex, camX, camY, tileSize);
-                } else if (e.type === 'trunk') {
-                    drawTileTrunk(e.cell, e.x, e.y, camX, camY, tileSize);
-                    count++;
-                } else if (e.type === 'animTrunk') {
-                    drawAnimTileTrunk(e.cell, e.x, e.y, e.layer, camX, camY, tileSize);
-                    count++;
-                } else if (e.type === 'animTile') {
-                    drawAnimTile(e.cell, e.x, e.y, e.layer, camX, camY, tileSize);
-                    count++;
-                } else {
-                    drawTileFull(e.cell, e.x, e.y, camX, camY, tileSize);
-                    count++;
-                }
+            // Draw any remaining entities below the visible area
+            while (entityIndex < movingEntities.length) {
+                const e = movingEntities[entityIndex];
+                if (e.type === 'player') drawPlayer();
+                else if (e.type === 'otherPlayer') drawOtherPlayer(e.playerId, camX, camY);
+                else if (e.type === 'npc') drawNPC(e.npcIndex, camX, camY, tileSize);
+                else if (e.type === 'item') drawItem(e.itemIndex, camX, camY, tileSize);
+                else if (e.type === 'staticObj') drawStaticObject(e.placedIndex, camX, camY, tileSize);
+                entityIndex++;
             }
 
             return count;
@@ -28194,8 +28212,8 @@ Item Receive Display:
 
         // Redraw content from higher layers that overlaps with canopy from lower layers
         function redrawHigherLayerContent(camX, camY, tileSize) {
-            // Calculate visible tile range with generous buffer (10 tiles)
-            const buffer = 10;
+            // Calculate visible tile range (reduced buffer from 10 to 4 for performance)
+            const buffer = 4;
             const viewWidth = canvas.width / cameraZoom;
             const viewHeight = canvas.height / cameraZoom;
             const startX = Math.max(0, Math.floor(camX / tileSize) - buffer);
