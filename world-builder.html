@@ -22716,8 +22716,8 @@
             const originalHealth = player.health;
 
             // Collect NPC positions to visit during warmup (triggers AI code paths)
-            // Calculate tileSize here since it's a local var in other functions
-            const warmupTileSize = gridSize * TILE_SCALE;
+            // Calculate tileSize here - TILE_SCALE (4) isn't defined yet at this point
+            const warmupTileSize = gridSize * 4;
             const npcPositions = placedNpcs.map(npc => ({
                 x: npc.x * warmupTileSize + warmupTileSize / 2,
                 y: npc.y * warmupTileSize + warmupTileSize / 2
