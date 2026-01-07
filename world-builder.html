@@ -22693,9 +22693,10 @@
         let gameStarted = false;
 
         // Warmup system - run simulated frames to JIT compile hot code paths
+        // IMPORTANT: Must use requestAnimationFrame (not setTimeout) so JIT compiles the same code path!
         let isWarmingUp = false;
         let warmupFrames = 0;
-        const WARMUP_FRAME_COUNT = 180; // ~3 seconds of warmup at 60fps
+        const WARMUP_FRAME_COUNT = 360; // ~6 seconds at 60fps - enough for V8 to fully optimize
 
         function runWarmup() {
             isWarmingUp = true;
@@ -22709,10 +22710,17 @@
                 loadingEl.innerHTML = '<div style="color:#fff;font-size:18px;">Optimizing...</div>';
             }
 
+            // Save original player position to restore after warmup
+            const originalX = player.x;
+            const originalY = player.y;
+
             function warmupLoop() {
                 if (warmupFrames >= WARMUP_FRAME_COUNT) {
-                    // Warmup complete
+                    // Warmup complete - restore player position
                     isWarmingUp = false;
+                    player.x = originalX;
+                    player.y = originalY;
+                    player.keys = { up: false, down: false, left: false, right: false };
                     console.log('[WARMUP] Complete after', warmupFrames, 'frames');
 
                     // Hide loading and start real game
@@ -22722,11 +22730,12 @@
                 }
 
                 // Simulate player movement to warm up collision/movement code
+                // Change direction every 30 frames for better coverage
                 const dirs = ['up', 'down', 'left', 'right'];
-                const dir = dirs[Math.floor(warmupFrames / 15) % 4];
+                const dir = dirs[Math.floor(warmupFrames / 30) % 4];
                 player.keys = { up: dir === 'up', down: dir === 'down', left: dir === 'left', right: dir === 'right' };
 
-                // Run one frame of game logic
+                // Run one frame of game logic (same as real game loop)
                 updateDayCycle();
                 update();
                 updateNPCs();
@@ -22745,16 +22754,17 @@
                 warmupFrames++;
 
                 // Update loading text periodically
-                if (warmupFrames % 30 === 0 && loadingEl) {
+                if (warmupFrames % 60 === 0 && loadingEl) {
                     const pct = Math.round((warmupFrames / WARMUP_FRAME_COUNT) * 100);
                     loadingEl.innerHTML = '<div style="color:#fff;font-size:18px;">Optimizing... ' + pct + '%</div>';
                 }
 
-                // Use setTimeout(0) instead of rAF for faster warmup
-                setTimeout(warmupLoop, 0);
+                // Use requestAnimationFrame - MUST match real game loop call path for JIT!
+                requestAnimationFrame(warmupLoop);
             }
 
-            warmupLoop();
+            // Start with rAF to match real game loop
+            requestAnimationFrame(warmupLoop);
         }
 
         function checkAllImagesLoaded() {
