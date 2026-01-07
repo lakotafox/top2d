@@ -17008,7 +17008,22 @@
         let editingShopIndex = -1;
 
         function openShopEditor(index) {
-            if (index < 0 || index >= shops.length) return;
+            // Create new shop if index is -1
+            if (index < 0) {
+                const newShop = {
+                    id: 'shop_' + Date.now(),
+                    name: 'New Shop',
+                    inventory: [],
+                    buyList: [],
+                    defaultSellRate: 50,
+                    greetingDialogId: ''
+                };
+                shops.push(newShop);
+                index = shops.length - 1;
+                broadcastEdit({ editType: 'addShop', shop: newShop });
+                updateShopList();
+            }
+            if (index >= shops.length) return;
             editingShopIndex = index;
             const shop = shops[index];
 
@@ -23412,8 +23427,8 @@
         setTimeout(updateQuestTracker, 100);
 
         // Shop system data
-        shopsData = projectData.shops || [];
-        playerGold = projectData.startingGold !== undefined ? projectData.startingGold : 100;
+        let shopsData = projectData.shops || [];
+        let playerGold = projectData.startingGold !== undefined ? projectData.startingGold : 100;
         console.log('[SHOP] Loaded', shopsData.length, 'shops, starting gold:', playerGold);
 
         // Track all images that need to load before starting the game
@@ -24681,12 +24696,12 @@
         let selectedHotbarSlot = 0; // Currently selected hotbar slot (0-9)
 
         // === SHOP SYSTEM (Test Game) ===
-        let playerGold = 0;         // Player's gold currency
+        // playerGold already loaded above with projectData.startingGold
         let shopOpen = false;       // Is shop UI open
         let activeShopIndex = -1;   // Index of currently open shop
         let shopTab = 'buy';        // 'buy' or 'sell'
         let shopSelectedIndex = 0;  // Selected item in shop list
-        let shopsData = [];         // Shop definitions from project
+        // shopsData already loaded above with projectData.shops
 
         // Initialize empty inventory slots
         function initInventory() {
