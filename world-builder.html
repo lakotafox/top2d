@@ -22696,12 +22696,12 @@
         // IMPORTANT: Must use requestAnimationFrame (not setTimeout) so JIT compiles the same code path!
         let isWarmingUp = false;
         let warmupFrames = 0;
-        const WARMUP_FRAME_COUNT = 360; // ~6 seconds at 60fps - enough for V8 to fully optimize
+        const WARMUP_FRAME_COUNT = 900; // ~15 seconds at 60fps - comprehensive warmup
 
         function runWarmup() {
             isWarmingUp = true;
             warmupFrames = 0;
-            console.log('[WARMUP] Starting JIT warmup phase...');
+            console.log('[WARMUP] Starting comprehensive JIT warmup phase...');
 
             // Show warmup indicator
             const loadingEl = document.getElementById('loadingScreen');
@@ -22710,17 +22710,28 @@
                 loadingEl.innerHTML = '<div style="color:#fff;font-size:18px;">Optimizing...</div>';
             }
 
-            // Save original player position to restore after warmup
+            // Save original player state to restore after warmup
             const originalX = player.x;
             const originalY = player.y;
+            const originalHealth = player.health;
+
+            // Collect NPC positions to visit during warmup (triggers AI code paths)
+            const npcPositions = placedNpcs.map(npc => ({
+                x: npc.x * tileSize + tileSize / 2,
+                y: npc.y * tileSize + tileSize / 2
+            }));
 
             function warmupLoop() {
                 if (warmupFrames >= WARMUP_FRAME_COUNT) {
-                    // Warmup complete - restore player position
+                    // Warmup complete - restore player state
                     isWarmingUp = false;
                     player.x = originalX;
                     player.y = originalY;
+                    player.health = originalHealth;
                     player.keys = { up: false, down: false, left: false, right: false };
+                    player.invulnerable = false;
+                    player.knockbackVx = 0;
+                    player.knockbackVy = 0;
                     console.log('[WARMUP] Complete after', warmupFrames, 'frames');
 
                     // Hide loading and start real game
@@ -22729,11 +22740,34 @@
                     return;
                 }
 
-                // Simulate player movement to warm up collision/movement code
-                // Change direction every 30 frames for better coverage
-                const dirs = ['up', 'down', 'left', 'right'];
-                const dir = dirs[Math.floor(warmupFrames / 30) % 4];
-                player.keys = { up: dir === 'up', down: dir === 'down', left: dir === 'left', right: dir === 'right' };
+                // Phase 1 (0-300): Basic movement in all directions
+                // Phase 2 (300-600): Visit NPC positions to trigger AI code
+                // Phase 3 (600-900): Stress test with rapid direction changes
+
+                const phase = Math.floor(warmupFrames / 300);
+
+                if (phase === 0) {
+                    // Basic movement - change direction every 30 frames
+                    const dirs = ['up', 'down', 'left', 'right'];
+                    const dir = dirs[Math.floor(warmupFrames / 30) % 4];
+                    player.keys = { up: dir === 'up', down: dir === 'down', left: dir === 'left', right: dir === 'right' };
+                } else if (phase === 1 && npcPositions.length > 0) {
+                    // Teleport near NPCs to trigger vision/chase/combat AI
+                    const npcIndex = Math.floor((warmupFrames - 300) / 50) % npcPositions.length;
+                    const targetNpc = npcPositions[npcIndex];
+                    // Position player near (but not on) the NPC
+                    player.x = targetNpc.x + 40;
+                    player.y = targetNpc.y + 40;
+                    // Simulate movement toward NPC
+                    player.keys = { up: false, down: false, left: true, right: false };
+                    // Make player invulnerable during warmup so we don't die
+                    player.invulnerable = true;
+                } else {
+                    // Phase 3: Rapid direction changes to stress test
+                    const dirs = ['up', 'down', 'left', 'right'];
+                    const dir = dirs[Math.floor(warmupFrames / 5) % 4]; // Change every 5 frames
+                    player.keys = { up: dir === 'up', down: dir === 'down', left: dir === 'left', right: dir === 'right' };
+                }
 
                 // Run one frame of game logic (same as real game loop)
                 updateDayCycle();
@@ -22743,18 +22777,23 @@
                 // Run draw to warm up rendering code
                 draw();
 
-                // Every 60 frames, briefly enable lighting to warm that path too
-                if (warmupFrames % 60 === 30) {
+                // Cycle through different lighting levels to warm up all light code paths
+                if (warmupFrames % 30 === 0) {
                     const savedDarkness = manualDarkness;
-                    manualDarkness = 50;
+                    manualDarkness = (warmupFrames % 90 === 0) ? 80 : (warmupFrames % 60 === 0) ? 40 : 20;
                     renderLighting();
                     manualDarkness = savedDarkness;
+                }
+
+                // Exercise trigger checking explicitly
+                if (warmupFrames % 10 === 0 && typeof checkTriggers === 'function') {
+                    try { checkTriggers(); } catch(e) {}
                 }
 
                 warmupFrames++;
 
                 // Update loading text periodically
-                if (warmupFrames % 60 === 0 && loadingEl) {
+                if (warmupFrames % 90 === 0 && loadingEl) {
                     const pct = Math.round((warmupFrames / WARMUP_FRAME_COUNT) * 100);
                     loadingEl.innerHTML = '<div style="color:#fff;font-size:18px;">Optimizing... ' + pct + '%</div>';
                 }
