@@ -24619,7 +24619,7 @@
                             state.frameTimer = 0;
                             state.frame = (state.frame + 1) % 4;
                         }
-                        return; // Skip normal path movement when chasing/attacking/returning
+                        continue; // Skip normal path movement when chasing/attacking/returning
                     }
                     // If idle, fall through to normal path movement (patrol behavior)
                 }
@@ -24635,7 +24635,7 @@
                         state.frameTimer = 0;
                         state.frame = (state.frame + 1) % 4;
                     }
-                    return;
+                    continue;
                 }
 
                 // Get current waypoint target
@@ -24643,7 +24643,7 @@
                 if (!waypoint) {
                     // Reset to start
                     state.currentWaypoint = 0;
-                    return;
+                    continue;
                 }
 
                 state.targetX = waypoint.x * gridSize;
@@ -24667,7 +24667,7 @@
                             state.frameTimer = 0;
                             state.frame = (state.frame + 1) % 4;
                         }
-                        return;
+                        continue;
                     } else {
                         // Idle complete - advance to next waypoint
                         state.idleUntil = 0;
@@ -27612,15 +27612,9 @@ Item Receive Display:
             ctx.save();
             ctx.scale(cameraZoom, cameraZoom);
 
-            // Sub-pixel camera offset for smooth scrolling without shimmer
-            // Use floor for consistent tile positions, translate by fractional part
-            const camX = Math.floor(camera.x);
-            const camY = Math.floor(camera.y);
-            const subPixelX = camera.x - camX;
-            const subPixelY = camera.y - camY;
-
-            // Translate by negative fractional offset so tiles scroll smoothly
-            ctx.translate(-subPixelX, -subPixelY);
+            // Draw tiles - use Math.round for camera to prevent seams
+            const camX = Math.round(camera.x);
+            const camY = Math.round(camera.y);
 
             // === 3-PASS RENDERING FOR Y-SORTING ===
             // Performance profiling for render passes
