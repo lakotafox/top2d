@@ -21998,8 +21998,10 @@
         let networkRecording = false;
         let networkLog = [];
         let frameTimeLog = [];
+        let perfLog = [];  // Detailed per-frame performance breakdown
         let recordStartTime = 0;
         const MAX_LOG_ENTRIES = 500;
+        const MAX_PERF_ENTRIES = 300;  // ~5 seconds at 60fps
 
         function toggleNetworkRecording() {
             networkRecording = !networkRecording;
@@ -22011,18 +22013,20 @@
                 // Start recording
                 networkLog = [];
                 frameTimeLog = [];
+                perfLog = [];
                 recordStartTime = performance.now();
                 btn.textContent = '⏹ Stop';
                 btn.style.background = '#a33';
                 copyBtn.disabled = true;
-                status.textContent = 'Recording... (0 events)';
+                status.textContent = 'Recording... (0 frames)';
                 status.style.color = '#f88';
             } else {
                 // Stop recording
                 btn.textContent = '🔴 Record';
                 btn.style.background = '#533';
                 copyBtn.disabled = false;
-                status.textContent = 'Recorded ' + networkLog.length + ' net events, ' + frameTimeLog.length + ' frames';
+                const avgFps = perfLog.length > 0 ? Math.round(perfLog.reduce((a, b) => a + b.fps, 0) / perfLog.length) : 0;
+                status.textContent = perfLog.length + ' frames, avg ' + avgFps + ' FPS';
                 status.style.color = '#8f8';
             }
         }
@@ -22063,19 +22067,48 @@
             }
         }
 
+        // Log detailed per-frame performance breakdown
+        function logPerfFrame(data) {
+            if (!networkRecording) return;
+            if (perfLog.length >= MAX_PERF_ENTRIES) return;
+
+            const now = performance.now();
+            const elapsed = now - recordStartTime;
+
+            perfLog.push({
+                t: Math.round(elapsed),
+                ...data
+            });
+
+            // Update status
+            const status = document.getElementById('recordStatus');
+            if (status) status.textContent = 'Recording... (' + perfLog.length + ' frames)';
+        }
+
         function copyNetworkLog() {
+            // Calculate performance summary
+            const avgFps = perfLog.length > 0 ? Math.round(perfLog.reduce((a, b) => a + b.fps, 0) / perfLog.length) : 0;
+            const avgFrameTime = perfLog.length > 0 ? (perfLog.reduce((a, b) => a + b.total, 0) / perfLog.length).toFixed(1) : 0;
+            const avgUpdate = perfLog.length > 0 ? (perfLog.reduce((a, b) => a + (b.update || 0), 0) / perfLog.length).toFixed(1) : 0;
+            const avgDraw = perfLog.length > 0 ? (perfLog.reduce((a, b) => a + (b.draw || 0), 0) / perfLog.length).toFixed(1) : 0;
+            const avgNpc = perfLog.length > 0 ? (perfLog.reduce((a, b) => a + (b.npc || 0), 0) / perfLog.length).toFixed(1) : 0;
+            const avgLight = perfLog.length > 0 ? (perfLog.reduce((a, b) => a + (b.light || 0), 0) / perfLog.length).toFixed(1) : 0;
+
             const report = {
                 recorded: new Date().toISOString(),
                 duration: ((performance.now() - recordStartTime) / 1000).toFixed(1) + 's',
-                networkEvents: networkLog,
-                slowFrames: frameTimeLog,
                 summary: {
-                    totalNetEvents: networkLog.length,
-                    totalSlowFrames: frameTimeLog.length,
-                    avgSlowFrameTime: frameTimeLog.length > 0
-                        ? (frameTimeLog.reduce((a, b) => a + parseFloat(b.ft), 0) / frameTimeLog.length).toFixed(1) + 'ms'
-                        : 'N/A'
-                }
+                    frames: perfLog.length,
+                    avgFps: avgFps,
+                    avgFrameTime: avgFrameTime + 'ms',
+                    avgUpdate: avgUpdate + 'ms',
+                    avgDraw: avgDraw + 'ms',
+                    avgNpc: avgNpc + 'ms',
+                    avgLight: avgLight + 'ms',
+                    netEvents: networkLog.length
+                },
+                frames: perfLog,
+                networkEvents: networkLog
             };
 
             const text = JSON.stringify(report, null, 2);
@@ -22084,13 +22117,13 @@
                 status.textContent = 'Copied to clipboard!';
                 status.style.color = '#4f8';
                 setTimeout(() => {
-                    status.textContent = 'Recorded ' + networkLog.length + ' net events, ' + frameTimeLog.length + ' frames';
+                    status.textContent = perfLog.length + ' frames, avg ' + avgFps + ' FPS';
                     status.style.color = '#8f8';
                 }, 2000);
             }).catch(err => {
                 console.error('Failed to copy:', err);
                 alert('Failed to copy. Check console for data.');
-                console.log('Network Log:', text);
+                console.log('Perf Log:', text);
             });
         }
 
@@ -26391,6 +26424,7 @@ Item Receive Display:
             const npcT0 = performance.now();
             updateNPCs();
             const npcT1 = performance.now();
+            window._lastNpcTime = npcT1 - npcT0;  // For perf recording
             if (npcT1 - npcT0 > 10) updatePerfLog += ' NPCs:' + (npcT1-npcT0).toFixed(0);
 
             // === SOUND UPDATES ===
@@ -27648,7 +27682,9 @@ Item Receive Display:
             }
 
             // === LIGHTING OVERLAY (drawn after all game content) ===
+            const lightT0 = performance.now();
             renderLighting();
+            window._lastLightTime = performance.now() - lightT0;  // For perf recording
 
             // Debug info - stacked properly from bottom up
             if (!uiHidden) {
@@ -29602,7 +29638,8 @@ Item Receive Display:
 
             // Performance profiling - log slow frames
             const perfStart = performance.now();
-            let perfLog = '';
+            let framePerfStr = '';
+            let updateTime = 0;
 
             // === FIXED TIMESTEP GAME LOGIC ===
             // Run game logic in fixed 16.67ms chunks for consistent behavior on all refresh rates
@@ -29632,7 +29669,8 @@ Item Receive Display:
                         const t0 = performance.now();
                         update();
                         const t1 = performance.now();
-                        if (t1 - t0 > 5) perfLog += ' update:' + (t1-t0).toFixed(0);
+                        updateTime += (t1 - t0);
+                        if (t1 - t0 > 5) framePerfStr += ' update:' + (t1-t0).toFixed(0);
                     }
                     // Check for walkover triggers after movement (but not during forced walk)
                     if (transitionPhase !== 'forceWalk' && !playerDying && !gameOverShown) {
@@ -29672,7 +29710,8 @@ Item Receive Display:
             const t2 = performance.now();
             draw();
             const t3 = performance.now();
-            if (t3 - t2 > 10) perfLog += ' draw:' + (t3-t2).toFixed(0);
+            const drawTime = t3 - t2;
+            if (drawTime > 10) framePerfStr += ' draw:' + drawTime.toFixed(0);
             drawTransitionOverlay();
 
             // Restore actual positions for next frame's calculations
@@ -29682,8 +29721,21 @@ Item Receive Display:
             player.y = actualPlayerY;
 
             const totalTime = performance.now() - perfStart;
+
+            // Log detailed perf data when recording
+            if (networkRecording) {
+                logPerfFrame({
+                    fps: currentFps,
+                    total: Math.round(totalTime),
+                    update: Math.round(updateTime),
+                    draw: Math.round(drawTime),
+                    npc: Math.round(window._lastNpcTime || 0),
+                    light: Math.round(window._lastLightTime || 0)
+                });
+            }
+
             if (totalTime > 20) {
-                console.log('[PERF]' + perfLog + ' total:' + totalTime.toFixed(0) + 'ms');
+                console.log('[PERF]' + framePerfStr + ' total:' + totalTime.toFixed(0) + 'ms');
             }
 
             requestAnimationFrame(gameLoop);
