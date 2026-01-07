@@ -9014,11 +9014,21 @@
                     const activeChar = playerCharacters[activePlayerIndex];
                     if (activeChar._spriteImg && activeChar._spriteImg.complete && activeChar._spriteImg.naturalWidth > 0) {
                         activeSprite = activeChar._spriteImg;
+                    } else {
+                        console.log('[DEBUG] No sprite for activeChar:', activePlayerIndex,
+                            '_spriteImg:', !!activeChar._spriteImg,
+                            'complete:', activeChar._spriteImg?.complete,
+                            'naturalWidth:', activeChar._spriteImg?.naturalWidth);
                     }
+                } else {
+                    console.log('[DEBUG] No active player char:', activePlayerIndex, 'chars:', playerCharacters.length);
                 }
                 // Fall back to playerSpriteImg if no active character sprite
                 if (!activeSprite && playerSpriteImg && playerSpriteImg.complete && playerSpriteImg.naturalWidth > 0) {
                     activeSprite = playerSpriteImg;
+                }
+                if (!activeSprite) {
+                    console.log('[DEBUG] No activeSprite available, will show cyan circle');
                 }
 
                 // Get active character's animations for proper frame display
