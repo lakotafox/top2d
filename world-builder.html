@@ -743,6 +743,8 @@
         #dialogMode:hover, #dialogMode.active { border-color: #f6a; color: #f6a; background: #1a0a12; }
         #questMode:hover, #questMode.active { border-color: #a8f; color: #a8f; background: #1a0a1f; }
         #questMode2:hover, #questMode2.active { border-color: #a8f; color: #a8f; background: #1a0a1f; }
+        #shopMode:hover, #shopMode.active { border-color: #fa0; color: #fa0; background: #1f1a0a; }
+        #shopMode2:hover, #shopMode2.active { border-color: #fa0; color: #fa0; background: #1f1a0a; }
 
         .prop-item {
             background: #333;
@@ -1427,6 +1429,7 @@
                 <button id="dialogMode" onclick="setMode('dialog')">Dialogs</button>
                 <button id="itemMode" onclick="setMode('item')">Items</button>
                 <button id="questMode" onclick="setMode('quest')">Quests</button>
+                <button id="shopMode" onclick="setMode('shop')">Shops</button>
             </div>
 
             <!-- TILE MODE -->
@@ -1713,6 +1716,18 @@
 
                         <div id="npcWaypointList" style="margin-top:10px; font-size:10px; color:#888; max-height:150px; overflow-y:auto;">
                             No waypoints
+                        </div>
+                    </div>
+
+                    <!-- Shop Attachment Section -->
+                    <div id="npcShopSection" style="margin-bottom:10px; padding:8px; background:#2a2a1a; border:1px solid #fa0; border-radius:4px;">
+                        <div style="font-size:11px; color:#fa0; font-weight:bold; margin-bottom:6px;">Shop:</div>
+                        <div id="npcShopInfo" style="font-size:10px; color:#ddd; margin-bottom:6px;">(No shop attached)</div>
+                        <div style="display:flex; gap:5px;">
+                            <select id="npcShopSelect" style="flex:1; font-size:10px;">
+                                <option value="-1">(None)</option>
+                            </select>
+                            <button onclick="attachShopToNpc()" style="padding:4px 8px; font-size:10px; background:#4a7c59;">Set</button>
                         </div>
                     </div>
 
@@ -2257,6 +2272,16 @@
                             </div>
                         </div>
 
+                        <!-- Decline Quest Dialog -->
+                        <div style="margin-bottom:5px;">
+                            <label style="font-size:10px; color:#f88;">If Declined:</label>
+                            <div style="display:flex; gap:4px;">
+                                <select id="questDeclineDialog" onchange="updateQuestField('declineDialogId', this.value)" style="flex:1; font-size:10px;"></select>
+                                <button onclick="openDialogPickerForQuest('decline')" class="retro-btn" style="padding:2px 6px; font-size:9px; background:#a44;">+</button>
+                            </div>
+                            <div style="font-size:8px; color:#888; margin-top:2px;">Shown if player declines via dialog choice</div>
+                        </div>
+
                         <div style="font-size:9px; color:#888; margin-top:8px; text-align:center;">
                             Dialogs shown when player talks to quest NPC
                         </div>
@@ -2329,6 +2354,58 @@
                     <button onclick="deleteCurrentQuest()" class="retro-btn retro-red" style="width:100%;">DELETE QUEST</button>
                 </div>
             </div>
+
+            <!-- SHOP MODE -->
+            <div id="shopModeContent" style="display:none;">
+                <h3 style="color:#fa0;">Shops</h3>
+
+                <!-- Shop List -->
+                <div style="background:#1a2a2a; padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid #fa0;">
+                    <label style="font-size:11px; color:#fa0; display:block; margin-bottom:8px;">Your Shops:</label>
+                    <div id="shopList" style="max-height:150px; overflow-y:auto; margin-bottom:10px;">
+                        <div style="color:#666; font-size:12px; text-align:center; padding:20px;">No shops created yet</div>
+                    </div>
+                    <button onclick="openShopEditor(-1)" class="retro-btn" style="width:100%; padding:8px; background:linear-gradient(135deg, #fa0, #c80); color:#000; font-weight:bold;">+ NEW SHOP</button>
+                </div>
+
+                <!-- Instructions -->
+                <div style="background:#222; padding:12px; border-radius:4px; margin-bottom:15px;">
+                    <p style="font-size:11px; color:#aaa; line-height:1.6; margin:0;">
+                        <b style="color:#fa0;">1.</b> Create a shop above<br>
+                        <b style="color:#fa0;">2.</b> Select shop, click <b style="color:#88f;">NPC</b> to attach<br>
+                        <b style="color:#fa0;">3.</b> Players interact with NPC to open shop
+                    </p>
+                </div>
+
+                <!-- Starting Gold -->
+                <div style="background:#2a2a1a; padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid #fa0;">
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Starting Gold:</label>
+                    <input type="number" id="startingGoldInput" value="100" min="0"
+                           onchange="startingGold = parseInt(this.value) || 0"
+                           style="width:100%; margin-top:4px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                    <div style="font-size:9px; color:#888; margin-top:4px;">Gold player starts with</div>
+                </div>
+
+                <!-- Selected Shop Info -->
+                <div id="selectedShopInfo" style="display:none; background:#1a1a2a; padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid #88f;">
+                    <label style="font-size:11px; color:#88f; font-weight:bold;">Selected: <span id="selectedShopName">None</span></label>
+                    <div style="margin-top:8px; display:flex; gap:5px;">
+                        <button onclick="openShopEditor(selectedShopIndex)" class="retro-btn" style="flex:1; padding:6px; font-size:10px; background:#484;">Edit</button>
+                        <button onclick="deleteShop(selectedShopIndex)" class="retro-btn" style="padding:6px 10px; font-size:10px; background:#844;">✕</button>
+                    </div>
+                    <div style="margin-top:8px; font-size:10px; color:#aaa;">
+                        Click an NPC on the map to attach this shop
+                    </div>
+                </div>
+
+                <!-- NPCs with Shops -->
+                <div style="background:#1a2a1a; padding:10px; border-radius:4px;">
+                    <label style="font-size:11px; color:#4a8; font-weight:bold;">NPCs with Shops:</label>
+                    <div id="npcShopList" style="max-height:100px; overflow-y:auto; margin-top:8px;">
+                        <div style="color:#666; font-size:11px; text-align:center; padding:10px;">No NPCs have shops</div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="resize-handle" id="sidebarResize"></div>
@@ -2348,6 +2425,7 @@
                     <button id="dialogMode2" onclick="setMode('dialog')">Dialog</button>
                     <button id="itemMode2" onclick="setMode('item')">Items</button>
                     <button id="questMode2" onclick="setMode('quest')">Quest</button>
+                    <button id="shopMode2" onclick="setMode('shop')">Shop</button>
                 </div>
 
                 <!-- Map Selector in Toolbar -->
@@ -3186,15 +3264,30 @@
                     </div>
 
                     <!-- Current Page Editor -->
-                    <div style="background:#1a1a2e; padding:12px; border-radius:8px; flex:1;">
+                    <div style="background:#1a1a2e; padding:12px; border-radius:8px; flex:1; overflow-y:auto;">
                         <div style="margin-bottom:8px;">
                             <label style="font-size:10px; color:#aaa; display:block; margin-bottom:4px;">Speaker Name:</label>
                             <input type="text" id="dialogSpeaker" placeholder="NPC name or leave empty" style="width:100%; padding:6px;" onkeyup="updateDialogPreview()">
                         </div>
-                        <div>
+                        <div style="margin-bottom:8px;">
                             <label style="font-size:10px; color:#aaa; display:block; margin-bottom:4px;">Text:</label>
-                            <textarea id="dialogTextInput" rows="5" placeholder="Enter dialog text..." style="width:100%; padding:6px; resize:vertical;" onkeyup="updateDialogPreview()"></textarea>
+                            <textarea id="dialogTextInput" rows="3" placeholder="Enter dialog text..." style="width:100%; padding:6px; resize:vertical;" onkeyup="updateDialogPreview()"></textarea>
                         </div>
+
+                        <!-- Dialog Choices Section -->
+                        <div style="background:#2a2a1a; padding:8px; border-radius:4px; border:1px solid #a80;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <label style="font-size:10px; color:#fa0; font-weight:bold;">Choices (optional):</label>
+                                <button onclick="addDialogChoice()" style="padding:2px 6px; font-size:9px; background:#4a7c59;">+ Add</button>
+                            </div>
+                            <div id="dialogChoicesList" style="font-size:10px; color:#888;">
+                                No choices (auto-advance)
+                            </div>
+                            <div style="font-size:8px; color:#666; margin-top:4px;">
+                                Add choices for Accept/Decline quests or branching paths
+                            </div>
+                        </div>
+
                         <button onclick="removeCurrentDialogPage()" style="margin-top:6px; padding:4px 8px; background:#644; font-size:10px;">Delete Page</button>
                     </div>
                 </div>
@@ -3486,6 +3579,78 @@
         </div>
     </div>
 
+    <!-- Shop Editor Modal -->
+    <div class="anim-modal" id="shopModal">
+        <div class="anim-modal-content" style="max-width:700px; max-height:90vh;">
+            <div style="display:flex; height:100%;">
+                <!-- Left: Shop Settings -->
+                <div style="width:280px; padding:15px; border-right:1px solid #444; overflow-y:auto;">
+                    <h2 style="margin-top:0; color:#fa0;">Shop Settings</h2>
+
+                    <div style="margin-bottom:15px;">
+                        <label style="font-size:11px; color:#888;">Shop Name:</label>
+                        <input type="text" id="shopEditorName" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;" placeholder="General Store">
+                    </div>
+
+                    <div style="margin-bottom:15px;">
+                        <label style="font-size:11px; color:#888;">Greeting Dialog (optional):</label>
+                        <select id="shopEditorGreeting" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                            <option value="">None</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:15px;">
+                        <label style="font-size:11px; color:#888;">Default Sell Rate (%):</label>
+                        <input type="number" id="shopEditorSellRate" value="50" min="0" max="100" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                        <p style="font-size:9px; color:#666; margin:3px 0 0 0;">% of buy price shop pays for unlisted items (0 = don't accept)</p>
+                    </div>
+                </div>
+
+                <!-- Right: Inventory Management -->
+                <div style="flex:1; padding:15px; overflow-y:auto;">
+                    <!-- Items For Sale -->
+                    <div style="margin-bottom:20px;">
+                        <h3 style="margin:0 0 10px 0; color:#4f8;">Shop Inventory (For Sale)</h3>
+                        <div id="shopInventoryList" style="max-height:150px; overflow-y:auto; margin-bottom:10px; background:#1a2a1a; padding:8px; border-radius:4px; min-height:60px;">
+                            <div style="color:#666; font-size:11px; text-align:center; padding:15px;">No items for sale</div>
+                        </div>
+                        <div style="display:flex; gap:5px;">
+                            <select id="shopAddItemSelect" style="flex:1; padding:5px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                                <option value="">Select item...</option>
+                            </select>
+                            <input type="number" id="shopAddItemPrice" placeholder="Price" style="width:70px; padding:5px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;" min="1" value="10">
+                            <input type="number" id="shopAddItemStock" placeholder="Stock" style="width:60px; padding:5px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;" min="-1" value="-1" title="-1 = unlimited">
+                            <button onclick="shopAddInventoryItem()" style="padding:5px 10px; background:#4a4; color:#fff; border:none; border-radius:3px; cursor:pointer;">+Add</button>
+                        </div>
+                        <div style="font-size:9px; color:#666; margin-top:3px;">Stock: -1 = unlimited</div>
+                    </div>
+
+                    <!-- Buy List (items shop accepts) -->
+                    <div>
+                        <h3 style="margin:0 0 10px 0; color:#f84;">Buy List (Shop Accepts)</h3>
+                        <p style="font-size:10px; color:#888; margin:0 0 8px 0;">Items the shop will buy from player:</p>
+                        <div id="shopBuyListDisplay" style="max-height:150px; overflow-y:auto; margin-bottom:10px; background:#2a1a1a; padding:8px; border-radius:4px; min-height:60px;">
+                            <div style="color:#666; font-size:11px; text-align:center; padding:15px;">Shop buys nothing (uses default rate)</div>
+                        </div>
+                        <div style="display:flex; gap:5px;">
+                            <select id="shopBuyItemSelect" style="flex:1; padding:5px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                                <option value="">Select item...</option>
+                            </select>
+                            <input type="number" id="shopBuyItemPrice" placeholder="Sell Price" style="width:80px; padding:5px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;" min="1" value="5">
+                            <button onclick="shopAddBuyListItem()" style="padding:5px 10px; background:#844; color:#fff; border:none; border-radius:3px; cursor:pointer;">+Add</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="padding:15px; border-top:1px solid #444; display:flex; justify-content:flex-end; gap:10px; background:#1a1a1a;">
+                <button onclick="closeShopEditor()" style="padding:8px 20px; background:#444; color:#fff; border:none; border-radius:3px; cursor:pointer;">Cancel</button>
+                <button onclick="saveShopEditor()" style="padding:8px 20px; background:linear-gradient(135deg, #fa0, #c80); color:#000; border:none; border-radius:3px; cursor:pointer; font-weight:bold;">Save Shop</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Door Target Map Modal -->
     <div id="doorMapModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:10000; justify-content:center; align-items:center;">
         <div style="background:#2a2a2a; padding:20px; border-radius:8px; min-width:300px; border:2px solid #4af;">
@@ -3761,6 +3926,12 @@
         let selectedQuestIndex = -1;
         let settingConditionMode = false;
         let settingConditionType = null;
+
+        // Shop System (builder side)
+        let shops = [];
+        let selectedShopIndex = -1;
+        let placedShops = []; // Shop objects placed on map: { x, y, mapName, shopIndex, trigger }
+        let startingGold = 100; // Initial gold for new games
 
         // NPC System
         let npcs = []; // Array of NPC definitions { name, spriteData, frameWidth, frameHeight, animations: {...}, fps }
@@ -5410,6 +5581,7 @@
             document.getElementById('dialogMode').classList.toggle('active', m === 'dialog');
             document.getElementById('itemMode').classList.toggle('active', m === 'item');
             document.getElementById('questMode').classList.toggle('active', m === 'quest');
+            document.getElementById('shopMode').classList.toggle('active', m === 'shop');
             // Toolbar tabs
             document.getElementById('tileMode2').classList.toggle('active', m === 'tile');
             if (document.getElementById('playerMode2')) document.getElementById('playerMode2').classList.toggle('active', m === 'player');
@@ -5422,6 +5594,7 @@
             document.getElementById('dialogMode2').classList.toggle('active', m === 'dialog');
             document.getElementById('itemMode2').classList.toggle('active', m === 'item');
             document.getElementById('questMode2').classList.toggle('active', m === 'quest');
+            document.getElementById('shopMode2').classList.toggle('active', m === 'shop');
             document.getElementById('tileModeContent').style.display = m === 'tile' ? 'block' : 'none';
             document.getElementById('playerModeContent').style.display = m === 'player' ? 'block' : 'none';
             document.getElementById('npcModeContent').style.display = m === 'npc' ? 'block' : 'none';
@@ -5433,9 +5606,10 @@
             document.getElementById('dialogModeContent').style.display = m === 'dialog' ? 'block' : 'none';
             document.getElementById('itemModeContent').style.display = m === 'item' ? 'block' : 'none';
             document.getElementById('questModeContent').style.display = m === 'quest' ? 'block' : 'none';
+            document.getElementById('shopModeContent').style.display = m === 'shop' ? 'block' : 'none';
 
             // Update mode label for mobile
-            const labels = { tile: 'Tiles', player: 'Player', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers', camera: 'Camera', dialog: 'Dialogs', item: 'Items', quest: 'Quests' };
+            const labels = { tile: 'Tiles', player: 'Player', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers', camera: 'Camera', dialog: 'Dialogs', item: 'Items', quest: 'Quests', shop: 'Shops' };
             document.getElementById('currentModeLabel').textContent = labels[m] || m;
 
             // Collapse menu on mobile after selection
@@ -5463,6 +5637,10 @@
             if (m === 'quest') {
                 renderQuestList();
                 updateQuestNpcDropdowns();
+            }
+            if (m === 'shop') {
+                updateShopList();
+                updateNpcShopList();
             }
 
             // Redraw map to show appropriate overlays
@@ -8687,6 +8865,26 @@
                         mapCtx.arc(iconX, iconY, 2, 0, Math.PI * 2);
                         mapCtx.arc(iconX + 4, iconY, 2, 0, Math.PI * 2);
                         mapCtx.fill();
+                    }
+
+                    // Draw shop indicator for NPCs with shops attached (in shop or npc mode)
+                    if ((mode === 'shop' || mode === 'npc') && placed.shopIndex >= 0 && placed.shopIndex < shops.length) {
+                        const iconX = px + 8;
+                        const iconY = py - 8;
+                        // Gold coin icon
+                        mapCtx.fillStyle = '#fa0';
+                        mapCtx.beginPath();
+                        mapCtx.arc(iconX, iconY, 8, 0, Math.PI * 2);
+                        mapCtx.fill();
+                        mapCtx.strokeStyle = '#c80';
+                        mapCtx.lineWidth = 2;
+                        mapCtx.stroke();
+                        // $ symbol
+                        mapCtx.fillStyle = '#640';
+                        mapCtx.font = 'bold 10px sans-serif';
+                        mapCtx.textAlign = 'center';
+                        mapCtx.textBaseline = 'middle';
+                        mapCtx.fillText('$', iconX, iconY);
                     }
                 });
             }
@@ -12516,6 +12714,14 @@
                 document.getElementById('npcScale').value = placed.scale || 1;
                 document.getElementById('npcScaleValue').textContent = (placed.scale || 1).toFixed(1) + 'x';
 
+                // Load shop attachment
+                updateNpcShopDropdown();
+                const shopSelect = document.getElementById('npcShopSelect');
+                if (shopSelect) {
+                    shopSelect.value = placed.shopIndex !== undefined ? placed.shopIndex : -1;
+                }
+                updateNpcShopInfo(placed);
+
                 // Show quest chain info for this NPC
                 updateNpcQuestChainPanel(placed);
             }
@@ -15898,6 +16104,7 @@
             const startSelect = document.getElementById('questStartDialog');
             const activeSelect = document.getElementById('questActiveDialog');
             const completeSelect = document.getElementById('questCompleteDialog');
+            const declineSelect = document.getElementById('questDeclineDialog');
             if (!startSelect || !activeSelect || !completeSelect) return;
 
             // Build dialog options
@@ -15910,6 +16117,7 @@
             startSelect.innerHTML = options;
             activeSelect.innerHTML = options;
             completeSelect.innerHTML = options;
+            if (declineSelect) declineSelect.innerHTML = options;
 
             // Set selected values from current quest
             const quest = quests[selectedQuestIndex];
@@ -15923,6 +16131,9 @@
                 if (quest.completeDialogId !== undefined && quest.completeDialogId !== '') {
                     completeSelect.value = quest.completeDialogId;
                 }
+                if (declineSelect && quest.declineDialogId !== undefined && quest.declineDialogId !== '') {
+                    declineSelect.value = quest.declineDialogId;
+                }
             }
         }
 
@@ -15934,7 +16145,7 @@
             // Open the dialog editor with a new dialog
             openDialogEditor(-1);
             // Show hint to user
-            const typeLabels = { start: 'Offer Quest', active: 'While Active', complete: 'Turn In' };
+            const typeLabels = { start: 'Offer Quest', active: 'While Active', complete: 'Turn In', decline: 'If Declined' };
             setTimeout(() => {
                 const nameInput = document.getElementById('dialogName');
                 if (nameInput) {
@@ -15951,7 +16162,8 @@
                 const fieldMap = {
                     'start': 'startDialogId',
                     'active': 'activeDialogId',
-                    'complete': 'completeDialogId'
+                    'complete': 'completeDialogId',
+                    'decline': 'declineDialogId'
                 };
                 const field = fieldMap[questDialogPickerType];
                 if (field) {
@@ -16674,6 +16886,376 @@
             }
         }
 
+        // ===== SHOP SYSTEM =====
+        function generateShopId() {
+            return 'shop_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function updateShopList() {
+            const container = document.getElementById('shopList');
+            if (!container) return;
+
+            if (shops.length === 0) {
+                container.innerHTML = '<div style="color:#666; font-size:11px; text-align:center; padding:10px;">No shops created</div>';
+                return;
+            }
+
+            container.innerHTML = shops.map((shop, i) => {
+                const isSelected = i === selectedShopIndex;
+                const itemCount = shop.inventory ? shop.inventory.length : 0;
+                const buyCount = shop.buyList ? shop.buyList.length : 0;
+                return '<div onclick="selectShop(' + i + ')" style="padding:8px; margin:3px 0; background:' + (isSelected ? '#4a5a2a' : '#333') + '; border-radius:4px; cursor:pointer; border:2px solid ' + (isSelected ? '#fa0' : 'transparent') + ';">' +
+                    '<div style="font-size:12px; color:#fff;">' + (shop.name || 'Unnamed Shop') + '</div>' +
+                    '<div style="font-size:10px; color:#888;">' + itemCount + ' item(s) for sale, buys ' + buyCount + ' type(s)</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        function selectShop(index) {
+            selectedShopIndex = index;
+            updateShopList();
+            updateSelectedShopInfo();
+        }
+
+        function updateSelectedShopInfo() {
+            const infoPanel = document.getElementById('selectedShopInfo');
+            if (!infoPanel) return;
+
+            if (selectedShopIndex < 0 || !shops[selectedShopIndex]) {
+                infoPanel.innerHTML = '<div style="color:#666; font-size:11px;">Select a shop above</div>';
+                return;
+            }
+
+            const shop = shops[selectedShopIndex];
+            infoPanel.innerHTML = `
+                <div style="margin-bottom:8px;">
+                    <strong style="color:#fa0;">${shop.name || 'Unnamed Shop'}</strong>
+                </div>
+                <div style="font-size:10px; color:#aaa; margin-bottom:8px;">
+                    ${shop.inventory?.length || 0} items for sale<br>
+                    Buys ${shop.buyList?.length || 0} item types<br>
+                    Default sell rate: ${shop.defaultSellRate || 50}%
+                </div>
+                <button onclick="openShopEditor(selectedShopIndex)" style="width:100%; padding:6px; margin-bottom:4px; background:#4a7c59;">Edit Shop</button>
+                <button onclick="deleteShop(selectedShopIndex)" style="width:100%; padding:6px; background:#a55;">Delete Shop</button>
+            `;
+        }
+
+        function updateNpcShopList() {
+            const container = document.getElementById('npcShopList');
+            if (!container) return;
+
+            const npcsWithShops = placedNpcs.filter((p, i) => p.shopIndex >= 0 && p.shopIndex < shops.length);
+
+            if (npcsWithShops.length === 0) {
+                container.innerHTML = '<div style="color:#666; font-size:10px;">No NPCs have shops attached</div>';
+                return;
+            }
+
+            container.innerHTML = npcsWithShops.map(placed => {
+                const npcDef = npcs[placed.npcIndex];
+                const shop = shops[placed.shopIndex];
+                return '<div style="padding:4px; margin:2px 0; background:#333; border-radius:3px; font-size:10px;">' +
+                    '<span style="color:#8cf;">' + (npcDef?.name || 'NPC') + '</span> → ' +
+                    '<span style="color:#fa0;">' + (shop?.name || 'Shop') + '</span>' +
+                '</div>';
+            }).join('');
+        }
+
+        function addNewShop() {
+            const newShop = {
+                id: generateShopId(),
+                name: 'Shop ' + (shops.length + 1),
+                inventory: [],      // Items for sale: { itemIndex, buyPrice, stock }
+                buyList: [],        // Items shop buys: { itemIndex, sellPrice }
+                defaultSellRate: 50,
+                greetingDialogId: ''
+            };
+            shops.push(newShop);
+            selectedShopIndex = shops.length - 1;
+            broadcastEdit({ editType: 'addShop', shop: newShop });
+            updateShopList();
+            updateSelectedShopInfo();
+            openShopEditor(selectedShopIndex);
+        }
+
+        function deleteShop(index) {
+            if (index < 0 || index >= shops.length) return;
+            if (!confirm('Delete this shop?')) return;
+
+            // Remove shop attachment from any NPCs
+            placedNpcs.forEach(p => {
+                if (p.shopIndex === index) {
+                    p.shopIndex = -1;
+                } else if (p.shopIndex > index) {
+                    p.shopIndex--;
+                }
+            });
+
+            // Remove from placedShops
+            placedShops = placedShops.filter(ps => ps.shopIndex !== index);
+            placedShops.forEach(ps => { if (ps.shopIndex > index) ps.shopIndex--; });
+
+            shops.splice(index, 1);
+            selectedShopIndex = -1;
+
+            broadcastEdit({ editType: 'deleteShop', index: index });
+            updateShopList();
+            updateSelectedShopInfo();
+            updateNpcShopList();
+        }
+
+        let editingShopIndex = -1;
+
+        function openShopEditor(index) {
+            if (index < 0 || index >= shops.length) return;
+            editingShopIndex = index;
+            const shop = shops[index];
+
+            document.getElementById('shopEditorName').value = shop.name || '';
+            document.getElementById('shopEditorSellRate').value = shop.defaultSellRate || 50;
+            updateShopGreetingDropdown();
+            document.getElementById('shopEditorGreeting').value = shop.greetingDialogId || '';
+
+            updateShopItemDropdowns();
+            renderShopInventoryEditor();
+            renderShopBuyListEditor();
+
+            document.getElementById('shopModal').style.display = 'flex';
+        }
+
+        function closeShopEditor() {
+            document.getElementById('shopModal').style.display = 'none';
+            editingShopIndex = -1;
+        }
+
+        function saveShopEditor() {
+            if (editingShopIndex < 0) return;
+            const shop = shops[editingShopIndex];
+
+            shop.name = document.getElementById('shopEditorName').value || 'Unnamed Shop';
+            shop.defaultSellRate = parseInt(document.getElementById('shopEditorSellRate').value) || 50;
+            shop.greetingDialogId = document.getElementById('shopEditorGreeting').value || '';
+
+            broadcastEdit({ editType: 'updateShop', index: editingShopIndex, shop: shop });
+            closeShopEditor();
+            updateShopList();
+            updateSelectedShopInfo();
+        }
+
+        function updateShopGreetingDropdown() {
+            const select = document.getElementById('shopEditorGreeting');
+            if (!select) return;
+
+            let options = '<option value="">(No greeting)</option>';
+            dialogs.forEach((d, i) => {
+                options += '<option value="' + (d.id || i) + '">' + (d.name || 'Dialog ' + i) + '</option>';
+            });
+            select.innerHTML = options;
+        }
+
+        function renderShopInventoryEditor() {
+            const container = document.getElementById('shopInventoryList');
+            if (!container || editingShopIndex < 0) return;
+
+            const shop = shops[editingShopIndex];
+            const inventory = shop.inventory || [];
+
+            if (inventory.length === 0) {
+                container.innerHTML = '<div style="color:#666; font-size:10px; text-align:center; padding:5px;">No items for sale</div>';
+                return;
+            }
+
+            container.innerHTML = inventory.map((inv, i) => {
+                const item = items[inv.itemIndex];
+                const itemName = item ? item.name : '(Unknown)';
+                return '<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:#333; border-radius:3px; font-size:10px;">' +
+                    '<span style="flex:1; color:#fff;">' + itemName + '</span>' +
+                    '<input type="number" value="' + (inv.buyPrice || 0) + '" onchange="updateShopInventoryPrice(' + i + ', this.value)" style="width:50px; margin:0 4px;" title="Buy price">' +
+                    '<input type="number" value="' + (inv.stock === -1 ? -1 : (inv.stock || 1)) + '" onchange="updateShopInventoryStock(' + i + ', this.value)" style="width:40px; margin:0 4px;" title="Stock (-1=unlimited)">' +
+                    '<button onclick="removeShopInventoryItem(' + i + ')" style="padding:2px 6px; font-size:9px; background:#a55;">×</button>' +
+                '</div>';
+            }).join('');
+        }
+
+        function updateShopInventoryPrice(index, value) {
+            if (editingShopIndex < 0) return;
+            const shop = shops[editingShopIndex];
+            if (shop.inventory && shop.inventory[index]) {
+                shop.inventory[index].buyPrice = parseInt(value) || 0;
+            }
+        }
+
+        function updateShopInventoryStock(index, value) {
+            if (editingShopIndex < 0) return;
+            const shop = shops[editingShopIndex];
+            if (shop.inventory && shop.inventory[index]) {
+                shop.inventory[index].stock = parseInt(value);
+            }
+        }
+
+        function removeShopInventoryItem(index) {
+            if (editingShopIndex < 0) return;
+            const shop = shops[editingShopIndex];
+            if (shop.inventory) {
+                shop.inventory.splice(index, 1);
+                renderShopInventoryEditor();
+            }
+        }
+
+        function shopAddInventoryItem() {
+            if (editingShopIndex < 0) return;
+            const select = document.getElementById('shopAddItemSelect');
+            const itemIndex = parseInt(select.value);
+            if (isNaN(itemIndex) || itemIndex < 0) return;
+
+            const shop = shops[editingShopIndex];
+            if (!shop.inventory) shop.inventory = [];
+
+            // Check if item already exists
+            if (shop.inventory.find(inv => inv.itemIndex === itemIndex)) {
+                alert('This item is already in the shop inventory');
+                return;
+            }
+
+            shop.inventory.push({
+                itemIndex: itemIndex,
+                buyPrice: 100,
+                stock: -1  // Unlimited by default
+            });
+
+            renderShopInventoryEditor();
+            select.value = '';
+        }
+
+        function renderShopBuyListEditor() {
+            const container = document.getElementById('shopBuyList');
+            if (!container || editingShopIndex < 0) return;
+
+            const shop = shops[editingShopIndex];
+            const buyList = shop.buyList || [];
+
+            if (buyList.length === 0) {
+                container.innerHTML = '<div style="color:#666; font-size:10px; text-align:center; padding:5px;">Shop doesn\'t buy anything</div>';
+                return;
+            }
+
+            container.innerHTML = buyList.map((buy, i) => {
+                const item = items[buy.itemIndex];
+                const itemName = item ? item.name : '(Unknown)';
+                return '<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:#333; border-radius:3px; font-size:10px;">' +
+                    '<span style="flex:1; color:#fff;">' + itemName + '</span>' +
+                    '<input type="number" value="' + (buy.sellPrice || 0) + '" onchange="updateShopBuyPrice(' + i + ', this.value)" style="width:50px; margin:0 4px;" title="Sell price">' +
+                    '<button onclick="removeShopBuyItem(' + i + ')" style="padding:2px 6px; font-size:9px; background:#a55;">×</button>' +
+                '</div>';
+            }).join('');
+        }
+
+        function updateShopBuyPrice(index, value) {
+            if (editingShopIndex < 0) return;
+            const shop = shops[editingShopIndex];
+            if (shop.buyList && shop.buyList[index]) {
+                shop.buyList[index].sellPrice = parseInt(value) || 0;
+            }
+        }
+
+        function removeShopBuyItem(index) {
+            if (editingShopIndex < 0) return;
+            const shop = shops[editingShopIndex];
+            if (shop.buyList) {
+                shop.buyList.splice(index, 1);
+                renderShopBuyListEditor();
+            }
+        }
+
+        function shopAddBuyListItem() {
+            if (editingShopIndex < 0) return;
+            const select = document.getElementById('shopAddBuyItemSelect');
+            const itemIndex = parseInt(select.value);
+            if (isNaN(itemIndex) || itemIndex < 0) return;
+
+            const shop = shops[editingShopIndex];
+            if (!shop.buyList) shop.buyList = [];
+
+            // Check if item already exists
+            if (shop.buyList.find(b => b.itemIndex === itemIndex)) {
+                alert('This item is already in the buy list');
+                return;
+            }
+
+            shop.buyList.push({
+                itemIndex: itemIndex,
+                sellPrice: 50  // Default sell price
+            });
+
+            renderShopBuyListEditor();
+            select.value = '';
+        }
+
+        function updateShopItemDropdowns() {
+            const addItemSelect = document.getElementById('shopAddItemSelect');
+            const addBuySelect = document.getElementById('shopAddBuyItemSelect');
+
+            let options = '<option value="">(Select item)</option>';
+            items.forEach((item, i) => {
+                options += '<option value="' + i + '">' + (item.name || 'Item ' + i) + '</option>';
+            });
+
+            if (addItemSelect) addItemSelect.innerHTML = options;
+            if (addBuySelect) addBuySelect.innerHTML = options;
+        }
+
+        function updateStartingGold(value) {
+            startingGold = parseInt(value) || 100;
+            broadcastEdit({ editType: 'updateStartingGold', value: startingGold });
+        }
+
+        // NPC Shop attachment functions
+        function updateNpcShopDropdown() {
+            const select = document.getElementById('npcShopSelect');
+            if (!select) return;
+
+            let options = '<option value="-1">(None)</option>';
+            shops.forEach((shop, i) => {
+                options += '<option value="' + i + '">' + (shop.name || 'Shop ' + i) + '</option>';
+            });
+            select.innerHTML = options;
+        }
+
+        function updateNpcShopInfo(placed) {
+            const info = document.getElementById('npcShopInfo');
+            if (!info) return;
+
+            if (placed.shopIndex >= 0 && placed.shopIndex < shops.length) {
+                const shop = shops[placed.shopIndex];
+                info.innerHTML = '<span style="color:#fa0;">' + (shop.name || 'Shop') + '</span> - ' +
+                    (shop.inventory?.length || 0) + ' items';
+            } else {
+                info.textContent = '(No shop attached)';
+            }
+        }
+
+        function attachShopToNpc() {
+            if (selectedPlacedNpcIndex < 0) return;
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            const select = document.getElementById('npcShopSelect');
+            const shopIndex = parseInt(select.value);
+
+            placed.shopIndex = shopIndex;
+
+            broadcastEdit({
+                editType: 'updatePlacedNpc',
+                index: selectedPlacedNpcIndex,
+                npc: placed
+            });
+
+            updateNpcShopInfo(placed);
+            if (mode === 'shop') {
+                updateNpcShopList();
+            }
+            renderMap(); // Re-render to show shop indicator
+        }
+
         // ===== SAVE/LOAD =====
         async function saveProject() {
             // Count tiles in first layer for debugging
@@ -17010,7 +17592,11 @@
                 })),
                 placedStaticObjects,
                 // Quests
-                quests
+                quests,
+                // Shops
+                shops,
+                placedShops,
+                startingGold
             };
         }
 
@@ -17629,6 +18215,13 @@
             if (project.dialogs) {
                 dialogs = project.dialogs;
             }
+
+            // Load shops
+            if (project.shops) {
+                shops = project.shops;
+            }
+            placedShops = project.placedShops || [];
+            startingGold = project.startingGold !== undefined ? project.startingGold : 100;
 
             // Load player characters
             if (project.playerCharacters && project.playerCharacters.length > 0) {
@@ -18481,6 +19074,65 @@
                         const key = edit.editorType + ':' + edit.editorIndex;
                         delete currentlyEditing[key];
                         console.log('[BUILDER MP] Remote user stopped editing:', key);
+                    }
+                    break;
+
+                // Shop system
+                case 'addShop':
+                    if (edit.shop) {
+                        shops.push(edit.shop);
+                        if (mode === 'shop') {
+                            updateShopList();
+                            updateNpcShopList();
+                        }
+                        console.log('[BUILDER MP] Remote shop added:', edit.shop.name);
+                    }
+                    break;
+
+                case 'updateShop':
+                    if (edit.index >= 0 && edit.index < shops.length && edit.shop) {
+                        shops[edit.index] = edit.shop;
+                        if (mode === 'shop') {
+                            updateShopList();
+                            updateSelectedShopInfo();
+                        }
+                        console.log('[BUILDER MP] Remote shop updated:', edit.shop.name);
+                    }
+                    break;
+
+                case 'deleteShop':
+                    if (edit.index >= 0 && edit.index < shops.length) {
+                        // Update NPC references
+                        placedNpcs.forEach(p => {
+                            if (p.shopIndex === edit.index) {
+                                p.shopIndex = -1;
+                            } else if (p.shopIndex > edit.index) {
+                                p.shopIndex--;
+                            }
+                        });
+                        // Update placed shops
+                        placedShops = placedShops.filter(ps => ps.shopIndex !== edit.index);
+                        placedShops.forEach(ps => { if (ps.shopIndex > edit.index) ps.shopIndex--; });
+
+                        shops.splice(edit.index, 1);
+                        if (selectedShopIndex === edit.index) selectedShopIndex = -1;
+                        else if (selectedShopIndex > edit.index) selectedShopIndex--;
+
+                        if (mode === 'shop') {
+                            updateShopList();
+                            updateSelectedShopInfo();
+                            updateNpcShopList();
+                        }
+                        console.log('[BUILDER MP] Remote shop deleted');
+                    }
+                    break;
+
+                case 'updateStartingGold':
+                    if (edit.value !== undefined) {
+                        startingGold = edit.value;
+                        const goldInput = document.getElementById('startingGoldInput');
+                        if (goldInput) goldInput.value = startingGold;
+                        console.log('[BUILDER MP] Starting gold updated:', startingGold);
                     }
                     break;
             }
@@ -20431,11 +21083,12 @@
         }
 
         function loadDialogPage(index) {
-            // Save current page first
+            // Save current page first (including choices)
             if (dialogEditorPages[dialogEditorPageIndex]) {
                 dialogEditorPages[dialogEditorPageIndex] = {
                     speaker: document.getElementById('dialogSpeaker').value,
-                    text: document.getElementById('dialogTextInput').value
+                    text: document.getElementById('dialogTextInput').value,
+                    choices: dialogEditorPages[dialogEditorPageIndex].choices || null
                 };
             }
 
@@ -20443,8 +21096,75 @@
             const page = dialogEditorPages[index] || { speaker: '', text: '' };
             document.getElementById('dialogSpeaker').value = page.speaker || '';
             document.getElementById('dialogTextInput').value = page.text || '';
+            renderDialogChoicesList();
             updateDialogPagesListEditor();
             updateDialogPreview();
+        }
+
+        // Dialog choices management
+        function renderDialogChoicesList() {
+            const container = document.getElementById('dialogChoicesList');
+            if (!container) return;
+
+            const page = dialogEditorPages[dialogEditorPageIndex];
+            const choices = page?.choices || [];
+
+            if (choices.length === 0) {
+                container.innerHTML = '<div style="color:#666; font-size:10px;">No choices (auto-advance)</div>';
+                return;
+            }
+
+            container.innerHTML = choices.map((choice, i) => {
+                const actionLabel = {
+                    'accept': 'Accept Quest',
+                    'decline': 'Decline Quest',
+                    'goto': 'Go to Dialog',
+                    'shop': 'Open Shop',
+                    'close': 'Close Dialog'
+                }[choice.action] || choice.action;
+
+                return `<div style="display:flex; gap:4px; align-items:center; margin-bottom:4px; padding:4px; background:#333; border-radius:3px;">
+                    <input type="text" value="${choice.text || ''}" onchange="updateDialogChoice(${i}, 'text', this.value)" style="flex:1; padding:3px; font-size:10px;" placeholder="Choice text...">
+                    <select onchange="updateDialogChoice(${i}, 'action', this.value)" style="padding:3px; font-size:9px; width:80px;">
+                        <option value="accept" ${choice.action === 'accept' ? 'selected' : ''}>Accept</option>
+                        <option value="decline" ${choice.action === 'decline' ? 'selected' : ''}>Decline</option>
+                        <option value="goto" ${choice.action === 'goto' ? 'selected' : ''}>Go to</option>
+                        <option value="shop" ${choice.action === 'shop' ? 'selected' : ''}>Shop</option>
+                        <option value="close" ${choice.action === 'close' ? 'selected' : ''}>Close</option>
+                    </select>
+                    <button onclick="removeDialogChoice(${i})" style="padding:2px 5px; font-size:9px; background:#a55;">X</button>
+                </div>`;
+            }).join('');
+        }
+
+        function addDialogChoice() {
+            const page = dialogEditorPages[dialogEditorPageIndex];
+            if (!page.choices) page.choices = [];
+
+            page.choices.push({
+                text: 'Choice ' + (page.choices.length + 1),
+                action: 'accept'
+            });
+
+            renderDialogChoicesList();
+        }
+
+        function updateDialogChoice(index, field, value) {
+            const page = dialogEditorPages[dialogEditorPageIndex];
+            if (page?.choices && page.choices[index]) {
+                page.choices[index][field] = value;
+            }
+        }
+
+        function removeDialogChoice(index) {
+            const page = dialogEditorPages[dialogEditorPageIndex];
+            if (page?.choices) {
+                page.choices.splice(index, 1);
+                if (page.choices.length === 0) {
+                    page.choices = null;
+                }
+                renderDialogChoicesList();
+            }
         }
 
         function selectDialogPageEditor(index) {
@@ -20453,12 +21173,14 @@
 
         function addDialogPage() {
             // Save current page
+            const existingChoices = dialogEditorPages[dialogEditorPageIndex]?.choices || null;
             dialogEditorPages[dialogEditorPageIndex] = {
                 speaker: document.getElementById('dialogSpeaker').value,
-                text: document.getElementById('dialogTextInput').value
+                text: document.getElementById('dialogTextInput').value,
+                choices: existingChoices
             };
 
-            dialogEditorPages.push({ speaker: '', text: '' });
+            dialogEditorPages.push({ speaker: '', text: '', choices: null });
             loadDialogPage(dialogEditorPages.length - 1);
         }
 
@@ -20555,10 +21277,12 @@
         }
 
         function saveDialog() {
-            // Save current page
+            // Save current page (preserving choices)
+            const existingChoices = dialogEditorPages[dialogEditorPageIndex]?.choices || null;
             dialogEditorPages[dialogEditorPageIndex] = {
                 speaker: document.getElementById('dialogSpeaker').value,
-                text: document.getElementById('dialogTextInput').value
+                text: document.getElementById('dialogTextInput').value,
+                choices: existingChoices
             };
 
             const name = document.getElementById('dialogNameInput').value.trim() || 'Dialog ' + (dialogs.length + 1);
@@ -22687,6 +23411,11 @@
         // Update quest tracker after a short delay to ensure UI elements exist
         setTimeout(updateQuestTracker, 100);
 
+        // Shop system data
+        shopsData = projectData.shops || [];
+        playerGold = projectData.startingGold !== undefined ? projectData.startingGold : 100;
+        console.log('[SHOP] Loaded', shopsData.length, 'shops, starting gold:', playerGold);
+
         // Track all images that need to load before starting the game
         let imagesToLoad = 0;
         let imagesLoaded = 0;
@@ -23894,6 +24623,14 @@
         let cursorItem = null;      // Item held on cursor: { itemIndex, quantity } or null
         let inventoryOpen = false;  // Is full inventory popup open
         let selectedHotbarSlot = 0; // Currently selected hotbar slot (0-9)
+
+        // === SHOP SYSTEM (Test Game) ===
+        let playerGold = 0;         // Player's gold currency
+        let shopOpen = false;       // Is shop UI open
+        let activeShopIndex = -1;   // Index of currently open shop
+        let shopTab = 'buy';        // 'buy' or 'sell'
+        let shopSelectedIndex = 0;  // Selected item in shop list
+        let shopsData = [];         // Shop definitions from project
 
         // Initialize empty inventory slots
         function initInventory() {
@@ -25533,6 +26270,37 @@ Item Receive Display:
         document.addEventListener('keydown', e => {
             keys[e.key] = true;
 
+            // === SHOP CONTROLS ===
+            if (shopOpen) {
+                e.preventDefault();
+                if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') {
+                    closeShop();
+                    return;
+                }
+                if (e.key === 'Tab') {
+                    shopTab = shopTab === 'buy' ? 'sell' : 'buy';
+                    shopSelectedIndex = 0;
+                    return;
+                }
+                if (e.key === 'ArrowUp') {
+                    shopSelectedIndex = Math.max(0, shopSelectedIndex - 1);
+                    return;
+                }
+                if (e.key === 'ArrowDown') {
+                    shopSelectedIndex++;
+                    return;
+                }
+                if (e.key === 'z' || e.key === 'Z' || e.key === 'Enter') {
+                    if (shopTab === 'buy') {
+                        shopBuyItem();
+                    } else {
+                        shopSellItem();
+                    }
+                    return;
+                }
+                return;
+            }
+
             if (e.key === 'Escape') {
                 if (inventoryOpen) {
                     inventoryOpen = false;
@@ -25557,8 +26325,35 @@ Item Receive Display:
             if (e.key === '0') {
                 selectedHotbarSlot = 9;
             }
-            // Interact key (A) - for dialogs, doors, and NPCs
+            // Dialog choice navigation (when dialog has choices)
+            if (activeDialog && dialogTypingState.complete) {
+                const page = activeDialog.dialog?.pages?.[activeDialog.pageIndex];
+                if (page?.choices && page.choices.length > 0) {
+                    if (e.key === 'ArrowUp') {
+                        dialogSelectedChoice = Math.max(0, dialogSelectedChoice - 1);
+                        renderDialogBox();
+                        return;
+                    }
+                    if (e.key === 'ArrowDown') {
+                        dialogSelectedChoice = Math.min(page.choices.length - 1, dialogSelectedChoice + 1);
+                        renderDialogBox();
+                        return;
+                    }
+                    if (e.key === 'z' || e.key === 'Z' || e.key === 'Enter') {
+                        selectDialogChoice();
+                        return;
+                    }
+                }
+            }
+
+            // Interact key (A) - for dialogs, doors, NPCs, and shops
             if ((e.key === 'a' || e.key === 'A') && !player.attacking) {
+                // Check for shop interaction first
+                const nearbyShop = checkShopInteraction();
+                if (nearbyShop >= 0 && !activeDialog) {
+                    openShop(nearbyShop);
+                    return;
+                }
                 handleInteract();
             }
             // Attack key (Space)
@@ -26767,6 +27562,7 @@ Item Receive Display:
         // === DIALOG INTERACTION SYSTEM ===
         let activeDialog = null; // { dialog, pageIndex, npc }
         let dialogCooldown = 0; // Prevent rapid re-trigger
+        let dialogSelectedChoice = 0; // Index of currently selected choice
         // Typewriter effect state
         let dialogTypingState = {
             charsShown: 0,
@@ -27049,13 +27845,98 @@ Item Receive Display:
                 return;
             }
 
+            // Check if current page has choices - don't auto-advance, wait for choice selection
+            const page = activeDialog.dialog.pages[activeDialog.pageIndex];
+            if (page?.choices && page.choices.length > 0) {
+                // Don't advance - player must select a choice with Z key
+                return;
+            }
+
             // Typing complete, advance to next page
             activeDialog.pageIndex++;
+            dialogSelectedChoice = 0; // Reset choice selection for next page
             if (activeDialog.pageIndex >= activeDialog.dialog.pages.length) {
                 closeDialog();
             } else {
                 resetDialogTyping(); // Reset typing for new page
                 renderDialogBox();
+            }
+        }
+
+        // Handle dialog choice selection
+        function selectDialogChoice() {
+            if (!activeDialog || !dialogTypingState.complete) return;
+
+            const page = activeDialog.dialog.pages[activeDialog.pageIndex];
+            if (!page?.choices || page.choices.length === 0) return;
+
+            const choice = page.choices[dialogSelectedChoice];
+            if (!choice) return;
+
+            console.log('[DIALOG] Selected choice:', choice.text, 'action:', choice.action);
+
+            switch (choice.action) {
+                case 'accept':
+                    // Accept quest - will be handled by pending quest action
+                    activeDialog.pageIndex = activeDialog.dialog.pages.length; // End dialog
+                    closeDialog();
+                    break;
+
+                case 'decline':
+                    // Decline quest - show decline dialog if available
+                    if (pendingQuestAction && pendingQuestAction.type === 'offer') {
+                        const quest = questsData?.find(q => q.id === pendingQuestAction.questId);
+                        if (quest?.declineDialogId !== undefined && quest.declineDialogId !== '') {
+                            const declineDialogIndex = parseInt(quest.declineDialogId);
+                            if (dialogsData[declineDialogIndex]) {
+                                pendingQuestAction = null; // Cancel quest offer
+                                activeDialog = {
+                                    dialog: dialogsData[declineDialogIndex],
+                                    pageIndex: 0,
+                                    npc: activeDialog.npc
+                                };
+                                dialogSelectedChoice = 0;
+                                resetDialogTyping();
+                                renderDialogBox();
+                                return;
+                            }
+                        }
+                    }
+                    pendingQuestAction = null;
+                    closeDialog();
+                    break;
+
+                case 'goto':
+                    // Go to specific dialog
+                    if (choice.targetDialogId !== undefined) {
+                        const targetIdx = parseInt(choice.targetDialogId);
+                        if (dialogsData[targetIdx]) {
+                            activeDialog = {
+                                dialog: dialogsData[targetIdx],
+                                pageIndex: 0,
+                                npc: activeDialog.npc
+                            };
+                            dialogSelectedChoice = 0;
+                            resetDialogTyping();
+                            renderDialogBox();
+                            return;
+                        }
+                    }
+                    closeDialog();
+                    break;
+
+                case 'shop':
+                    // Open shop
+                    closeDialog();
+                    if (activeDialog?.npc?.shopIndex >= 0) {
+                        openShop(activeDialog.npc.shopIndex);
+                    }
+                    break;
+
+                case 'close':
+                default:
+                    closeDialog();
+                    break;
             }
         }
 
@@ -27170,9 +28051,26 @@ Item Receive Display:
             const typingCursor = dialogTypingState.complete ? '' : '<span style="animation:blink 0.5s infinite;">▌</span>';
             html += '<div style="line-height:1.5;">' + displayText + typingCursor + '</div>';
 
-            // Show different prompt based on typing state
-            const prompt = dialogTypingState.complete ? '[A]' : '[A] skip';
-            html += '<div style="text-align:right; margin-top:10px; font-size:10px; color:#888;">' + prompt + ' ' + (activeDialog.pageIndex + 1) + '/' + dialog.pages.length + '</div>';
+            // Show dialog choices if present and typing is complete
+            const choices = page.choices || [];
+            if (choices.length > 0 && dialogTypingState.complete) {
+                html += '<div style="margin-top:12px; border-top:1px solid ' + (dialog.colors?.border || preset.border) + '; padding-top:8px;">';
+                choices.forEach((choice, i) => {
+                    const isSelected = i === dialogSelectedChoice;
+                    const cursor = isSelected ? '► ' : '  ';
+                    const bgColor = isSelected ? 'rgba(255,255,255,0.15)' : 'transparent';
+                    html += '<div style="padding:4px 8px; margin:2px 0; background:' + bgColor + '; cursor:pointer;">' +
+                            '<span style="color:' + (dialog.colors?.accent || preset.accent) + ';">' + cursor + '</span>' +
+                            choice.text +
+                            '</div>';
+                });
+                html += '</div>';
+                html += '<div style="text-align:right; margin-top:5px; font-size:10px; color:#888;">↑↓ select | [Z] confirm</div>';
+            } else {
+                // Show different prompt based on typing state
+                const prompt = dialogTypingState.complete ? '[A]' : '[A] skip';
+                html += '<div style="text-align:right; margin-top:10px; font-size:10px; color:#888;">' + prompt + ' ' + (activeDialog.pageIndex + 1) + '/' + dialog.pages.length + '</div>';
+            }
 
             // Add blink animation style if not present
             if (!document.getElementById('dialogBlinkStyle')) {
@@ -27957,6 +28855,10 @@ Item Receive Display:
             if (inventoryOpen) {
                 drawInventoryPopup();
             }
+            // Draw shop UI if open
+            if (shopOpen) {
+                drawShopUI();
+            }
         }
 
         // Draw hotbar at bottom of screen
@@ -28021,6 +28923,254 @@ Item Receive Display:
                 ctx.textBaseline = 'top';
                 ctx.fillText(i === 9 ? '0' : (i + 1).toString(), slotX + 2, hotbarY + 2);
             }
+
+            // Draw gold display above hotbar
+            if (playerGold !== undefined) {
+                const goldX = hotbarX + hotbarWidth + 15;
+                const goldY = hotbarY + SLOT_SIZE / 2;
+                // Gold coin icon
+                ctx.fillStyle = '#fa0';
+                ctx.beginPath();
+                ctx.arc(goldX, goldY, 10, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#c80';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = '#640';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('$', goldX, goldY);
+                // Gold amount
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 14px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText(playerGold.toString(), goldX + 16, goldY + 1);
+            }
+        }
+
+        // === SHOP SYSTEM ===
+        function openShop(shopIndex) {
+            if (shopIndex < 0 || shopIndex >= shopsData.length) return;
+            shopOpen = true;
+            activeShopIndex = shopIndex;
+            shopTab = 'buy';
+            shopSelectedIndex = 0;
+            console.log('[SHOP] Opened shop:', shopsData[shopIndex].name);
+        }
+
+        function closeShop() {
+            shopOpen = false;
+            activeShopIndex = -1;
+        }
+
+        function drawShopUI() {
+            if (!shopOpen || activeShopIndex < 0) return;
+
+            const shop = shopsData[activeShopIndex];
+            if (!shop) return;
+
+            // Darken background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Shop panel
+            const panelW = 340;
+            const panelH = 280;
+            const panelX = (canvas.width - panelW) / 2;
+            const panelY = (canvas.height - panelH) / 2;
+
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(panelX, panelY, panelW, panelH);
+            ctx.strokeStyle = '#fa0';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+            // Shop name
+            ctx.fillStyle = '#fa0';
+            ctx.font = 'bold 16px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(shop.name || 'Shop', panelX + panelW / 2, panelY + 25);
+
+            // Gold display
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText('Gold: ' + playerGold, panelX + panelW - 15, panelY + 25);
+
+            // Tabs
+            const tabY = panelY + 45;
+            const tabW = 80;
+            const tabH = 24;
+
+            // Buy tab
+            ctx.fillStyle = shopTab === 'buy' ? '#4a7c59' : '#333';
+            ctx.fillRect(panelX + 20, tabY, tabW, tabH);
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('BUY', panelX + 20 + tabW / 2, tabY + 16);
+
+            // Sell tab
+            ctx.fillStyle = shopTab === 'sell' ? '#7c594a' : '#333';
+            ctx.fillRect(panelX + 110, tabY, tabW, tabH);
+            ctx.fillStyle = '#fff';
+            ctx.fillText('SELL', panelX + 110 + tabW / 2, tabY + 16);
+
+            // Item list
+            const listY = tabY + 35;
+            const listH = panelH - 130;
+            ctx.fillStyle = '#252540';
+            ctx.fillRect(panelX + 15, listY, panelW - 30, listH);
+
+            let items = [];
+            if (shopTab === 'buy' && shop.inventory) {
+                items = shop.inventory.map((inv, i) => ({
+                    name: itemsData[inv.itemIndex]?.name || 'Unknown',
+                    price: inv.buyPrice,
+                    stock: inv.stock,
+                    itemIndex: inv.itemIndex,
+                    index: i
+                }));
+            } else if (shopTab === 'sell') {
+                // Show player's sellable items
+                inventorySlots.forEach((slot, i) => {
+                    if (slot) {
+                        const item = itemsData[slot.itemIndex];
+                        const buyEntry = shop.buyList?.find(b => b.itemIndex === slot.itemIndex);
+                        const sellPrice = buyEntry ? buyEntry.sellPrice : Math.floor((item?.basePrice || 10) * (shop.defaultSellRate || 50) / 100);
+                        items.push({
+                            name: item?.name || 'Item',
+                            price: sellPrice,
+                            quantity: slot.quantity,
+                            slotIndex: i,
+                            index: items.length
+                        });
+                    }
+                });
+            }
+
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'left';
+            const itemH = 22;
+            const maxVisible = Math.floor(listH / itemH);
+            const startIdx = Math.max(0, shopSelectedIndex - maxVisible + 1);
+
+            items.slice(startIdx, startIdx + maxVisible).forEach((item, i) => {
+                const idx = startIdx + i;
+                const itemY = listY + 5 + i * itemH;
+                if (idx === shopSelectedIndex) {
+                    ctx.fillStyle = '#4a4a6a';
+                    ctx.fillRect(panelX + 17, itemY - 2, panelW - 34, itemH - 2);
+                }
+                ctx.fillStyle = '#fff';
+                ctx.fillText(item.name, panelX + 25, itemY + 12);
+                ctx.fillStyle = '#fa0';
+                ctx.textAlign = 'right';
+                ctx.fillText(item.price + 'g', panelX + panelW - 25, itemY + 12);
+                if (item.quantity) {
+                    ctx.fillStyle = '#888';
+                    ctx.fillText('x' + item.quantity + ' ', panelX + panelW - 60, itemY + 12);
+                }
+                ctx.textAlign = 'left';
+            });
+
+            if (items.length === 0) {
+                ctx.fillStyle = '#666';
+                ctx.textAlign = 'center';
+                ctx.fillText(shopTab === 'buy' ? 'Nothing for sale' : 'Nothing to sell', panelX + panelW / 2, listY + listH / 2);
+            }
+
+            // Instructions
+            ctx.fillStyle = '#888';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('Arrow keys: navigate | Z: ' + (shopTab === 'buy' ? 'buy' : 'sell') + ' | X: close | Tab: switch', panelX + panelW / 2, panelY + panelH - 15);
+        }
+
+        function shopBuyItem() {
+            if (!shopOpen || activeShopIndex < 0 || shopTab !== 'buy') return;
+            const shop = shopsData[activeShopIndex];
+            if (!shop?.inventory || shopSelectedIndex >= shop.inventory.length) return;
+
+            const inv = shop.inventory[shopSelectedIndex];
+            if (playerGold < inv.buyPrice) {
+                console.log('[SHOP] Not enough gold!');
+                return;
+            }
+
+            // Find empty slot or stackable slot
+            const item = itemsData[inv.itemIndex];
+            let added = false;
+            if (item?.stackable) {
+                for (let i = 0; i < inventorySlots.length; i++) {
+                    if (inventorySlots[i]?.itemIndex === inv.itemIndex) {
+                        inventorySlots[i].quantity++;
+                        added = true;
+                        break;
+                    }
+                }
+            }
+            if (!added) {
+                for (let i = 0; i < inventorySlots.length; i++) {
+                    if (!inventorySlots[i]) {
+                        inventorySlots[i] = { itemIndex: inv.itemIndex, quantity: 1 };
+                        added = true;
+                        break;
+                    }
+                }
+            }
+
+            if (added) {
+                playerGold -= inv.buyPrice;
+                console.log('[SHOP] Bought', item?.name, 'for', inv.buyPrice, 'gold');
+            } else {
+                console.log('[SHOP] Inventory full!');
+            }
+        }
+
+        function shopSellItem() {
+            if (!shopOpen || activeShopIndex < 0 || shopTab !== 'sell') return;
+
+            // Build sellable items list
+            const sellableItems = [];
+            inventorySlots.forEach((slot, i) => {
+                if (slot) sellableItems.push({ slot, slotIndex: i });
+            });
+
+            if (shopSelectedIndex >= sellableItems.length) return;
+
+            const { slot, slotIndex } = sellableItems[shopSelectedIndex];
+            const shop = shopsData[activeShopIndex];
+            const item = itemsData[slot.itemIndex];
+            const buyEntry = shop?.buyList?.find(b => b.itemIndex === slot.itemIndex);
+            const sellPrice = buyEntry ? buyEntry.sellPrice : Math.floor((item?.basePrice || 10) * (shop?.defaultSellRate || 50) / 100);
+
+            playerGold += sellPrice;
+            slot.quantity--;
+            if (slot.quantity <= 0) {
+                inventorySlots[slotIndex] = null;
+            }
+            console.log('[SHOP] Sold', item?.name, 'for', sellPrice, 'gold');
+        }
+
+        function checkShopInteraction() {
+            // Check if player is near an NPC with a shop
+            const tileSize = gridSize * TILE_SCALE;
+            const playerTileX = Math.floor(player.x / tileSize);
+            const playerTileY = Math.floor(player.y / tileSize);
+
+            for (let i = 0; i < placedNpcs.length; i++) {
+                const npc = placedNpcs[i];
+                if (npc.mapName && npc.mapName !== currentGameMap) continue;
+                if (npc.shopIndex === undefined || npc.shopIndex < 0) continue;
+
+                const dist = Math.abs(npc.x - playerTileX) + Math.abs(npc.y - playerTileY);
+                if (dist <= 1) {
+                    return npc.shopIndex;
+                }
+            }
+            return -1;
         }
 
         // Draw full inventory popup
