@@ -24296,21 +24296,23 @@
 
         // === NPC UPDATE FUNCTION ===
         function updateNPCs() {
-            placedNpcs.forEach((placed, i) => {
+            // Use for loop instead of forEach to avoid creating closure every frame (GC pressure)
+            for (let i = 0; i < placedNpcs.length; i++) {
+                const placed = placedNpcs[i];
                 // Only update NPCs on current map
-                if (placed.mapName && placed.mapName !== currentGameMap) return;
+                if (placed.mapName && placed.mapName !== currentGameMap) continue;
 
                 const state = npcRuntimeState[i];
-                if (!state) return;
+                if (!state) continue;
 
                 // Skip movement if NPC is paused for dialog
                 if (state._dialogPaused) {
                     state.moving = false;
-                    return;
+                    continue;
                 }
 
                 const npc = npcsData[placed.npcIndex];
-                if (!npc) return;
+                if (!npc) continue;
 
                 const path = placed.path || [];
                 const speed = (placed.speed || 3) * 0.5; // Convert to pixel speed
@@ -24685,7 +24687,7 @@
                                 state.y = placed.y * gridSize;
                             }
                         }
-                        return; // Start moving to next waypoint on next frame
+                        continue; // Start moving to next waypoint on next frame
                     }
                 }
 
@@ -24710,7 +24712,7 @@
                         state.waypointAnimation = wpAnim;
                         state.moving = false;
                         // Don't advance waypoint - will advance after idle completes
-                        return;
+                        continue;
                     }
 
                     state.currentWaypoint++;
@@ -24771,7 +24773,7 @@
                     state.frameTimer = 0;
                     state.frame = (state.frame + 1) % 4;
                 }
-            });
+            }
         }
 
         // Offscreen canvas for lighting effects
@@ -29532,9 +29534,9 @@ Item Receive Display:
             // Skip dead enemies
             if (state.dead) return;
 
-            // Don't round - keep fractional for smooth interpolation on high refresh rate monitors
-            const sx = state.x * TILE_SCALE - camX;
-            const sy = state.y * TILE_SCALE - camY;
+            // Round to prevent sub-pixel blur (NPCs don't use interpolation like player does)
+            const sx = Math.round(state.x * TILE_SCALE - camX);
+            const sy = Math.round(state.y * TILE_SCALE - camY);
 
             // Get correct animation based on direction or waypoint animation
             const anims = npc.animations || {};
