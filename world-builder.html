@@ -24970,18 +24970,25 @@
             const playerTileY = Math.floor(player.y / tileSize);
             const fadeTime = 0.1; // Smooth transition time in seconds
 
-            Object.keys(tileSounds).forEach(key => {
+            // Use for-in to avoid Object.keys() allocation
+            for (const key in tileSounds) {
                 // Filter by current map (keys are "mapName:x,y" or legacy "x,y")
                 let sx, sy;
-                if (key.includes(':')) {
-                    // New format: "mapName:x,y"
-                    const parts = key.split(':');
-                    if (parts[0] !== currentGameMap) return; // Skip sounds on other maps
-                    [sx, sy] = parts[1].split(',').map(Number);
+                const colonIdx = key.indexOf(':');
+                if (colonIdx !== -1) {
+                    // New format: "mapName:x,y" - avoid split() allocations
+                    const mapName = key.substring(0, colonIdx);
+                    if (mapName !== currentGameMap) continue; // Skip sounds on other maps
+                    const coords = key.substring(colonIdx + 1);
+                    const commaIdx = coords.indexOf(',');
+                    sx = parseInt(coords.substring(0, commaIdx), 10);
+                    sy = parseInt(coords.substring(commaIdx + 1), 10);
                 } else {
                     // Legacy format: "x,y" (treat as main map)
-                    if (currentGameMap !== 'main') return;
-                    [sx, sy] = key.split(',').map(Number);
+                    if (currentGameMap !== 'main') continue;
+                    const commaIdx = key.indexOf(',');
+                    sx = parseInt(key.substring(0, commaIdx), 10);
+                    sy = parseInt(key.substring(commaIdx + 1), 10);
                 }
                 const ts = tileSounds[key];
 
@@ -25076,6 +25083,11 @@
         }
 
         // === LIGHTING RENDERING (Classic 2D - no WebGL) ===
+        // Pre-allocated arrays for polygon lights to avoid GC pauses
+        const polyScreenPointsPool = [];
+        for (let i = 0; i < 100; i++) polyScreenPointsPool.push({ x: 0, y: 0 });
+        const filteredPolyLightsPool = []; // Reusable array for filtered poly lights
+
         function renderLighting() {
             const lighting = lightingSettingsData;
 
@@ -25129,13 +25141,16 @@
                 lightCtx.fill();
             }
 
-            // Cut out placed point lights
+            // Cut out placed point lights (use for-in to avoid Object.keys() allocation)
             const mapPrefix = currentGameMap + ':';
-            Object.keys(pointLights).forEach(key => {
-                if (!key.startsWith(mapPrefix)) return;
+            for (const key in pointLights) {
+                if (!key.startsWith(mapPrefix)) continue;
 
-                const coords = key.split(':')[1];
-                const [lx, ly] = coords.split(',').map(Number);
+                const colonIdx = key.indexOf(':');
+                const coords = key.substring(colonIdx + 1);
+                const commaIdx = coords.indexOf(',');
+                const lx = parseInt(coords.substring(0, commaIdx), 10);
+                const ly = parseInt(coords.substring(commaIdx + 1), 10);
                 const light = pointLights[key];
 
                 const screenX = ((lx * tileSize + tileSize / 2) - camX) * cameraZoom;
@@ -25156,26 +25171,34 @@
                 lightCtx.beginPath();
                 lightCtx.arc(screenX, screenY, radius, 0, Math.PI * 2);
                 lightCtx.fill();
-            });
+            }
 
-            // Cut out polygon lights
-            const currentMapPolyLights = polyLights.filter(pl => pl.mapName === currentGameMap);
+            // Cut out polygon lights (reuse array to avoid GC)
+            filteredPolyLightsPool.length = 0;
+            for (let i = 0; i < polyLights.length; i++) {
+                if (polyLights[i].mapName === currentGameMap) {
+                    filteredPolyLightsPool.push(polyLights[i]);
+                }
+            }
 
             // Debug: Log once per map
             if (!window._polyLightLoggedMap || window._polyLightLoggedMap !== currentGameMap) {
-                console.log('[POLY LIGHTS] Map:', currentGameMap, 'Total polyLights:', polyLights.length, 'On this map:', currentMapPolyLights.length);
-                currentMapPolyLights.forEach((pl, i) => console.log('  Poly', i, 'points:', pl.points?.length, 'intensity:', pl.intensity));
+                console.log('[POLY LIGHTS] Map:', currentGameMap, 'Total polyLights:', polyLights.length, 'On this map:', filteredPolyLightsPool.length);
+                filteredPolyLightsPool.forEach((pl, i) => console.log('  Poly', i, 'points:', pl.points?.length, 'intensity:', pl.intensity));
                 window._polyLightLoggedMap = currentGameMap;
             }
 
-            currentMapPolyLights.forEach(poly => {
-                if (!poly.points || poly.points.length < 3) return;
+            for (let pi = 0; pi < filteredPolyLightsPool.length; pi++) {
+                const poly = filteredPolyLightsPool[pi];
+                if (!poly.points || poly.points.length < 3) continue;
 
-                // Calculate screen coordinates for polygon points
-                const screenPoints = poly.points.map(pt => ({
-                    x: ((pt.x * tileSize) - camX) * cameraZoom,
-                    y: ((pt.y * tileSize) - camY) * cameraZoom
-                }));
+                // Calculate screen coordinates using pooled objects (avoid creating new arrays/objects)
+                const pointCount = Math.min(poly.points.length, polyScreenPointsPool.length);
+                for (let i = 0; i < pointCount; i++) {
+                    const pt = poly.points[i];
+                    polyScreenPointsPool[i].x = ((pt.x * tileSize) - camX) * cameraZoom;
+                    polyScreenPointsPool[i].y = ((pt.y * tileSize) - camY) * cameraZoom;
+                }
 
                 // Draw filled polygon with gradient-like intensity
                 const intensity = poly.intensity || 0.8;
@@ -25190,13 +25213,13 @@
                 // Draw polygon as light cutout
                 lightCtx.fillStyle = 'rgba(255,255,255,' + (intensity * flickerMult) + ')';
                 lightCtx.beginPath();
-                lightCtx.moveTo(screenPoints[0].x, screenPoints[0].y);
-                for (let i = 1; i < screenPoints.length; i++) {
-                    lightCtx.lineTo(screenPoints[i].x, screenPoints[i].y);
+                lightCtx.moveTo(polyScreenPointsPool[0].x, polyScreenPointsPool[0].y);
+                for (let i = 1; i < pointCount; i++) {
+                    lightCtx.lineTo(polyScreenPointsPool[i].x, polyScreenPointsPool[i].y);
                 }
                 lightCtx.closePath();
                 lightCtx.fill();
-            });
+            }
 
             // Reset composite operation and draw darkness over game
             lightCtx.globalCompositeOperation = 'source-over';
@@ -26090,23 +26113,28 @@ Item Receive Display:
         }
 
         // Pixel-level collision check on ALL layers
+        // Pre-allocated collision check points to avoid GC (8 points: corners + edge midpoints)
+        const collisionPoints = [
+            { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 },
+            { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }
+        ];
+
         function checkCollision(x, y, w, h) {
             const tileSize = gridSize * TILE_SCALE;
             const pixelScale = tileSize / gridSize;
 
-            // Check corners and edge midpoints
-            const points = [
-                { x: x, y: y },
-                { x: x + w - 1, y: y },
-                { x: x, y: y + h - 1 },
-                { x: x + w - 1, y: y + h - 1 },
-                { x: x + w / 2, y: y },
-                { x: x + w / 2, y: y + h - 1 },
-                { x: x, y: y + h / 2 },
-                { x: x + w - 1, y: y + h / 2 }
-            ];
+            // Update pre-allocated points instead of creating new array
+            collisionPoints[0].x = x;           collisionPoints[0].y = y;
+            collisionPoints[1].x = x + w - 1;   collisionPoints[1].y = y;
+            collisionPoints[2].x = x;           collisionPoints[2].y = y + h - 1;
+            collisionPoints[3].x = x + w - 1;   collisionPoints[3].y = y + h - 1;
+            collisionPoints[4].x = x + w / 2;   collisionPoints[4].y = y;
+            collisionPoints[5].x = x + w / 2;   collisionPoints[5].y = y + h - 1;
+            collisionPoints[6].x = x;           collisionPoints[6].y = y + h / 2;
+            collisionPoints[7].x = x + w - 1;   collisionPoints[7].y = y + h / 2;
 
-            for (const point of points) {
+            for (let pi = 0; pi < 8; pi++) {
+                const point = collisionPoints[pi];
                 const tileX = Math.floor(point.x / tileSize);
                 const tileY = Math.floor(point.y / tileSize);
 
@@ -28236,10 +28264,20 @@ Item Receive Display:
 
         // === Y-SORTING FUNCTIONS ===
 
+        // Object pool for Y-sorting to avoid GC pauses
+        // Pre-allocated array and objects - reuse instead of creating new ones each frame
+        const ENTITY_POOL_SIZE = 200; // Max entities to Y-sort (player + NPCs + items + other players)
+        const entityPool = [];
+        for (let i = 0; i < ENTITY_POOL_SIZE; i++) {
+            entityPool.push({ type: '', gridY: 0, subSort: 0, npcIndex: -1, itemIndex: -1, placedIndex: -1, playerId: null });
+        }
+        let entityPoolUsed = 0;
+
         // Original Y-sorting: Y position is primary, layer is tiebreaker
         function drawYSortedEntities(camX, camY, tileSize) {
             // OPTIMIZED: Draw tiles by row order (no sorting needed), interleave moving entities
             // This avoids creating/sorting a 16k+ element array every frame!
+            // FURTHER OPTIMIZED: Reuse pooled objects to eliminate GC pauses
 
             // Calculate visible tile range (reduced buffer from 10 to 4 for performance)
             const buffer = 4;
@@ -28252,16 +28290,26 @@ Item Receive Display:
 
             const playerLayer = playerLayerIndex || 1;
 
-            // Collect only MOVING entities (not tiles!) - much smaller array
-            const movingEntities = [];
+            // Reset pool counter (reuse pre-allocated objects instead of creating new ones)
+            entityPoolUsed = 0;
+
+            // Helper to get next pooled entity
+            function getPooledEntity(type, gridY, subSort) {
+                if (entityPoolUsed >= ENTITY_POOL_SIZE) return null; // Safety limit
+                const e = entityPool[entityPoolUsed++];
+                e.type = type;
+                e.gridY = gridY;
+                e.subSort = subSort;
+                e.npcIndex = -1;
+                e.itemIndex = -1;
+                e.placedIndex = -1;
+                e.playerId = null;
+                return e;
+            }
 
             // Add player
             const playerGridY = Math.floor((player.y + player.height) / (gridSize * TILE_SCALE));
-            movingEntities.push({
-                type: 'player',
-                gridY: playerGridY,
-                subSort: 0.5
-            });
+            getPooledEntity('player', playerGridY, 0.5);
 
             // Add NPCs on current map
             for (let i = 0; i < placedNpcs.length; i++) {
@@ -28273,12 +28321,8 @@ Item Receive Display:
                 if (!npc) continue;
 
                 const npcGridY = Math.floor((state.y + gridSize) / gridSize);
-                movingEntities.push({
-                    type: 'npc',
-                    npcIndex: i,
-                    gridY: npcGridY,
-                    subSort: 0.4
-                });
+                const e = getPooledEntity('npc', npcGridY, 0.4);
+                if (e) e.npcIndex = i;
             }
 
             // Add items on current map
@@ -28288,12 +28332,8 @@ Item Receive Display:
                 const item = itemsData[placed.itemIndex];
                 if (!item) continue;
 
-                movingEntities.push({
-                    type: 'item',
-                    itemIndex: i,
-                    gridY: placed.y + 1,
-                    subSort: 0.3
-                });
+                const e = getPooledEntity('item', placed.y + 1, 0.3);
+                if (e) e.itemIndex = i;
             }
 
             // Add static objects on current map
@@ -28303,31 +28343,32 @@ Item Receive Display:
                 const obj = staticObjectsData[placed.objIndex];
                 if (!obj) continue;
 
-                movingEntities.push({
-                    type: 'staticObj',
-                    placedIndex: i,
-                    gridY: placed.y + (obj.height || 1),
-                    subSort: 0.2
-                });
+                const e = getPooledEntity('staticObj', placed.y + (obj.height || 1), 0.2);
+                if (e) e.placedIndex = i;
             }
 
             // Add other multiplayer players
             otherPlayers.forEach((other, odId) => {
                 if (other.inTavern || other.currentMap !== currentGameMap) return;
                 const otherGridY = Math.floor((other.y + player.height) / (gridSize * TILE_SCALE));
-                movingEntities.push({
-                    type: 'otherPlayer',
-                    playerId: odId,
-                    gridY: otherGridY,
-                    subSort: 0.45
-                });
+                const e = getPooledEntity('otherPlayer', otherGridY, 0.45);
+                if (e) e.playerId = odId;
             });
 
-            // Sort only the moving entities (typically < 50 items, not 16k+)
-            movingEntities.sort((a, b) => {
-                if (a.gridY !== b.gridY) return a.gridY - b.gridY;
-                return a.subSort - b.subSort;
-            });
+            // Sort only the used portion of the pool (typically < 50 items)
+            // Use a view into the pool array to avoid creating new array
+            const usedCount = entityPoolUsed;
+            // In-place sort of first N elements
+            for (let i = 1; i < usedCount; i++) {
+                const current = entityPool[i];
+                let j = i - 1;
+                while (j >= 0 && (entityPool[j].gridY > current.gridY ||
+                       (entityPool[j].gridY === current.gridY && entityPool[j].subSort > current.subSort))) {
+                    entityPool[j + 1] = entityPool[j];
+                    j--;
+                }
+                entityPool[j + 1] = current;
+            }
 
             // Track which moving entities we've drawn
             let entityIndex = 0;
@@ -28370,8 +28411,8 @@ Item Receive Display:
                 }
 
                 // After drawing tiles for this row, draw any entities at this Y
-                while (entityIndex < movingEntities.length && movingEntities[entityIndex].gridY <= y) {
-                    const e = movingEntities[entityIndex];
+                while (entityIndex < usedCount && entityPool[entityIndex].gridY <= y) {
+                    const e = entityPool[entityIndex];
                     if (e.type === 'player') {
                         drawPlayer();
                     } else if (e.type === 'otherPlayer') {
@@ -28388,8 +28429,8 @@ Item Receive Display:
             }
 
             // Draw any remaining entities below the visible area
-            while (entityIndex < movingEntities.length) {
-                const e = movingEntities[entityIndex];
+            while (entityIndex < usedCount) {
+                const e = entityPool[entityIndex];
                 if (e.type === 'player') drawPlayer();
                 else if (e.type === 'otherPlayer') drawOtherPlayer(e.playerId, camX, camY);
                 else if (e.type === 'npc') drawNPC(e.npcIndex, camX, camY, tileSize);
