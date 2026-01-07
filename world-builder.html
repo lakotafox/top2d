@@ -27402,8 +27402,8 @@ Item Receive Display:
             let dp4e = performance.now();
             if (dp4e - dp4 > 3) drawPerfLog += ' redraw:' + (dp4e-dp4).toFixed(0);
 
-            if (drawPerfLog && (performance.now() - drawPerfStart) > 20) {
-                console.log('[DRAW PERF]' + drawPerfLog);
+            if (drawPerfLog && (performance.now() - drawPerfStart) > 12) {
+                console.log('[DRAW]' + drawPerfLog + ' total:' + (performance.now() - drawPerfStart).toFixed(0));
             }
 
             // PASS 5: Draw collision debug on top of everything (so canopy doesn't hide it)
@@ -29682,8 +29682,8 @@ Item Receive Display:
             player.y = actualPlayerY;
 
             const totalTime = performance.now() - perfStart;
-            if (totalTime > 50) {
-                console.log('[PERF SLOW FRAME]' + perfLog + ' total:' + totalTime.toFixed(0) + 'ms');
+            if (totalTime > 20) {
+                console.log('[PERF]' + perfLog + ' total:' + totalTime.toFixed(0) + 'ms');
             }
 
             requestAnimationFrame(gameLoop);
