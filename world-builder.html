@@ -29823,41 +29823,41 @@ Item Receive Display:
 
             // Log frame time for network recording (outside perf panel check)
             const currentFps = deltaTime > 0 ? Math.round(1000 / deltaTime) : 60;
-            if (networkRecording) logFrameTime(deltaTime, currentFps);
+            // DISABLED FOR PERF TEST: if (networkRecording) logFrameTime(deltaTime, currentFps);
 
-            // Update performance panel (every render frame)
-            if (perfPanelVisible) {
-                perfUpdateCounter++;
-                fpsHistory.push(currentFps);
-                if (fpsHistory.length > FPS_HISTORY_SIZE) fpsHistory.shift();
-
-                // Update display every 10 frames for performance
-                if (perfUpdateCounter % 10 === 0) {
-                    const avgFps = Math.round(fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length);
-                    const fpsEl = document.getElementById('perfFPS');
-                    fpsEl.textContent = avgFps;
-                    fpsEl.className = 'perf-value' + (avgFps < 30 ? ' critical' : avgFps < 50 ? ' warning' : '');
-
-                    const frameTimeEl = document.getElementById('perfFrameTime');
-                    frameTimeEl.textContent = deltaTime.toFixed(1) + 'ms';
-                    frameTimeEl.className = 'perf-value' + (deltaTime > 33 ? ' critical' : deltaTime > 20 ? ' warning' : '');
-
-                    document.getElementById('perfNPCs').textContent = placedNpcs ? placedNpcs.length : 0;
-                    document.getElementById('perfTriggers').textContent = placedTriggers ? placedTriggers.length : 0;
-                    document.getElementById('perfLights').textContent = pointLights ? Object.keys(pointLights).length : 0;
-                    document.getElementById('perfLayers').textContent = layers ? layers.length : 0;
-
-                    // Update FPS graph
-                    const bars = document.querySelectorAll('#fpsGraph .fps-bar');
-                    fpsHistory.forEach((fps, i) => {
-                        if (bars[i]) {
-                            const height = Math.min(30, (fps / 60) * 30);
-                            bars[i].style.height = height + 'px';
-                            bars[i].style.background = fps < 30 ? '#f44' : fps < 50 ? '#fa4' : '#4f8';
-                        }
-                    });
-                }
-            }
+            // DISABLED FOR PERF TEST - Update performance panel (every render frame)
+            // if (perfPanelVisible) {
+            //     perfUpdateCounter++;
+            //     fpsHistory.push(currentFps);
+            //     if (fpsHistory.length > FPS_HISTORY_SIZE) fpsHistory.shift();
+            //
+            //     // Update display every 10 frames for performance
+            //     if (perfUpdateCounter % 10 === 0) {
+            //         const avgFps = Math.round(fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length);
+            //         const fpsEl = document.getElementById('perfFPS');
+            //         fpsEl.textContent = avgFps;
+            //         fpsEl.className = 'perf-value' + (avgFps < 30 ? ' critical' : avgFps < 50 ? ' warning' : '');
+            //
+            //         const frameTimeEl = document.getElementById('perfFrameTime');
+            //         frameTimeEl.textContent = deltaTime.toFixed(1) + 'ms';
+            //         frameTimeEl.className = 'perf-value' + (deltaTime > 33 ? ' critical' : deltaTime > 20 ? ' warning' : '');
+            //
+            //         document.getElementById('perfNPCs').textContent = placedNpcs ? placedNpcs.length : 0;
+            //         document.getElementById('perfTriggers').textContent = placedTriggers ? placedTriggers.length : 0;
+            //         document.getElementById('perfLights').textContent = pointLights ? Object.keys(pointLights).length : 0;
+            //         document.getElementById('perfLayers').textContent = layers ? layers.length : 0;
+            //
+            //         // Update FPS graph
+            //         const bars = document.querySelectorAll('#fpsGraph .fps-bar');
+            //         fpsHistory.forEach((fps, i) => {
+            //             if (bars[i]) {
+            //                 const height = Math.min(30, (fps / 60) * 30);
+            //                 bars[i].style.height = height + 'px';
+            //                 bars[i].style.background = fps < 30 ? '#f44' : fps < 50 ? '#fa4' : '#4f8';
+            //             }
+            //         });
+            //     }
+            // }
 
             // Performance profiling - log slow frames
             const perfStart = performance.now();
@@ -29945,17 +29945,17 @@ Item Receive Display:
 
             const totalTime = performance.now() - perfStart;
 
-            // Log detailed perf data when recording
-            if (networkRecording) {
-                logPerfFrame({
-                    fps: currentFps,
-                    total: Math.round(totalTime),
-                    update: Math.round(updateTime),
-                    draw: Math.round(drawTime),
-                    npc: Math.round(window._lastNpcTime || 0),
-                    light: Math.round(window._lastLightTime || 0)
-                });
-            }
+            // DISABLED FOR PERF TEST - Log detailed perf data when recording
+            // if (networkRecording) {
+            //     logPerfFrame({
+            //         fps: currentFps,
+            //         total: Math.round(totalTime),
+            //         update: Math.round(updateTime),
+            //         draw: Math.round(drawTime),
+            //         npc: Math.round(window._lastNpcTime || 0),
+            //         light: Math.round(window._lastLightTime || 0)
+            //     });
+            // }
 
             if (totalTime > 20) {
                 console.log('[PERF]' + framePerfStr + ' total:' + totalTime.toFixed(0) + 'ms');

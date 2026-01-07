@@ -425,6 +425,7 @@
                 <button id="testModeBtn" onclick="toggleTestMode()" style="width:100%; margin-top:5px; background:#4a4;">Collision: ON</button>
                 <button id="copyObjectBtn" onclick="startCopyMode()" style="width:100%; margin-top:5px; padding:8px; background:#a48; font-size:12px;">Copy Object</button>
                 <button id="farkleTableBtn" onclick="startFarklePlacement()" style="width:100%; margin-top:5px; padding:8px; background:#b86; font-size:12px;">Place Farkle Table</button>
+                <button id="blackjackTableBtn" onclick="startBlackjackPlacement()" style="width:100%; margin-top:5px; padding:8px; background:#1a5c32; color:#c9a227; font-size:12px;">Place Blackjack Table</button>
                 <button id="returnDoorBtn" onclick="startReturnDoorPlacement()" style="width:100%; margin-top:5px; padding:8px; background:#48a; font-size:12px;">Place Return Door</button>
                 <div style="font-size:10px; color:#888; margin-top:5px;">
                     View: <span id="currentViewDisplay">First Person</span> | Collisions: <span id="collisionCount">0</span>
@@ -1381,6 +1382,13 @@
                 return;
             }
 
+            // Blackjack placement mode - click to place table
+            if (blackjackPlaceMode) {
+                console.log('[BLACKJACK] Click detected - placing table');
+                confirmBlackjackPlacement();
+                return;
+            }
+
             // Return door placement mode - click to place door
             if (settingReturnDoor) {
                 console.log('[RETURN DOOR] Click detected - placing door');
@@ -1486,6 +1494,10 @@
                 }
                 if (farklePlaceMode) {
                     exitFarklePlacement();
+                    return;
+                }
+                if (blackjackPlaceMode) {
+                    cancelBlackjackPlacement();
                     return;
                 }
                 if (settingReturnDoor) {
@@ -5230,7 +5242,35 @@
                 case 'blackjack_error':
                     console.log('[BLACKJACK] Error from server:', data.error);
                     break;
+
+                case 'blackjack_table_placed':
+                    // Another player placed a Blackjack table - create it locally
+                    console.log('[BLACKJACK] Received table from another player:', data);
+                    createRemoteBlackjackTable(data);
+                    break;
             }
+        }
+
+        function createRemoteBlackjackTable(data) {
+            const pos = data.position;
+            const rot = data.rotation || 0;
+
+            // Check if table already exists at this position
+            const exists = blackjackTables.some(t =>
+                Math.abs(t.x - pos.x) < 0.5 &&
+                Math.abs(t.z - pos.z) < 0.5
+            );
+
+            if (exists) {
+                console.log('[BLACKJACK] Table already exists at this position, skipping');
+                return;
+            }
+
+            // Create the table mesh
+            const mesh = createBlackjackTableMesh(pos.x, pos.y, pos.z, rot);
+            blackjackTableMeshes.push(mesh);
+            blackjackTables.push({ x: pos.x, y: pos.y, z: pos.z, rotation: rot });
+            console.log('[BLACKJACK] Created remote table at', pos.x, pos.y, pos.z);
         }
 
         function spawnOtherPlayer(playerData) {
@@ -6530,16 +6570,31 @@
             const popup = document.getElementById('blackjackPopup');
             if (!popup || !blackjackState.active) return;
 
-            const dealerArea = document.getElementById('bjDealerCards');
-            const playersArea = document.getElementById('bjPlayersArea');
-            const bettingControls = document.getElementById('bjBettingControls');
-            const playingControls = document.getElementById('bjPlayingControls');
-            const resultMsg = document.getElementById('bjResultMessage');
+            // Use correct element IDs from HTML
+            const dealerArea = document.getElementById('dealerCards');
+            const playersArea = document.getElementById('bjPlayers');
+            const bettingControls = document.getElementById('bjBettingArea');
+            const playingControls = document.getElementById('bjPlayingArea');
+            const resultMsg = document.getElementById('bjResult');
             const betAmountEl = document.getElementById('bjBetAmount');
-            const myChipsEl = document.getElementById('bjMyChips');
+            const myChipsEl = document.getElementById('bjChips');
+            const phaseEl = document.getElementById('bjPhase');
 
             // Find my player
             const myPlayer = blackjackState.players.find(p => p.id === blackjackState.myPlayerId);
+
+            // Update phase message
+            if (phaseEl) {
+                const phaseMessages = {
+                    'waiting': 'Place your bet to start!',
+                    'betting': myPlayer?.status === 'waiting' ? 'Waiting for other players to bet...' : 'Place your bet!',
+                    'dealing': 'Dealing cards...',
+                    'playing': myPlayer?.status === 'playing' ? 'Your turn! Hit or Stand?' : 'Waiting for other player...',
+                    'dealer_turn': 'Dealer is playing...',
+                    'payout': 'Round complete!'
+                };
+                phaseEl.textContent = phaseMessages[blackjackState.phase] || blackjackState.phase;
+            }
 
             // Update my chips display
             if (myChipsEl && myPlayer) {
@@ -6578,11 +6633,24 @@
                         aces--;
                     }
 
+                    // Friendly status text
+                    const statusText = {
+                        'betting': 'Choosing bet...',
+                        'waiting': 'Bet placed',
+                        'playing': 'Playing',
+                        'stand': 'Standing',
+                        'bust': 'BUST!',
+                        'blackjack': 'BLACKJACK!',
+                        'win': 'Winner!',
+                        'lose': 'Lost',
+                        'push': 'Push'
+                    }[player.status] || player.status;
+
                     html += `<div class="bj-player ${isMe ? 'is-me' : ''}" style="background:${isMe ? 'rgba(201,162,39,0.2)' : 'rgba(255,255,255,0.1)'}; padding:10px; border-radius:8px; margin:5px; display:inline-block; min-width:120px; vertical-align:top;">
                         <div style="font-weight:bold; color:${isMe ? '#c9a227' : '#fff'};">${player.name} ${isMe ? '(You)' : ''}</div>
                         <div style="font-size:12px; color:#aaa;">Chips: ${player.chips.toLocaleString()} | Bet: ${player.bet}</div>
                         <div style="margin:5px 0;">${player.hand.map(c => getCardDisplay(c)).join('')}</div>
-                        <div style="font-size:14px; color:#ffd700;">Status: ${player.status} ${player.hand.length > 0 ? `(${handValue})` : ''}</div>
+                        <div style="font-size:14px; color:#ffd700;">${statusText} ${player.hand.length > 0 ? `(${handValue})` : ''}</div>
                     </div>`;
                 }
                 playersArea.innerHTML = html;
@@ -6648,21 +6716,119 @@
         };
 
         function joinBlackjackTable(tableId) {
+            console.log('[BLACKJACK] Joining table:', tableId);
+
+            // Check if connected to multiplayer
+            if (!multiplayerWs || multiplayerWs.readyState !== WebSocket.OPEN) {
+                alert('Connect to multiplayer first! Enter a room code and click Connect.');
+                console.log('[BLACKJACK] Not connected to multiplayer');
+                return;
+            }
+
             blackjackState.active = true;
             blackjackState.tableId = tableId;
-            blackjackState.myPlayerId = multiplayerPlayerId;
+            blackjackState.myPlayerId = localPlayerId;
+            blackjackState.phase = 'betting'; // Default to betting phase
 
             const popup = document.getElementById('blackjackPopup');
-            if (popup) popup.style.display = 'block';
+            if (popup) {
+                popup.style.display = 'block';
+                console.log('[BLACKJACK] Popup shown');
+            } else {
+                console.error('[BLACKJACK] Popup element not found!');
+            }
 
-            sendBlackjackAction('join', { name: multiplayerPlayerName || 'Player' });
+            // Show betting controls immediately
+            const bettingArea = document.getElementById('bjBettingArea');
+            if (bettingArea) {
+                bettingArea.style.display = 'block';
+            }
+
+            const playerName = document.getElementById('mpNameInput')?.value || 'Player';
+            sendBlackjackAction('join', { name: playerName });
         }
 
-        // Blackjack table positions (add near bar area)
-        let blackjackTables = [
-            { x: -8, z: 5, rotation: 0 }
-        ];
+        // Blackjack table positions
+        let blackjackTables = [];
         let nearBlackjackTable = false;
+        let blackjackPlaceMode = false;
+        let blackjackPreview = null;
+
+        window.startBlackjackPlacement = function() {
+            blackjackPlaceMode = true;
+            document.getElementById('blackjackTableBtn').style.background = '#4a4';
+            document.getElementById('blackjackTableBtn').textContent = 'Click to Place (ESC cancel)';
+
+            // Create preview mesh (initial position, will be updated by raycast)
+            blackjackPreview = createBlackjackTableMesh(0, 0, 0, 0);
+            blackjackPreview.traverse(child => {
+                if (child.material) {
+                    child.material = child.material.clone();
+                    child.material.transparent = true;
+                    child.material.opacity = 0.5;
+                }
+            });
+
+            document.body.requestPointerLock();
+        };
+
+        function cancelBlackjackPlacement() {
+            blackjackPlaceMode = false;
+            if (blackjackPreview) {
+                scene.remove(blackjackPreview);
+                blackjackPreview = null;
+            }
+            document.getElementById('blackjackTableBtn').style.background = '#1a5c32';
+            document.getElementById('blackjackTableBtn').textContent = 'Place Blackjack Table';
+        }
+
+        function confirmBlackjackPlacement() {
+            if (!blackjackPreview) return;
+
+            const pos = blackjackPreview.position.clone();
+            const rot = blackjackPreview.rotation.y;
+
+            // Validate position (not at origin, reasonable Y)
+            if (Math.abs(pos.x) < 0.1 && Math.abs(pos.y) < 0.1 && Math.abs(pos.z) < 0.1) {
+                console.log('[BLACKJACK] Cannot place at origin - look at the floor to aim');
+                return;
+            }
+            // Warn if Y seems too high or low
+            const estimatedFloorY = camera.position.y - (playerHeight * 0.9);
+            if (pos.y > camera.position.y || pos.y < estimatedFloorY - 2) {
+                console.log('[BLACKJACK] Warning: Table Y position', pos.y.toFixed(2), 'may be wrong. Expected around', estimatedFloorY.toFixed(2));
+            }
+
+            // Remove preview
+            scene.remove(blackjackPreview);
+            blackjackPreview = null;
+
+            // Create permanent table
+            const mesh = createBlackjackTableMesh(pos.x, pos.y, pos.z, rot);
+            blackjackTableMeshes.push(mesh);
+
+            // Add to tables array
+            blackjackTables.push({ x: pos.x, y: pos.y, z: pos.z, rotation: rot });
+            console.log('[BLACKJACK] Placed table at', pos.x, pos.y, pos.z);
+
+            // Broadcast table to other players
+            if (multiplayerWs && multiplayerWs.readyState === WebSocket.OPEN) {
+                const msg = {
+                    type: 'blackjack_table_placed',
+                    position: { x: pos.x, y: pos.y, z: pos.z },
+                    rotation: rot
+                };
+                multiplayerWs.send(JSON.stringify(msg));
+                console.log('[BLACKJACK] Broadcast table placement:', msg);
+            } else {
+                console.log('[BLACKJACK] Cannot broadcast - WebSocket not connected',
+                    multiplayerWs ? 'readyState: ' + multiplayerWs.readyState : 'ws is null');
+            }
+
+            blackjackPlaceMode = false;
+            document.getElementById('blackjackTableBtn').style.background = '#1a5c32';
+            document.getElementById('blackjackTableBtn').textContent = 'Place Blackjack Table';
+        }
 
         function checkBlackjackTableProximity() {
             if (!camera || blackjackState.active) return;
@@ -6690,63 +6856,107 @@
         // ========== END BLACKJACK MULTIPLAYER CLIENT ==========
 
         // Create blackjack table mesh
-        function createBlackjackTableMesh(x, z, rotation = 0) {
+        function createBlackjackTableMesh(x, y, z, rotation = 0) {
             const group = new THREE.Group();
 
-            // Table base (dark wood)
-            const baseGeom = new THREE.CylinderGeometry(1.2, 1.2, 0.1, 32, 1, false, 0, Math.PI);
-            const baseMat = new THREE.MeshStandardMaterial({ color: 0x3d2817 });
-            const base = new THREE.Mesh(baseGeom, baseMat);
-            base.position.y = 0.9;
-            base.rotation.y = Math.PI / 2;
-            group.add(base);
+            // Use same leg height as Farkle tables for consistency
+            const legHeight = tableLegHeight || 0.9;
 
-            // Felt surface (green)
-            const feltGeom = new THREE.CylinderGeometry(1.1, 1.1, 0.02, 32, 1, false, 0, Math.PI);
-            const feltMat = new THREE.MeshStandardMaterial({ color: 0x1a5c32 });
+            // Four table legs starting at Y=0
+            const legInsetX = 1.0;
+            const legInsetZ = 0.4;
+            const legGeom = new THREE.CylinderGeometry(0.06, 0.08, legHeight, 8);
+            const legMat = new THREE.MeshStandardMaterial({
+                color: 0x5d3a22,
+                roughness: 0.7,
+                emissive: 0x1a0f08,
+                emissiveIntensity: 0.3
+            });
+
+            [[-legInsetX, -legInsetZ], [legInsetX, -legInsetZ],
+             [-legInsetX, legInsetZ], [legInsetX, legInsetZ]].forEach(([lx, lz]) => {
+                const leg = new THREE.Mesh(legGeom, legMat);
+                leg.position.set(lx, legHeight / 2, lz);
+                group.add(leg);
+            });
+
+            // Table top at leg height
+            const topY = legHeight;
+            const topGeom = new THREE.BoxGeometry(2.4, 0.1, 1.2);
+            const topMat = new THREE.MeshStandardMaterial({
+                color: 0x5d3a22,
+                roughness: 0.5,
+                emissive: 0x1a0f08,
+                emissiveIntensity: 0.3
+            });
+            const top = new THREE.Mesh(topGeom, topMat);
+            top.position.y = topY + 0.05;
+            group.add(top);
+
+            // Bright green felt surface on top
+            const feltGeom = new THREE.BoxGeometry(2.2, 0.03, 1.0);
+            const feltMat = new THREE.MeshStandardMaterial({
+                color: 0x1a8c42,  // Brighter green
+                roughness: 0.9,
+                emissive: 0x0a3c1a,
+                emissiveIntensity: 0.3
+            });
             const felt = new THREE.Mesh(feltGeom, feltMat);
-            felt.position.y = 0.96;
-            felt.rotation.y = Math.PI / 2;
+            felt.position.y = topY + 0.115;
             group.add(felt);
 
-            // Gold trim
-            const trimGeom = new THREE.TorusGeometry(1.15, 0.03, 8, 32, Math.PI);
-            const trimMat = new THREE.MeshStandardMaterial({ color: 0xc9a227, metalness: 0.8, roughness: 0.3 });
+            // Gold trim ring around felt
+            const trimGeom = new THREE.BoxGeometry(2.3, 0.06, 1.1);
+            const trimMat = new THREE.MeshStandardMaterial({
+                color: 0xd4a017,
+                roughness: 0.3,
+                metalness: 0.8,
+                emissive: 0x3d2800,
+                emissiveIntensity: 0.2
+            });
             const trim = new THREE.Mesh(trimGeom, trimMat);
-            trim.position.y = 0.95;
-            trim.rotation.x = Math.PI / 2;
+            trim.position.y = topY + 0.08;
             group.add(trim);
 
-            // Table leg
-            const legGeom = new THREE.CylinderGeometry(0.15, 0.2, 0.9, 8);
-            const legMat = new THREE.MeshStandardMaterial({ color: 0x3d2817 });
-            const leg = new THREE.Mesh(legGeom, legMat);
-            leg.position.y = 0.45;
-            group.add(leg);
-
-            // Add "BLACKJACK" text label floating above table
+            // "BLACKJACK" text label floating above table
             const canvas = document.createElement('canvas');
             canvas.width = 256;
             canvas.height = 64;
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#1a5c32';
             ctx.fillRect(0, 0, 256, 64);
-            ctx.fillStyle = '#c9a227';
-            ctx.font = 'bold 28px Georgia';
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 32px Georgia';
             ctx.textAlign = 'center';
-            ctx.fillText('BLACKJACK', 128, 42);
+            ctx.fillText('BLACKJACK', 128, 44);
 
             const labelTex = new THREE.CanvasTexture(canvas);
-            const labelGeom = new THREE.PlaneGeometry(1, 0.25);
-            const labelMat = new THREE.MeshBasicMaterial({ map: labelTex, transparent: true });
+            const labelGeom = new THREE.PlaneGeometry(1.2, 0.3);
+            const labelMat = new THREE.MeshBasicMaterial({ map: labelTex, transparent: true, side: THREE.DoubleSide });
             const label = new THREE.Mesh(labelGeom, labelMat);
-            label.position.y = 1.3;
+            label.position.y = topY + 0.5;
             label.rotation.x = -0.3;
             group.add(label);
 
-            group.position.set(x, 0, z);
+            // Add a bright glowing beacon above table for visibility
+            const beaconGeom = new THREE.SphereGeometry(0.15, 16, 16);
+            const beaconMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // Bright green
+            const beacon = new THREE.Mesh(beaconGeom, beaconMat);
+            beacon.position.y = topY + 1.0;
+            group.add(beacon);
+
+            // Add vertical pole/stick to help locate table
+            const poleGeom = new THREE.CylinderGeometry(0.02, 0.02, 1.5, 8);
+            const poleMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const pole = new THREE.Mesh(poleGeom, poleMat);
+            pole.position.y = topY + 0.75;
+            group.add(pole);
+
+            group.position.set(x, y, z);
             group.rotation.y = rotation;
             scene.add(group);
+
+            console.log('[BLACKJACK] Created table mesh at', x.toFixed(2), y.toFixed(2), z.toFixed(2), 'legHeight:', legHeight, 'topY:', topY);
 
             return group;
         }
@@ -6755,7 +6965,7 @@
         let blackjackTableMeshes = [];
         function initBlackjackTables() {
             for (const table of blackjackTables) {
-                const mesh = createBlackjackTableMesh(table.x, table.z, table.rotation);
+                const mesh = createBlackjackTableMesh(table.x, table.y || 0, table.z, table.rotation);
                 blackjackTableMeshes.push(mesh);
                 console.log('[BLACKJACK] Created table at', table.x, table.z);
             }
@@ -7115,6 +7325,52 @@
             // Update Farkle table preview position
             if (farklePlaceMode && farklePreview) {
                 updateFarklePreviewPosition();
+            }
+
+            // Update Blackjack table preview position
+            if (blackjackPlaceMode && blackjackPreview) {
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                const intersects = raycaster.intersectObjects(scene.children, true);
+
+                // Find a floor-like surface (normal pointing mostly up, Y < camera)
+                let bestHit = null;
+                for (const hit of intersects) {
+                    if (hit.object === blackjackPreview) continue;
+                    if (hit.object.parent === blackjackPreview) continue;
+                    if (hit.object === playerBody) continue;
+                    if (hit.object === collisionBox) continue;
+                    if (blackjackTableMeshes.some(m => hit.object === m || m.children?.includes(hit.object))) continue;
+
+                    // Prefer floor surfaces (normal Y > 0.5 means roughly horizontal facing up)
+                    if (hit.face && hit.face.normal.y > 0.5 && hit.point.y < camera.position.y) {
+                        bestHit = hit;
+                        break;
+                    }
+                    // Fallback to any hit below camera level
+                    if (!bestHit && hit.point.y < camera.position.y) {
+                        bestHit = hit;
+                    }
+                }
+
+                if (bestHit) {
+                    blackjackPreview.position.set(bestHit.point.x, bestHit.point.y, bestHit.point.z);
+                } else {
+                    // No valid hit - place 3 units in front at estimated floor level
+                    const forward = new THREE.Vector3(0, 0, -3);
+                    forward.applyQuaternion(camera.quaternion);
+                    // Estimate floor as camera Y minus eye height (player height * 0.9)
+                    const estimatedFloorY = camera.position.y - (playerHeight * 0.9);
+                    blackjackPreview.position.set(
+                        camera.position.x + forward.x,
+                        estimatedFloorY,
+                        camera.position.z + forward.z
+                    );
+                }
+
+                // R key to rotate
+                if (keys['r']) {
+                    blackjackPreview.rotation.y += 0.05;
+                }
             }
 
             // Show/hide Farkle prompt when near table
