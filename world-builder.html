@@ -27612,9 +27612,15 @@ Item Receive Display:
             ctx.save();
             ctx.scale(cameraZoom, cameraZoom);
 
-            // Draw tiles - use Math.round for camera to prevent seams
-            const camX = Math.round(camera.x);
-            const camY = Math.round(camera.y);
+            // Sub-pixel camera offset for smooth scrolling without shimmer
+            // Use floor for consistent tile positions, translate by fractional part
+            const camX = Math.floor(camera.x);
+            const camY = Math.floor(camera.y);
+            const subPixelX = camera.x - camX;
+            const subPixelY = camera.y - camY;
+
+            // Translate by negative fractional offset so tiles scroll smoothly
+            ctx.translate(-subPixelX, -subPixelY);
 
             // === 3-PASS RENDERING FOR Y-SORTING ===
             // Performance profiling for render passes
