@@ -22696,7 +22696,9 @@
         // IMPORTANT: Must use requestAnimationFrame (not setTimeout) so JIT compiles the same code path!
         let isWarmingUp = false;
         let warmupFrames = 0;
-        const WARMUP_FRAME_COUNT = 900; // ~15 seconds at 60fps - comprehensive warmup
+        const WARMUP_FRAME_COUNT = 200; // ~3 seconds at 60fps
+        const WARMUP_ITERATIONS_PER_FRAME = 8; // Run hot functions 8x per frame = 1600 total iterations
+        // TurboFan needs ~1000+ iterations to fully optimize - this gives us plenty
 
         function runWarmup() {
             isWarmingUp = true;
@@ -22775,61 +22777,86 @@
                     player.keys = { up: dir === 'up', down: dir === 'down', left: dir === 'left', right: dir === 'right' };
                 }
 
-                // Run one frame of game logic (same as real game loop)
-                updateDayCycle();
-                update();
-                updateNPCs();
+                // Run hot functions multiple times per frame to accelerate JIT optimization
+                // TurboFan needs ~1000+ iterations - with 8 iterations per frame over 600 frames = 4800 iterations
+                // NOTE: No try-catch blocks - they prevent TurboFan from inlining!
+                for (let iter = 0; iter < WARMUP_ITERATIONS_PER_FRAME; iter++) {
+                    const totalIter = warmupFrames * WARMUP_ITERATIONS_PER_FRAME + iter;
 
-                // Run draw to warm up rendering code
-                draw();
+                    // Run one frame of game logic (same as real game loop)
+                    updateDayCycle();
+                    update();
+                    updateNPCs();
 
-                // Cycle through different lighting levels to warm up all light code paths
-                if (warmupFrames % 30 === 0) {
-                    const savedDarkness = manualDarkness;
-                    manualDarkness = (warmupFrames % 90 === 0) ? 80 : (warmupFrames % 60 === 0) ? 40 : 20;
-                    renderLighting();
-                    manualDarkness = savedDarkness;
-                }
+                    // Run draw to warm up rendering code (only draw once per frame to avoid visual glitches)
+                    if (iter === 0) {
+                        draw();
+                    }
 
-                // Exercise trigger checking explicitly
-                if (warmupFrames % 10 === 0 && typeof checkTriggers === 'function') {
-                    try { checkTriggers(); } catch(e) {}
-                }
+                    // Cycle through different lighting levels to warm up all light code paths
+                    if (totalIter % 30 === 0) {
+                        const savedDarkness = manualDarkness;
+                        manualDarkness = (totalIter % 90 === 0) ? 80 : (totalIter % 60 === 0) ? 40 : 20;
+                        renderLighting();
+                        manualDarkness = savedDarkness;
+                    }
 
-                // Exercise player attack code paths (every 45 frames, attack for 15 frames)
-                if (warmupFrames % 45 < 15) {
-                    player.attacking = true;
-                    player.attackFrame = warmupFrames % 3;
-                    player.attackAnim = player.animations && player.animations.attackDown ? 'attackDown' : null;
-                } else {
-                    player.attacking = false;
-                }
+                    // Exercise trigger checking explicitly (no try-catch - prevents inlining)
+                    if (totalIter % 10 === 0 && typeof checkTriggers === 'function') {
+                        checkTriggers();
+                    }
 
-                // Exercise quest checking
-                if (warmupFrames % 20 === 0 && typeof checkQuestConditions === 'function') {
-                    try { checkQuestConditions(); } catch(e) {}
-                }
+                    // Exercise ALL player animation paths (not just attackDown)
+                    // This ensures monomorphic dispatch for animation lookup
+                    const animKeys = ['walkUp', 'walkDown', 'walkLeft', 'walkRight',
+                                      'idleUp', 'idleDown', 'idleLeft', 'idleRight',
+                                      'attackUp', 'attackDown', 'attackLeft', 'attackRight'];
+                    const animIndex = totalIter % animKeys.length;
+                    const animKey = animKeys[animIndex];
 
-                // Exercise dialog checking
-                if (warmupFrames % 15 === 0 && typeof checkDialogInteraction === 'function') {
-                    try { checkDialogInteraction(); } catch(e) {}
-                }
+                    if (totalIter % 45 < 15) {
+                        player.attacking = true;
+                        player.attackFrame = totalIter % 3;
+                        player.attackAnim = player.animations && player.animations[animKey] ? animKey : null;
+                    } else {
+                        player.attacking = false;
+                        // Exercise idle/walk animations too
+                        if (player.animations && player.animations[animKey]) {
+                            player.currentAnim = animKey;
+                        }
+                    }
 
-                // Exercise item interaction checking
-                if (warmupFrames % 25 === 0 && typeof checkItemInteraction === 'function') {
-                    try { checkItemInteraction(); } catch(e) {}
-                }
+                    // Exercise quest checking (no try-catch)
+                    if (totalIter % 20 === 0 && typeof checkQuestConditions === 'function') {
+                        checkQuestConditions();
+                    }
 
-                // Exercise collision checking with various positions
-                if (warmupFrames % 5 === 0 && typeof checkCollision === 'function') {
-                    const testX = player.x + (warmupFrames % 100) - 50;
-                    const testY = player.y + (warmupFrames % 80) - 40;
-                    try { checkCollision(testX, testY, 20, 20); } catch(e) {}
-                }
+                    // Exercise dialog checking (no try-catch)
+                    if (totalIter % 15 === 0 && typeof checkDialogInteraction === 'function') {
+                        checkDialogInteraction();
+                    }
 
-                // Exercise inventory functions
-                if (warmupFrames % 30 === 0 && typeof updateInventoryUI === 'function') {
-                    try { updateInventoryUI(); } catch(e) {}
+                    // Exercise item interaction checking (no try-catch)
+                    if (totalIter % 25 === 0 && typeof checkItemInteraction === 'function') {
+                        checkItemInteraction();
+                    }
+
+                    // Exercise collision checking with various positions (no try-catch)
+                    if (totalIter % 5 === 0 && typeof checkCollision === 'function') {
+                        const testX = player.x + (totalIter % 100) - 50;
+                        const testY = player.y + (totalIter % 80) - 40;
+                        checkCollision(testX, testY, 20, 20);
+                    }
+
+                    // Exercise inventory functions (no try-catch)
+                    if (totalIter % 30 === 0 && typeof updateInventoryUI === 'function') {
+                        updateInventoryUI();
+                    }
+
+                    // Exercise ambient sound code paths
+                    if (totalIter % 20 === 0 && typeof updateAmbientSounds === 'function') {
+                        updateAmbientSounds();
+                    }
                 }
 
                 warmupFrames++;
