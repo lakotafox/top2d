@@ -22737,6 +22737,9 @@
                     player.invulnerable = false;
                     player.knockbackVx = 0;
                     player.knockbackVy = 0;
+                    player.attacking = false;
+                    player.attackAnim = null;
+                    player.attackFrame = 0;
                     console.log('[WARMUP] Complete after', warmupFrames, 'frames');
 
                     // Hide loading and start real game
@@ -22791,6 +22794,42 @@
                 // Exercise trigger checking explicitly
                 if (warmupFrames % 10 === 0 && typeof checkTriggers === 'function') {
                     try { checkTriggers(); } catch(e) {}
+                }
+
+                // Exercise player attack code paths (every 45 frames, attack for 15 frames)
+                if (warmupFrames % 45 < 15) {
+                    player.attacking = true;
+                    player.attackFrame = warmupFrames % 3;
+                    player.attackAnim = player.animations && player.animations.attackDown ? 'attackDown' : null;
+                } else {
+                    player.attacking = false;
+                }
+
+                // Exercise quest checking
+                if (warmupFrames % 20 === 0 && typeof checkQuestConditions === 'function') {
+                    try { checkQuestConditions(); } catch(e) {}
+                }
+
+                // Exercise dialog checking
+                if (warmupFrames % 15 === 0 && typeof checkDialogInteraction === 'function') {
+                    try { checkDialogInteraction(); } catch(e) {}
+                }
+
+                // Exercise item interaction checking
+                if (warmupFrames % 25 === 0 && typeof checkItemInteraction === 'function') {
+                    try { checkItemInteraction(); } catch(e) {}
+                }
+
+                // Exercise collision checking with various positions
+                if (warmupFrames % 5 === 0 && typeof checkCollision === 'function') {
+                    const testX = player.x + (warmupFrames % 100) - 50;
+                    const testY = player.y + (warmupFrames % 80) - 40;
+                    try { checkCollision(testX, testY, 20, 20); } catch(e) {}
+                }
+
+                // Exercise inventory functions
+                if (warmupFrames % 30 === 0 && typeof updateInventoryUI === 'function') {
+                    try { updateInventoryUI(); } catch(e) {}
                 }
 
                 warmupFrames++;
