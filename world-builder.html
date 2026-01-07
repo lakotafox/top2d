@@ -9008,7 +9008,27 @@
 
             // === DRAW GAME PLAYERS (visible to builder when co-op) ===
             if (gamePlayersInBuilder.size > 0) {
-                // Same frame data as game test
+                // Get the active player character sprite
+                let activeSprite = null;
+                if (activePlayerIndex >= 0 && playerCharacters[activePlayerIndex]) {
+                    const activeChar = playerCharacters[activePlayerIndex];
+                    if (activeChar._spriteImg && activeChar._spriteImg.complete && activeChar._spriteImg.naturalWidth > 0) {
+                        activeSprite = activeChar._spriteImg;
+                    }
+                }
+                // Fall back to playerSpriteImg if no active character sprite
+                if (!activeSprite && playerSpriteImg && playerSpriteImg.complete && playerSpriteImg.naturalWidth > 0) {
+                    activeSprite = playerSpriteImg;
+                }
+
+                // Get active character's animations for proper frame display
+                const activeChar = activePlayerIndex >= 0 ? playerCharacters[activePlayerIndex] : null;
+                const charAnims = activeChar?.animations || null;
+                const charFrameW = activeChar?.frameWidth || 64;
+                const charFrameH = activeChar?.frameHeight || 64;
+                const charMirrors = activeChar?.animMirrors || {};
+
+                // Legacy frame data fallback
                 const idleFrames = {
                     down: [0, 1, 2],
                     up: [3, 4, 5],
@@ -9030,26 +9050,78 @@
                     const px = (gPlayer.x / 4) * zoom;
                     const py = (gPlayer.y / 4) * zoom;
 
-                    const frameWidth = 64;
-                    const frameHeight = 64;
                     const drawSize = tileSize * 1.5;
                     const dir = gPlayer.direction || 'down';
                     const frame = gPlayer.frame || 0;
 
-                    let row = 0;
-                    let col = 0;
-                    let flipX = dir === 'left';
+                    let srcX = 0, srcY = 0, srcW = charFrameW, srcH = charFrameH;
+                    let flipX = false;
 
-                    if (gPlayer.animation === 'walk') {
-                        const walk = walkFrames[dir];
-                        row = walk.row;
-                        col = walk.cols[frame % walk.cols.length];
+                    // Try to use new animation system
+                    if (charAnims) {
+                        const dirMap = { down: 'walkDown', up: 'walkUp', left: 'walkLeft', right: 'walkRight' };
+                        const idleDirMap = { down: 'idleDown', up: 'idleUp', left: 'idleLeft', right: 'idleRight' };
+                        const attackDirMap = { down: 'attackDown', up: 'attackUp', left: 'attackLeft', right: 'attackRight' };
+
+                        let animKey;
+                        if (gPlayer.animation === 'attack') {
+                            const attackKey = attackDirMap[dir];
+                            if (charAnims[attackKey] && charAnims[attackKey].length > 0) {
+                                animKey = attackKey;
+                            } else if (charAnims.attack && charAnims.attack.length > 0) {
+                                animKey = 'attack';
+                            } else {
+                                animKey = dirMap[dir];
+                            }
+                        } else if (gPlayer.animation === 'walk') {
+                            animKey = dirMap[dir];
+                        } else {
+                            const dirIdleKey = idleDirMap[dir];
+                            if (charAnims[dirIdleKey] && charAnims[dirIdleKey].length > 0) {
+                                animKey = dirIdleKey;
+                            } else {
+                                animKey = 'idle';
+                            }
+                        }
+
+                        let frames = charAnims[animKey];
+                        if (!frames || frames.length === 0) frames = charAnims.walkDown || [];
+                        if ((!frames || frames.length === 0) && dir === 'left') {
+                            frames = charAnims.walkRight || [];
+                            flipX = true;
+                        }
+
+                        if (frames && frames.length > 0) {
+                            const f = frames[frame % frames.length];
+                            srcX = f.x;
+                            srcY = f.y;
+                            srcW = f.w;
+                            srcH = f.h;
+                        }
+
+                        if (charMirrors[animKey]) flipX = !flipX;
+                        if (dir === 'left' && (!charAnims.walkLeft || charAnims.walkLeft.length === 0)) {
+                            flipX = true;
+                        }
                     } else {
-                        row = 0;
-                        col = idleFrames[dir][frame % idleFrames[dir].length];
+                        // Legacy frame layout
+                        let row = 0, col = 0;
+                        flipX = dir === 'left';
+
+                        if (gPlayer.animation === 'walk') {
+                            const walk = walkFrames[dir];
+                            row = walk.row;
+                            col = walk.cols[frame % walk.cols.length];
+                        } else {
+                            row = 0;
+                            col = idleFrames[dir][frame % idleFrames[dir].length];
+                        }
+
+                        srcX = col * charFrameW;
+                        srcY = row * charFrameH;
                     }
 
-                    if (playerSpriteImg && playerSpriteImg.complete && playerSpriteImg.naturalWidth > 0) {
+                    if (activeSprite) {
                         // Draw shadow
                         mapCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
                         mapCtx.beginPath();
@@ -9061,12 +9133,12 @@
                         if (flipX) {
                             mapCtx.translate(px + drawSize / 2, py - drawSize / 2);
                             mapCtx.scale(-1, 1);
-                            mapCtx.drawImage(playerSpriteImg,
-                                col * frameWidth, row * frameHeight, frameWidth, frameHeight,
+                            mapCtx.drawImage(activeSprite,
+                                srcX, srcY, srcW, srcH,
                                 0, 0, drawSize, drawSize);
                         } else {
-                            mapCtx.drawImage(playerSpriteImg,
-                                col * frameWidth, row * frameHeight, frameWidth, frameHeight,
+                            mapCtx.drawImage(activeSprite,
+                                srcX, srcY, srcW, srcH,
                                 px - drawSize / 2, py - drawSize / 2, drawSize, drawSize);
                         }
                         mapCtx.restore();
@@ -23429,6 +23501,7 @@
                             other.targetY = data.player.y;
                             other.direction = data.player.direction || other.direction;
                             other.animation = data.player.animation || other.animation;
+                            other.attackFrame = data.player.attackFrame || 0;
                             other.currentMap = data.player.currentMap || other.currentMap;
                             other.inTavern = data.player.inTavern || false;
                         }
@@ -23489,12 +23562,21 @@
             if (now - mpLastSendTime < 100) return; // Throttle to 10/sec
             mpLastSendTime = now;
 
+            // Determine animation state
+            let animState = 'idle';
+            if (player.attacking && player.attackAnim) {
+                animState = 'attack';
+            } else if (player.moving) {
+                animState = 'walk';
+            }
+
             mpSocket.send(JSON.stringify({
                 type: 'update',
                 x: player.x,
                 y: player.y,
                 direction: player.direction,
-                animation: player.moving ? 'walk' : 'idle',
+                animation: animState,
+                attackFrame: player.attackFrame || 0,
                 currentMap: currentGameMap,
                 inTavern: inTavernMode
             }));
@@ -28935,25 +29017,76 @@ Item Receive Display:
             let flipX = false;
 
             if (playerAnimations) {
-                // New animation system
+                // New animation system - match local player's logic
                 const dirMap = { down: 'walkDown', up: 'walkUp', left: 'walkLeft', right: 'walkRight' };
-                let animKey = other.animation === 'walk' ? dirMap[dir] : 'idle';
+                const idleDirMap = { down: 'idleDown', up: 'idleUp', left: 'idleLeft', right: 'idleRight' };
+                const attackDirMap = { down: 'attackDown', up: 'attackUp', left: 'attackLeft', right: 'attackRight' };
+
+                let animKey;
+                let useAttackFrame = false;
+
+                if (other.animation === 'attack') {
+                    // Check for directional attack animation
+                    const attackKey = attackDirMap[dir];
+                    if (playerAnimations[attackKey] && playerAnimations[attackKey].length > 0) {
+                        animKey = attackKey;
+                    } else if (playerAnimations.attack && playerAnimations.attack.length > 0) {
+                        animKey = 'attack';
+                    } else {
+                        animKey = dirMap[dir];
+                    }
+                    useAttackFrame = true;
+                } else if (other.animation === 'walk') {
+                    animKey = dirMap[dir];
+                } else {
+                    // Idle - check for directional idle first
+                    const dirIdleKey = idleDirMap[dir];
+                    if (playerAnimations[dirIdleKey] && playerAnimations[dirIdleKey].length > 0) {
+                        animKey = dirIdleKey;
+                    } else {
+                        animKey = 'idle';
+                    }
+                }
+
                 let frames = playerAnimations[animKey];
 
-                if (!frames || frames.length === 0) frames = playerAnimations.walkDown || [];
+                // Fallback: if no frames, use walkDown
+                if (!frames || frames.length === 0) {
+                    frames = playerAnimations.walkDown || [];
+                }
+                // Fallback for left: use right and flip
                 if ((!frames || frames.length === 0) && dir === 'left') {
                     frames = playerAnimations.walkRight || [];
                     flipX = true;
                 }
 
+                let currentSheetIndex = 0;
                 if (frames && frames.length > 0) {
-                    const frame = frames[other.frame % frames.length];
+                    let frameIndex;
+                    if (useAttackFrame) {
+                        frameIndex = (other.attackFrame || 0) % frames.length;
+                    } else {
+                        frameIndex = other.frame % frames.length;
+                    }
+                    const frame = frames[frameIndex];
                     srcX = frame.x;
                     srcY = frame.y;
                     srcW = frame.w;
                     srcH = frame.h;
+                    currentSheetIndex = frame.sheet || 0;
                 }
 
+                // Use the correct sprite sheet for this frame
+                if (playerSpriteSheets && playerSpriteSheets[currentSheetIndex]) {
+                    playerImg = playerSpriteSheets[currentSheetIndex];
+                }
+
+                // Check if this animation should be mirrored (from player editor mirror toggle)
+                if (playerAnimMirrors && playerAnimMirrors[animKey]) {
+                    flipX = !flipX;
+                }
+
+                // Handle left direction by mirroring right (fallback if no walkLeft defined)
                 if (dir === 'left' && (!playerAnimations.walkLeft || playerAnimations.walkLeft.length === 0)) {
                     flipX = true;
                 }
