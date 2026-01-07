@@ -28140,15 +28140,19 @@ Item Receive Display:
 
         // Helper for drawing tiles with rotation and flip in test game
         function drawTileWithEffects(ctx, img, srcX, srcY, srcSize, destX, destY, destSize, rotation, flipped) {
+            // Round to integers to prevent tile seams from floating point errors
+            const dx = Math.round(destX);
+            const dy = Math.round(destY);
+
             // Fast path: no rotation or flip - skip expensive save/restore
             if (!rotation && !flipped) {
-                ctx.drawImage(img, srcX, srcY, srcSize, srcSize, destX, destY, destSize, destSize);
+                ctx.drawImage(img, srcX, srcY, srcSize, srcSize, dx, dy, destSize, destSize);
                 return;
             }
 
             // Slow path: needs transforms
             ctx.save();
-            ctx.translate(destX + destSize / 2, destY + destSize / 2);
+            ctx.translate(dx + destSize / 2, dy + destSize / 2);
 
             if (rotation !== 0) {
                 ctx.rotate(rotation * Math.PI / 180);
@@ -28532,8 +28536,9 @@ Item Receive Display:
                 return;
             }
 
-            const px = tx * tileSize - camX;
-            const py = ty * tileSize - camY;
+            // Round to integers to prevent tile seams
+            const px = Math.round(tx * tileSize - camX);
+            const py = Math.round(ty * tileSize - camY);
 
             // Use origin tile position for synced animation
             const originX = tx - (cell.offsetX || 0);
@@ -28608,8 +28613,9 @@ Item Receive Display:
             if (!propData.frames || propData.frames.length === 0) return;
             if (!propData.splitLine) return;
 
-            const px = Math.floor(tx * tileSize - camX);
-            const py = Math.floor(ty * tileSize - camY);
+            // Round to integers to prevent tile seams
+            const px = Math.round(tx * tileSize - camX);
+            const py = Math.round(ty * tileSize - camY);
             const scale = tileSize / gridSize;
 
             // Use origin tile position for synced animation
@@ -28722,8 +28728,9 @@ Item Receive Display:
 
             if (!cellTileset || splitData === undefined) return;
 
-            const px = tx * tileSize - camX;
-            const py = ty * tileSize - camY;
+            // Round to integers to prevent tile seams
+            const px = Math.round(tx * tileSize - camX);
+            const py = Math.round(ty * tileSize - camY);
             const scale = tileSize / gridSize;
 
             ctx.imageSmoothingEnabled = false;
@@ -28820,8 +28827,9 @@ Item Receive Display:
                         const cell = layer[y][x];
                         if (!cell) continue;
 
-                        const px = x * tileSize - camX;
-                        const py = y * tileSize - camY;
+                        // Round to integers to prevent tile seams
+                        const px = Math.round(x * tileSize - camX);
+                        const py = Math.round(y * tileSize - camY);
                         const scale = tileSize / gridSize;
 
                         if (cell.type === 'tile') {
