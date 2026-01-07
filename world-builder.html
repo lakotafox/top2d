@@ -24999,9 +24999,9 @@
                     // Lazy decode: if not loaded yet, trigger decode (will be available next frame)
                     if (!soundBuffer && ts.soundIndex >= 0 && ts.soundIndex < soundsData.length) {
                         decodeSound(ts.soundIndex);
-                        return;
+                        continue;
                     }
-                    if (!soundBuffer) return;
+                    if (!soundBuffer) continue;
                 }
 
                 // Calculate distance from player (in tiles)
@@ -25045,7 +25045,7 @@
                 // For non-looping sounds, only start when in range
                 if (!ambientSounds[key]?.playing && !ts.loop && targetVolume > 0) {
                     const soundBuffer = soundBuffers[ts.soundIndex];
-                    if (!soundBuffer) return;
+                    if (!soundBuffer) continue;
                     const source = audioContext.createBufferSource();
                     source.buffer = soundBuffer;
                     source.loop = false;
@@ -25079,7 +25079,7 @@
                         gain.linearRampToValueAtTime(Math.max(0, targetVolume), audioContext.currentTime + fadeTime);
                     }
                 }
-            });
+            }
         }
 
         // === LIGHTING RENDERING (Classic 2D - no WebGL) ===
