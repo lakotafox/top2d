@@ -28772,8 +28772,9 @@ Item Receive Display:
         function drawPlayer() {
             const camX = Math.round(camera.x);
             const camY = Math.round(camera.y);
-            const sx = Math.round(player.x - camX);
-            const sy = Math.round(player.y - camY);
+            // Don't round player offset - keep fractional for smooth interpolation on high refresh rate monitors
+            const sx = player.x - camX;
+            const sy = player.y - camY;
 
             // Use player character animation if available, otherwise use legacy layout
             let srcX = 0, srcY = 0, srcW = playerFrameWidth, srcH = playerFrameHeight;
@@ -29092,8 +29093,9 @@ Item Receive Display:
             const other = otherPlayers.get(playerId);
             if (!other) return;
 
-            const sx = Math.round(other.x - camX);
-            const sy = Math.round(other.y - camY);
+            // Don't round - keep fractional for smooth interpolation on high refresh rate monitors
+            const sx = other.x - camX;
+            const sy = other.y - camY;
             const dir = other.direction || 'down';
 
             // Use player character animation if available, otherwise use legacy layout
@@ -29253,8 +29255,9 @@ Item Receive Display:
             // Skip dead enemies
             if (state.dead) return;
 
-            const sx = Math.round(state.x * TILE_SCALE - camX);
-            const sy = Math.round(state.y * TILE_SCALE - camY);
+            // Don't round - keep fractional for smooth interpolation on high refresh rate monitors
+            const sx = state.x * TILE_SCALE - camX;
+            const sy = state.y * TILE_SCALE - camY;
 
             // Get correct animation based on direction or waypoint animation
             const anims = npc.animations || {};
