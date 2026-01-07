@@ -3580,73 +3580,86 @@
     </div>
 
     <!-- Shop Editor Modal -->
-    <div class="anim-modal" id="shopModal">
-        <div class="anim-modal-content" style="max-width:700px; max-height:90vh;">
-            <div style="display:flex; height:100%;">
-                <!-- Left: Shop Settings -->
-                <div style="width:280px; padding:15px; border-right:1px solid #444; overflow-y:auto;">
-                    <h2 style="margin-top:0; color:#fa0;">Shop Settings</h2>
+    <div id="shopModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:2000; justify-content:center; align-items:center;">
+        <div style="background:#2a2a2a; border-radius:8px; max-width:600px; width:90%; max-height:85vh; overflow:hidden; border:2px solid #fa0; display:flex; flex-direction:column;">
+            <!-- Header -->
+            <div style="padding:12px 15px; background:#1a1a1a; border-bottom:1px solid #444; display:flex; justify-content:space-between; align-items:center;">
+                <h2 style="margin:0; color:#fa0; font-size:16px;">Edit Shop</h2>
+                <button onclick="closeShopEditor()" style="background:none; border:none; color:#888; font-size:20px; cursor:pointer; padding:0 5px;">&times;</button>
+            </div>
 
-                    <div style="margin-bottom:15px;">
-                        <label style="font-size:11px; color:#888;">Shop Name:</label>
-                        <input type="text" id="shopEditorName" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;" placeholder="General Store">
-                    </div>
-
-                    <div style="margin-bottom:15px;">
-                        <label style="font-size:11px; color:#888;">Greeting Dialog (optional):</label>
-                        <select id="shopEditorGreeting" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
-                            <option value="">None</option>
-                        </select>
-                    </div>
-
-                    <div style="margin-bottom:15px;">
-                        <label style="font-size:11px; color:#888;">Default Sell Rate (%):</label>
-                        <input type="number" id="shopEditorSellRate" value="50" min="0" max="100" style="width:100%; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
-                        <p style="font-size:9px; color:#666; margin:3px 0 0 0;">% of buy price shop pays for unlisted items (0 = don't accept)</p>
-                    </div>
+            <!-- Content -->
+            <div style="padding:15px; overflow-y:auto; flex:1;">
+                <!-- Shop Name -->
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Shop Name:</label>
+                    <input type="text" id="shopEditorName" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; margin-top:4px; box-sizing:border-box;" placeholder="General Store">
                 </div>
 
-                <!-- Right: Inventory Management -->
-                <div style="flex:1; padding:15px; overflow-y:auto;">
-                    <!-- Items For Sale -->
-                    <div style="margin-bottom:20px;">
-                        <h3 style="margin:0 0 10px 0; color:#4f8;">Shop Inventory (For Sale)</h3>
-                        <div id="shopInventoryList" style="max-height:150px; overflow-y:auto; margin-bottom:10px; background:#1a2a1a; padding:8px; border-radius:4px; min-height:60px;">
-                            <div style="color:#666; font-size:11px; text-align:center; padding:15px;">No items for sale</div>
-                        </div>
-                        <div style="display:flex; gap:5px;">
-                            <select id="shopAddItemSelect" style="flex:1; padding:5px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
-                                <option value="">Select item...</option>
-                            </select>
-                            <input type="number" id="shopAddItemPrice" placeholder="Price" style="width:70px; padding:5px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;" min="1" value="10">
-                            <input type="number" id="shopAddItemStock" placeholder="Stock" style="width:60px; padding:5px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;" min="-1" value="-1" title="-1 = unlimited">
-                            <button onclick="shopAddInventoryItem()" style="padding:5px 10px; background:#4a4; color:#fff; border:none; border-radius:3px; cursor:pointer;">+Add</button>
-                        </div>
-                        <div style="font-size:9px; color:#666; margin-top:3px;">Stock: -1 = unlimited</div>
-                    </div>
+                <!-- Greeting Message -->
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Greeting Message (optional):</label>
+                    <textarea id="shopEditorGreeting" rows="2" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; margin-top:4px; box-sizing:border-box; resize:vertical; font-family:inherit;" placeholder="Welcome to my shop! Take a look around..."></textarea>
+                    <div style="font-size:9px; color:#666; margin-top:2px;">Shown when player opens shop</div>
+                </div>
 
-                    <!-- Buy List (items shop accepts) -->
-                    <div>
-                        <h3 style="margin:0 0 10px 0; color:#f84;">Buy List (Shop Accepts)</h3>
-                        <p style="font-size:10px; color:#888; margin:0 0 8px 0;">Items the shop will buy from player:</p>
-                        <div id="shopBuyListDisplay" style="max-height:150px; overflow-y:auto; margin-bottom:10px; background:#2a1a1a; padding:8px; border-radius:4px; min-height:60px;">
-                            <div style="color:#666; font-size:11px; text-align:center; padding:15px;">Shop buys nothing (uses default rate)</div>
-                        </div>
-                        <div style="display:flex; gap:5px;">
-                            <select id="shopBuyItemSelect" style="flex:1; padding:5px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
-                                <option value="">Select item...</option>
-                            </select>
-                            <input type="number" id="shopBuyItemPrice" placeholder="Sell Price" style="width:80px; padding:5px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;" min="1" value="5">
-                            <button onclick="shopAddBuyListItem()" style="padding:5px 10px; background:#844; color:#fff; border:none; border-radius:3px; cursor:pointer;">+Add</button>
-                        </div>
+                <!-- Default Sell Rate -->
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Default Sell Rate: <span id="sellRateDisplay">50</span>%</label>
+                    <input type="range" id="shopEditorSellRate" value="50" min="0" max="100" style="width:100%; margin-top:4px;" oninput="document.getElementById('sellRateDisplay').textContent=this.value">
+                    <div style="font-size:9px; color:#666;">% of buy price shop pays for items not in buy list (0 = don't accept)</div>
+                </div>
+
+                <!-- Items For Sale -->
+                <div style="margin-bottom:15px; background:#1a2a1a; padding:10px; border-radius:4px; border:1px solid #4a8;">
+                    <label style="font-size:12px; color:#4f8; font-weight:bold; display:block; margin-bottom:8px;">🏷️ Items For Sale</label>
+                    <div id="shopInventoryList" style="max-height:120px; overflow-y:auto; margin-bottom:8px; min-height:40px;">
+                        <div style="color:#666; font-size:11px; text-align:center; padding:10px;">No items for sale yet</div>
                     </div>
+                    <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
+                        <select id="shopAddItemSelect" style="flex:1; min-width:120px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;">
+                            <option value="">(Select item)</option>
+                        </select>
+                        <div style="display:flex; align-items:center; gap:3px;">
+                            <span style="font-size:10px; color:#fa0;">💰</span>
+                            <input type="number" id="shopAddItemPrice" style="width:55px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="1" value="10" title="Price">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:3px;">
+                            <span style="font-size:10px; color:#888;">📦</span>
+                            <input type="number" id="shopAddItemStock" style="width:50px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="-1" value="-1" title="Stock (-1=∞)">
+                        </div>
+                        <button onclick="shopAddInventoryItem()" style="padding:6px 12px; background:#4a4; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">Add</button>
+                    </div>
+                    <div style="font-size:9px; color:#666; margin-top:4px;">💰 = price to buy | 📦 = stock (-1 = unlimited)</div>
+                </div>
+
+                <!-- Buy List -->
+                <div style="background:#2a1a1a; padding:10px; border-radius:4px; border:1px solid #a64;">
+                    <label style="font-size:12px; color:#f84; font-weight:bold; display:block; margin-bottom:8px;">💵 Items Shop Will Buy</label>
+                    <div id="shopBuyListDisplay" style="max-height:100px; overflow-y:auto; margin-bottom:8px; min-height:40px;">
+                        <div style="color:#666; font-size:11px; text-align:center; padding:10px;">Shop uses default rate for all items</div>
+                    </div>
+                    <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
+                        <select id="shopBuyItemSelect" style="flex:1; min-width:120px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;">
+                            <option value="">(Select item)</option>
+                        </select>
+                        <div style="display:flex; align-items:center; gap:3px;">
+                            <span style="font-size:10px; color:#4a8;">💵</span>
+                            <input type="number" id="shopBuyItemPrice" style="width:55px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="1" value="5" title="Sell price">
+                        </div>
+                        <button onclick="shopAddBuyListItem()" style="padding:6px 12px; background:#844; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">Add</button>
+                    </div>
+                    <div style="font-size:9px; color:#666; margin-top:4px;">💵 = price shop pays player for this item</div>
                 </div>
             </div>
 
             <!-- Footer -->
-            <div style="padding:15px; border-top:1px solid #444; display:flex; justify-content:flex-end; gap:10px; background:#1a1a1a;">
-                <button onclick="closeShopEditor()" style="padding:8px 20px; background:#444; color:#fff; border:none; border-radius:3px; cursor:pointer;">Cancel</button>
-                <button onclick="saveShopEditor()" style="padding:8px 20px; background:linear-gradient(135deg, #fa0, #c80); color:#000; border:none; border-radius:3px; cursor:pointer; font-weight:bold;">Save Shop</button>
+            <div style="padding:12px 15px; border-top:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#1a1a1a;">
+                <button onclick="deleteShopFromEditor()" style="padding:8px 15px; background:#633; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">🗑️ Delete</button>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="closeShopEditor()" style="padding:8px 20px; background:#444; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">Cancel</button>
+                    <button onclick="saveShopEditor()" style="padding:8px 20px; background:linear-gradient(135deg, #fa0, #c80); color:#000; border:none; border-radius:3px; cursor:pointer; font-weight:bold; font-size:12px;">Save</button>
+                </div>
             </div>
         </div>
     </div>
@@ -16912,7 +16925,18 @@
         }
 
         function selectShop(index) {
-            selectedShopIndex = index;
+            // Toggle selection - click again to unselect
+            if (selectedShopIndex === index) {
+                selectedShopIndex = -1;
+            } else {
+                selectedShopIndex = index;
+            }
+            updateShopList();
+            updateSelectedShopInfo();
+        }
+
+        function unselectShop() {
+            selectedShopIndex = -1;
             updateShopList();
             updateSelectedShopInfo();
         }
@@ -16922,22 +16946,29 @@
             if (!infoPanel) return;
 
             if (selectedShopIndex < 0 || !shops[selectedShopIndex]) {
-                infoPanel.innerHTML = '<div style="color:#666; font-size:11px;">Select a shop above</div>';
+                infoPanel.style.display = 'none';
                 return;
             }
 
+            infoPanel.style.display = 'block';
             const shop = shops[selectedShopIndex];
             infoPanel.innerHTML = `
-                <div style="margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <strong style="color:#fa0;">${shop.name || 'Unnamed Shop'}</strong>
+                    <button onclick="unselectShop()" style="background:none; border:none; color:#888; cursor:pointer; font-size:14px;" title="Unselect">✕</button>
                 </div>
                 <div style="font-size:10px; color:#aaa; margin-bottom:8px;">
                     ${shop.inventory?.length || 0} items for sale<br>
                     Buys ${shop.buyList?.length || 0} item types<br>
                     Default sell rate: ${shop.defaultSellRate || 50}%
                 </div>
-                <button onclick="openShopEditor(selectedShopIndex)" style="width:100%; padding:6px; margin-bottom:4px; background:#4a7c59;">Edit Shop</button>
-                <button onclick="deleteShop(selectedShopIndex)" style="width:100%; padding:6px; background:#a55;">Delete Shop</button>
+                <div style="display:flex; gap:5px;">
+                    <button onclick="openShopEditor(selectedShopIndex)" style="flex:1; padding:6px; background:#4a7c59; color:#fff; border:none; border-radius:3px; cursor:pointer;">Edit</button>
+                    <button onclick="deleteShop(selectedShopIndex)" style="padding:6px 10px; background:#a55; color:#fff; border:none; border-radius:3px; cursor:pointer;">🗑️</button>
+                </div>
+                <div style="margin-top:8px; font-size:10px; color:#aaa;">
+                    Click an NPC to attach this shop
+                </div>
             `;
         }
 
@@ -17016,7 +17047,7 @@
                     inventory: [],
                     buyList: [],
                     defaultSellRate: 50,
-                    greetingDialogId: ''
+                    greeting: ''
                 };
                 shops.push(newShop);
                 index = shops.length - 1;
@@ -17025,18 +17056,21 @@
             }
             if (index >= shops.length) return;
             editingShopIndex = index;
+            selectedShopIndex = index;
             const shop = shops[index];
 
             document.getElementById('shopEditorName').value = shop.name || '';
-            document.getElementById('shopEditorSellRate').value = shop.defaultSellRate || 50;
-            updateShopGreetingDropdown();
-            document.getElementById('shopEditorGreeting').value = shop.greetingDialogId || '';
+            const sellRate = shop.defaultSellRate || 50;
+            document.getElementById('shopEditorSellRate').value = sellRate;
+            document.getElementById('sellRateDisplay').textContent = sellRate;
+            document.getElementById('shopEditorGreeting').value = shop.greeting || shop.greetingDialogId || '';
 
             updateShopItemDropdowns();
             renderShopInventoryEditor();
             renderShopBuyListEditor();
 
             document.getElementById('shopModal').style.display = 'flex';
+            updateSelectedShopInfo();
         }
 
         function closeShopEditor() {
@@ -17050,7 +17084,7 @@
 
             shop.name = document.getElementById('shopEditorName').value || 'Unnamed Shop';
             shop.defaultSellRate = parseInt(document.getElementById('shopEditorSellRate').value) || 50;
-            shop.greetingDialogId = document.getElementById('shopEditorGreeting').value || '';
+            shop.greeting = document.getElementById('shopEditorGreeting').value || '';
 
             broadcastEdit({ editType: 'updateShop', index: editingShopIndex, shop: shop });
             closeShopEditor();
@@ -17058,15 +17092,12 @@
             updateSelectedShopInfo();
         }
 
-        function updateShopGreetingDropdown() {
-            const select = document.getElementById('shopEditorGreeting');
-            if (!select) return;
-
-            let options = '<option value="">(No greeting)</option>';
-            dialogs.forEach((d, i) => {
-                options += '<option value="' + (d.id || i) + '">' + (d.name || 'Dialog ' + i) + '</option>';
-            });
-            select.innerHTML = options;
+        function deleteShopFromEditor() {
+            if (editingShopIndex < 0) return;
+            if (!confirm('Delete this shop?')) return;
+            const indexToDelete = editingShopIndex;
+            closeShopEditor();
+            deleteShop(indexToDelete);
         }
 
         function renderShopInventoryEditor() {
@@ -29052,9 +29083,32 @@ Item Receive Display:
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+            // Calculate greeting height for dynamic panel sizing
+            const greeting = shop.greeting || '';
+            let greetingHeight = 0;
+            if (greeting) {
+                const testFont = '11px monospace';
+                ctx.font = testFont;
+                const maxWidth = 300;
+                const words = greeting.split(' ');
+                let lines = 0, line = '';
+                for (const word of words) {
+                    const test = line + (line ? ' ' : '') + word;
+                    if (ctx.measureText(test).width > maxWidth) {
+                        if (line) lines++;
+                        line = word;
+                    } else {
+                        line = test;
+                    }
+                }
+                if (line) lines++;
+                lines = Math.min(lines, 2);
+                greetingHeight = lines * 14 + 5;
+            }
+
             // Shop panel
             const panelW = 340;
-            const panelH = 280;
+            const panelH = 280 + greetingHeight;
             const panelX = (canvas.width - panelW) / 2;
             const panelY = (canvas.height - panelH) / 2;
 
@@ -29076,8 +29130,33 @@ Item Receive Display:
             ctx.textAlign = 'right';
             ctx.fillText('Gold: ' + playerGold, panelX + panelW - 15, panelY + 25);
 
+            // Greeting message (if exists)
+            if (greeting) {
+                ctx.fillStyle = '#aaa';
+                ctx.font = '11px monospace';
+                ctx.textAlign = 'center';
+                const maxWidth = panelW - 40;
+                const words = greeting.split(' ');
+                let lines = [];
+                let line = '';
+                for (const word of words) {
+                    const test = line + (line ? ' ' : '') + word;
+                    if (ctx.measureText(test).width > maxWidth) {
+                        if (line) lines.push(line);
+                        line = word;
+                    } else {
+                        line = test;
+                    }
+                }
+                if (line) lines.push(line);
+                lines = lines.slice(0, 2);
+                lines.forEach((l, i) => {
+                    ctx.fillText(l, panelX + panelW / 2, panelY + 42 + i * 14);
+                });
+            }
+
             // Tabs
-            const tabY = panelY + 45;
+            const tabY = panelY + 45 + greetingHeight;
             const tabW = 80;
             const tabH = 24;
 
