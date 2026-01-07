@@ -22723,6 +22723,9 @@
                 y: npc.y * warmupTileSize + warmupTileSize / 2
             }));
 
+            // Make player invulnerable during entire warmup
+            player.invulnerable = true;
+
             function warmupLoop() {
                 if (warmupFrames >= WARMUP_FRAME_COUNT) {
                     // Warmup complete - restore player state
@@ -22762,8 +22765,6 @@
                     player.y = targetNpc.y + 40;
                     // Simulate movement toward NPC
                     player.keys = { up: false, down: false, left: true, right: false };
-                    // Make player invulnerable during warmup so we don't die
-                    player.invulnerable = true;
                 } else {
                     // Phase 3: Rapid direction changes to stress test
                     const dirs = ['up', 'down', 'left', 'right'];
