@@ -22692,17 +22692,81 @@
         let imagesLoaded = 0;
         let gameStarted = false;
 
+        // Warmup system - run simulated frames to JIT compile hot code paths
+        let isWarmingUp = false;
+        let warmupFrames = 0;
+        const WARMUP_FRAME_COUNT = 180; // ~3 seconds of warmup at 60fps
+
+        function runWarmup() {
+            isWarmingUp = true;
+            warmupFrames = 0;
+            console.log('[WARMUP] Starting JIT warmup phase...');
+
+            // Show warmup indicator
+            const loadingEl = document.getElementById('loadingScreen');
+            if (loadingEl) {
+                loadingEl.style.display = 'flex';
+                loadingEl.innerHTML = '<div style="color:#fff;font-size:18px;">Optimizing...</div>';
+            }
+
+            function warmupLoop() {
+                if (warmupFrames >= WARMUP_FRAME_COUNT) {
+                    // Warmup complete
+                    isWarmingUp = false;
+                    console.log('[WARMUP] Complete after', warmupFrames, 'frames');
+
+                    // Hide loading and start real game
+                    hideLoading();
+                    gameLoop();
+                    return;
+                }
+
+                // Simulate player movement to warm up collision/movement code
+                const dirs = ['up', 'down', 'left', 'right'];
+                const dir = dirs[Math.floor(warmupFrames / 15) % 4];
+                player.keys = { up: dir === 'up', down: dir === 'down', left: dir === 'left', right: dir === 'right' };
+
+                // Run one frame of game logic
+                updateDayCycle();
+                update();
+                updateNPCs();
+
+                // Run draw to warm up rendering code
+                draw();
+
+                // Every 60 frames, briefly enable lighting to warm that path too
+                if (warmupFrames % 60 === 30) {
+                    const savedDarkness = manualDarkness;
+                    manualDarkness = 50;
+                    renderLighting();
+                    manualDarkness = savedDarkness;
+                }
+
+                warmupFrames++;
+
+                // Update loading text periodically
+                if (warmupFrames % 30 === 0 && loadingEl) {
+                    const pct = Math.round((warmupFrames / WARMUP_FRAME_COUNT) * 100);
+                    loadingEl.innerHTML = '<div style="color:#fff;font-size:18px;">Optimizing... ' + pct + '%</div>';
+                }
+
+                // Use setTimeout(0) instead of rAF for faster warmup
+                setTimeout(warmupLoop, 0);
+            }
+
+            warmupLoop();
+        }
+
         function checkAllImagesLoaded() {
             showLoading(imagesLoaded, imagesToLoad);
             if (imagesLoaded >= imagesToLoad && !gameStarted) {
-                console.log('All images loaded, starting game...');
+                console.log('All images loaded, starting warmup...');
                 gameStarted = true;
                 gameStartTime = Date.now();
-                hideLoading();
                 findStartPos();
                 hideAllUI(); // Start with debug UI hidden
                 buildAnimatedTileRegistry(); // Cache animated tile locations for performance
-                gameLoop();
+                runWarmup(); // Run warmup before starting game loop
             }
         }
 
