@@ -2447,7 +2447,6 @@
                         <button onclick="clearMap()">Clear Map</button>
                         <button onclick="downloadProject()">Save</button>
                         <button onclick="document.getElementById('projectFileInput').click()">Load</button>
-                        <button onclick="exportConfig()">Export</button>
                         <button onclick="showStorageInfo()">Storage</button>
                         <button onclick="showRoomInfo()">Room Info</button>
                         <div class="tools-menu-separator"></div>
@@ -9299,21 +9298,11 @@
                     const activeChar = playerCharacters[activePlayerIndex];
                     if (activeChar._spriteImg && activeChar._spriteImg.complete && activeChar._spriteImg.naturalWidth > 0) {
                         activeSprite = activeChar._spriteImg;
-                    } else {
-                        console.log('[DEBUG] No sprite for activeChar:', activePlayerIndex,
-                            '_spriteImg:', !!activeChar._spriteImg,
-                            'complete:', activeChar._spriteImg?.complete,
-                            'naturalWidth:', activeChar._spriteImg?.naturalWidth);
                     }
-                } else {
-                    console.log('[DEBUG] No active player char:', activePlayerIndex, 'chars:', playerCharacters.length);
                 }
                 // Fall back to playerSpriteImg if no active character sprite
                 if (!activeSprite && playerSpriteImg && playerSpriteImg.complete && playerSpriteImg.naturalWidth > 0) {
                     activeSprite = playerSpriteImg;
-                }
-                if (!activeSprite) {
-                    console.log('[DEBUG] No activeSprite available, will show cyan circle');
                 }
 
                 // Get active character's animations for proper frame display
@@ -17772,6 +17761,7 @@
                     fps: npc.fps,
                     pingPong: npc.pingPong || false,
                     collisionInsets: npc.collisionInsets || null,
+                    noShadow: npc.noShadow || false,
                     shadowOffsetX: npc.shadowOffsetX ?? 0,
                     shadowOffsetY: npc.shadowOffsetY ?? 4,
                     shadowWidth: npc.shadowWidth ?? 0.35,
@@ -17810,7 +17800,14 @@
                     fps: c.fps || 8,
                     pingPong: c.pingPong || false,
                     attackMovement: c.attackMovement || 'stop',
-                    gameOverSoundIndex: c.gameOverSoundIndex !== undefined ? c.gameOverSoundIndex : -1
+                    gameOverSoundIndex: c.gameOverSoundIndex !== undefined ? c.gameOverSoundIndex : -1,
+                    // Scale and shadow
+                    scale: c.scale || 1,
+                    noShadow: c.noShadow || false,
+                    shadowOffsetX: c.shadowOffsetX ?? 0,
+                    shadowOffsetY: c.shadowOffsetY ?? 4,
+                    shadowWidth: c.shadowWidth ?? 0.35,
+                    shadowHeight: c.shadowHeight ?? 0.12
                 })),
                 activePlayerIndex,
                 // Multi-map support
@@ -17829,7 +17826,8 @@
                     frameHeight: item.frameHeight,
                     frames: item.frames,
                     fps: item.fps,
-                    idleFrame: item.idleFrame
+                    idleFrame: item.idleFrame,
+                    maxStack: item.maxStack || 99
                 })),
                 placedItems,
                 // Static objects (multi-tile props from tilesets)
@@ -20304,11 +20302,6 @@
             } else {
                 alert('No tileset data found in save');
             }
-        }
-
-        function exportConfig() {
-            const config = { gridSize, mapSize: { cols: mapCols, rows: mapRows }, tileCollisions, layers };
-            navigator.clipboard.writeText(JSON.stringify(config, null, 2)).then(() => alert('Copied!'));
         }
 
         // ===== MULTI-MAP FUNCTIONS =====
@@ -24119,7 +24112,27 @@
                 if (activePlayerChar.gameOverSoundIndex !== undefined) {
                     playerGameOverSoundIndex = activePlayerChar.gameOverSoundIndex;
                 }
-                console.log('Using player character:', activePlayerChar.name, playerFrameWidth + 'x' + playerFrameHeight, 'attackMovement:', playerAttackMovement);
+                // Load scale (convert from multiplier to pixels-per-tile ratio)
+                if (activePlayerChar.scale !== undefined) {
+                    // Scale is saved as a multiplier (0.5 to 3), default playerScale is 1.7
+                    playerScale = activePlayerChar.scale * 1.7;
+                    console.log('Loaded player scale:', activePlayerChar.scale, '-> playerScale:', playerScale);
+                }
+                // Load shadow settings
+                if (activePlayerChar.noShadow !== undefined) {
+                    playerNoShadow = activePlayerChar.noShadow;
+                }
+                if (activePlayerChar.shadowOffsetX !== undefined || activePlayerChar.shadowOffsetY !== undefined) {
+                    // Convert from pixel offsets to the expected format
+                    playerShadowYOffset = 17 - (activePlayerChar.shadowOffsetY || 0);
+                }
+                if (activePlayerChar.shadowWidth !== undefined) {
+                    playerShadowWidth = Math.round(activePlayerChar.shadowWidth * 100);
+                }
+                if (activePlayerChar.shadowHeight !== undefined) {
+                    playerShadowHeight = Math.round(activePlayerChar.shadowHeight * 100);
+                }
+                console.log('Using player character:', activePlayerChar.name, playerFrameWidth + 'x' + playerFrameHeight, 'attackMovement:', playerAttackMovement, 'scale:', playerScale);
             }
         }
 
@@ -25134,10 +25147,11 @@
         let currentLighting = { r: 0, g: 0, b: 0, a: 0 }; // interpolated values
         let manualDarkness = 0; // 0-100, used when cycle is off
 
-        // Shadow settings (fixed values)
-        const shadowWidth = 21;
-        const shadowHeight = 8;
-        const shadowYOffset = 17;
+        // Shadow settings (loaded from player character or defaults)
+        let playerShadowWidth = 21;
+        let playerShadowHeight = 8;
+        let playerShadowYOffset = 17;
+        let playerNoShadow = false;
 
         // === NPC SYSTEM ===
         // Use outer scope variables for live sync
@@ -30988,17 +31002,19 @@ Item Receive Display:
             const spriteX = sx + player.width / 2 - drawW / 2;
             const spriteY = sy - 15; // shift sprite up so collision box covers body properly
 
-            // Simple ellipse shadow under hero
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.beginPath();
-            ctx.ellipse(
-                spriteX + drawW / 2,
-                spriteY + drawH - shadowYOffset,
-                drawW * (shadowWidth / 100),
-                drawW * (shadowHeight / 100),
-                0, 0, Math.PI * 2
-            );
-            ctx.fill();
+            // Simple ellipse shadow under hero (unless disabled)
+            if (!playerNoShadow) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.beginPath();
+                ctx.ellipse(
+                    spriteX + drawW / 2,
+                    spriteY + drawH - playerShadowYOffset,
+                    drawW * (playerShadowWidth / 100),
+                    drawW * (playerShadowHeight / 100),
+                    0, 0, Math.PI * 2
+                );
+                ctx.fill();
+            }
 
             // Invincibility flashing effect - blink every 4 frames
             const shouldDraw = !player.invincible || (Math.floor(player.invincibleTimer / 4) % 2 === 0);
@@ -31250,11 +31266,13 @@ Item Receive Display:
             const spriteX = sx + player.width / 2 - drawW / 2;
             const spriteY = sy - 15;
 
-            // Shadow
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.beginPath();
-            ctx.ellipse(spriteX + drawW / 2, spriteY + drawH - shadowYOffset, drawW * 0.2, drawW * 0.08, 0, 0, Math.PI * 2);
-            ctx.fill();
+            // Shadow (use player shadow settings)
+            if (!playerNoShadow) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.beginPath();
+                ctx.ellipse(spriteX + drawW / 2, spriteY + drawH - playerShadowYOffset, drawW * 0.2, drawW * 0.08, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
 
             // Draw sprite
             if (playerImg.complete) {
