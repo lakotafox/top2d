@@ -17275,7 +17275,7 @@
 
             shop.name = document.getElementById('shopEditorName').value || 'Unnamed Shop';
             shop.defaultSellRate = parseInt(document.getElementById('shopEditorSellRate').value) || 50;
-            shop.greeting = document.getElementById('shopEditorGreeting').value || '';
+            shop.greetingDialogId = document.getElementById('shopEditorGreeting').value || '';
 
             broadcastEdit({ editType: 'updateShop', index: editingShopIndex, shop: shop });
             closeShopEditor();
@@ -26551,9 +26551,42 @@ Item Receive Display:
             // Interact key (A) - for dialogs, doors, NPCs, and shops
             if ((e.key === 'a' || e.key === 'A') && !player.attacking) {
                 // Check for shop interaction first
-                const nearbyShop = checkShopInteraction();
-                if (nearbyShop >= 0 && !activeDialog) {
-                    openShop(nearbyShop);
+                const shopResult = checkShopInteraction();
+                if (shopResult && shopResult.shopIndex >= 0 && !activeDialog) {
+                    // Show shop greeting dialog with Open Shop / Leave choices
+                    const shop = shopsData[shopResult.shopIndex];
+                    const shopName = shop?.name || 'Shop';
+
+                    // Check if shop has a custom greeting dialog
+                    if (shop?.greetingDialogId && dialogsData[parseInt(shop.greetingDialogId)]) {
+                        // Use custom greeting dialog - add shop choices if not already present
+                        const greetingDialog = dialogsData[parseInt(shop.greetingDialogId)];
+                        activeDialog = {
+                            dialog: greetingDialog,
+                            pageIndex: 0,
+                            npc: shopResult.npc,
+                            isShopGreeting: true
+                        };
+                    } else {
+                        // Create simple shop prompt dialog
+                        activeDialog = {
+                            dialog: {
+                                name: shopName,
+                                pages: [{
+                                    text: 'Welcome! Would you like to browse my wares?',
+                                    choices: [
+                                        { text: 'Open Shop', action: 'shop' },
+                                        { text: 'Leave', action: 'close' }
+                                    ]
+                                }]
+                            },
+                            pageIndex: 0,
+                            npc: shopResult.npc
+                        };
+                    }
+                    dialogSelectedChoice = 0;
+                    resetDialogTyping();
+                    renderDialogBox();
                     return;
                 }
                 handleInteract();
@@ -29682,10 +29715,10 @@ Item Receive Display:
 
                 const dist = Math.abs(npc.x - playerTileX) + Math.abs(npc.y - playerTileY);
                 if (dist <= 1) {
-                    return npc.shopIndex;
+                    return { shopIndex: npc.shopIndex, npc: npc };
                 }
             }
-            return -1;
+            return null;
         }
 
         // Draw full inventory popup
