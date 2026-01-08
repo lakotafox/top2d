@@ -29154,10 +29154,26 @@ Item Receive Display:
             ctx.textAlign = 'center';
             ctx.fillText(shop.name || 'Shop', panelX + panelW / 2, panelY + 20);
 
+            // Gold display with cart total
+            const cartTotal = getCartTotal();
             ctx.fillStyle = '#fc0';
             ctx.font = 'bold 14px monospace';
             ctx.textAlign = 'left';
             ctx.fillText('Gold: ' + playerGold, panelX + 15, panelY + 20);
+
+            // Show cart cost next to gold (red for spending, green for earning)
+            if (cartTotal !== 0) {
+                const costText = (cartTotal >= 0 ? '+' : '') + cartTotal;
+                ctx.fillStyle = cartTotal >= 0 ? '#4f8' : '#f44';
+                ctx.font = 'bold 12px monospace';
+                ctx.fillText(costText, panelX + 95, panelY + 20);
+
+                // Show resulting gold
+                const resultGold = playerGold + cartTotal;
+                ctx.fillStyle = resultGold >= 0 ? '#888' : '#f44';
+                ctx.font = '11px monospace';
+                ctx.fillText('= ' + resultGold, panelX + 140, panelY + 20);
+            }
 
             // Close X button
             const closeBtnX = panelX + panelW - 28;
@@ -29189,6 +29205,7 @@ Item Receive Display:
             // Draw shop items
             shopUIButtons.shopItems = [];
             const shopInv = shop.inventory || [];
+            const availableGold = playerGold + cartTotal; // Gold after current cart
             for (let i = 0; i < Math.max(shopInv.length, cols * 2); i++) {
                 const col = i % cols;
                 const row = Math.floor(i / cols);
@@ -29199,11 +29216,18 @@ Item Receive Display:
 
                 const inv = shopInv[i];
                 const inCart = inv && shopCart.some(c => c.type === 'buy' && c.shopInvIdx === i);
+                const canAfford = inv && (inCart || inv.buyPrice <= availableGold);
 
-                // Slot background
-                ctx.fillStyle = inCart ? '#3a5a3a' : '#2a3a2a';
+                // Slot background - gray out if can't afford
+                if (inCart) {
+                    ctx.fillStyle = '#3a5a3a';
+                } else if (!canAfford && inv) {
+                    ctx.fillStyle = '#1a1a1a'; // Darker for unaffordable
+                } else {
+                    ctx.fillStyle = '#2a3a2a';
+                }
                 ctx.fillRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
-                ctx.strokeStyle = inCart ? '#8f8' : '#4a5a4a';
+                ctx.strokeStyle = inCart ? '#8f8' : (!canAfford && inv ? '#333' : '#4a5a4a');
                 ctx.lineWidth = inCart ? 2 : 1;
                 ctx.strokeRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
 
@@ -29219,12 +29243,15 @@ Item Receive Display:
                             const drawH = frame.h * scale;
                             const drawX = slotX + (SLOT_SIZE - drawW) / 2;
                             const drawY = slotY + (SLOT_SIZE - drawH) / 2;
+                            // Gray out sprite if can't afford
+                            if (!canAfford) ctx.globalAlpha = 0.4;
                             ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
+                            ctx.globalAlpha = 1;
                         }
                     }
 
-                    // Price below slot
-                    ctx.fillStyle = '#fc0';
+                    // Price below slot - red if can't afford
+                    ctx.fillStyle = canAfford ? '#fc0' : '#844';
                     ctx.font = '9px monospace';
                     ctx.textAlign = 'center';
                     ctx.fillText(inv.buyPrice + 'g', slotX + SLOT_SIZE/2, slotY + SLOT_SIZE + 10);
@@ -29459,6 +29486,14 @@ Item Receive Display:
                         if (existing >= 0) {
                             shopCart.splice(existing, 1); // Remove from cart
                         } else {
+                            // Check if player can afford this item with current cart
+                            const currentTotal = getCartTotal();
+                            const newTotal = currentTotal - inv.buyPrice;
+                            if (playerGold + newTotal < 0) {
+                                // Can't afford - don't add to cart
+                                console.log('[SHOP] Cannot afford item, need', inv.buyPrice, 'but only have', playerGold + currentTotal);
+                                return true;
+                            }
                             const itemDef = itemsData[inv.itemIndex];
                             shopCart.push({
                                 type: 'buy',
