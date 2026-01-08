@@ -26408,35 +26408,13 @@ Item Receive Display:
         document.addEventListener('keydown', e => {
             keys[e.key] = true;
 
-            // === SHOP CONTROLS ===
+            // === SHOP CONTROLS (mouse-based, escape to close) ===
             if (shopOpen) {
                 e.preventDefault();
-                if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') {
+                if (e.key === 'Escape') {
                     closeShop();
-                    return;
                 }
-                if (e.key === 'Tab') {
-                    shopTab = shopTab === 'buy' ? 'sell' : 'buy';
-                    shopSelectedIndex = 0;
-                    return;
-                }
-                if (e.key === 'ArrowUp') {
-                    shopSelectedIndex = Math.max(0, shopSelectedIndex - 1);
-                    return;
-                }
-                if (e.key === 'ArrowDown') {
-                    shopSelectedIndex++;
-                    return;
-                }
-                if (e.key === 'z' || e.key === 'Z' || e.key === 'Enter') {
-                    if (shopTab === 'buy') {
-                        shopBuyItem();
-                    } else {
-                        shopSellItem();
-                    }
-                    return;
-                }
-                return;
+                return; // Block all other keys while shop is open
             }
 
             if (e.key === 'Escape') {
@@ -26518,13 +26496,19 @@ Item Receive Display:
             mouseY = e.clientY - rect.top;
         });
 
-        // Click handling for inventory
+        // Click handling for inventory and shop
         canvas.addEventListener('click', e => {
-            if (!inventoryOpen) return;
-
             const rect = canvas.getBoundingClientRect();
             const clickX = e.clientX - rect.left;
             const clickY = e.clientY - rect.top;
+
+            // Handle shop clicks first
+            if (shopOpen) {
+                handleShopClick(clickX, clickY);
+                return;
+            }
+
+            if (!inventoryOpen) return;
 
             // Calculate inventory popup position (same as in drawInventoryPopup)
             const cols = 10;
@@ -29095,18 +29079,23 @@ Item Receive Display:
         }
 
         // === SHOP SYSTEM ===
+        // Store button hitboxes for click detection
+        let shopUIButtons = {};
+        let shopItemsList = [];
+
         function openShop(shopIndex) {
             if (shopIndex < 0 || shopIndex >= shopsData.length) return;
             shopOpen = true;
             activeShopIndex = shopIndex;
             shopTab = 'buy';
-            shopSelectedIndex = 0;
+            shopSelectedIndex = -1; // No item selected initially
             console.log('[SHOP] Opened shop:', shopsData[shopIndex].name);
         }
 
         function closeShop() {
             shopOpen = false;
             activeShopIndex = -1;
+            shopSelectedIndex = -1;
         }
 
         function drawShopUI() {
@@ -29123,8 +29112,7 @@ Item Receive Display:
             const greeting = shop.greeting || '';
             let greetingHeight = 0;
             if (greeting) {
-                const testFont = '11px monospace';
-                ctx.font = testFont;
+                ctx.font = '11px monospace';
                 const maxWidth = 300;
                 const words = greeting.split(' ');
                 let lines = 0, line = '';
@@ -29144,7 +29132,7 @@ Item Receive Display:
 
             // Shop panel
             const panelW = 340;
-            const panelH = 280 + greetingHeight;
+            const panelH = 320 + greetingHeight;
             const panelX = (canvas.width - panelW) / 2;
             const panelY = (canvas.height - panelH) / 2;
 
@@ -29165,6 +29153,18 @@ Item Receive Display:
             ctx.font = '12px monospace';
             ctx.textAlign = 'right';
             ctx.fillText('Gold: ' + playerGold, panelX + panelW - 15, panelY + 25);
+
+            // Close button (X)
+            const closeBtnX = panelX + panelW - 30;
+            const closeBtnY = panelY + 8;
+            const closeBtnSize = 20;
+            ctx.fillStyle = '#633';
+            ctx.fillRect(closeBtnX, closeBtnY, closeBtnSize, closeBtnSize);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('X', closeBtnX + closeBtnSize/2, closeBtnY + 15);
+            shopUIButtons.close = { x: closeBtnX, y: closeBtnY, w: closeBtnSize, h: closeBtnSize };
 
             // Greeting message (if exists)
             if (greeting) {
@@ -29193,32 +29193,40 @@ Item Receive Display:
 
             // Tabs
             const tabY = panelY + 45 + greetingHeight;
-            const tabW = 80;
-            const tabH = 24;
+            const tabW = 100;
+            const tabH = 28;
 
-            // Buy tab
+            // Buy tab button
             ctx.fillStyle = shopTab === 'buy' ? '#4a7c59' : '#333';
-            ctx.fillRect(panelX + 20, tabY, tabW, tabH);
+            ctx.fillRect(panelX + 30, tabY, tabW, tabH);
+            ctx.strokeStyle = shopTab === 'buy' ? '#6a9' : '#555';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(panelX + 30, tabY, tabW, tabH);
             ctx.fillStyle = '#fff';
-            ctx.font = '12px monospace';
+            ctx.font = 'bold 13px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('BUY', panelX + 20 + tabW / 2, tabY + 16);
+            ctx.fillText('BUY', panelX + 30 + tabW / 2, tabY + 19);
+            shopUIButtons.buyTab = { x: panelX + 30, y: tabY, w: tabW, h: tabH };
 
-            // Sell tab
+            // Sell tab button
             ctx.fillStyle = shopTab === 'sell' ? '#7c594a' : '#333';
-            ctx.fillRect(panelX + 110, tabY, tabW, tabH);
+            ctx.fillRect(panelX + 140, tabY, tabW, tabH);
+            ctx.strokeStyle = shopTab === 'sell' ? '#a96' : '#555';
+            ctx.strokeRect(panelX + 140, tabY, tabW, tabH);
             ctx.fillStyle = '#fff';
-            ctx.fillText('SELL', panelX + 110 + tabW / 2, tabY + 16);
+            ctx.fillText('SELL', panelX + 140 + tabW / 2, tabY + 19);
+            shopUIButtons.sellTab = { x: panelX + 140, y: tabY, w: tabW, h: tabH };
 
-            // Item list
-            const listY = tabY + 35;
-            const listH = panelH - 130;
+            // Item list area
+            const listY = tabY + 40;
+            const listH = panelH - 180 - greetingHeight;
             ctx.fillStyle = '#252540';
             ctx.fillRect(panelX + 15, listY, panelW - 30, listH);
 
-            let items = [];
+            // Build items list
+            shopItemsList = [];
             if (shopTab === 'buy' && shop.inventory) {
-                items = shop.inventory.map((inv, i) => ({
+                shopItemsList = shop.inventory.map((inv, i) => ({
                     name: itemsData[inv.itemIndex]?.name || 'Unknown',
                     price: inv.buyPrice,
                     stock: inv.stock,
@@ -29226,59 +29234,164 @@ Item Receive Display:
                     index: i
                 }));
             } else if (shopTab === 'sell') {
-                // Show player's sellable items
                 inventorySlots.forEach((slot, i) => {
                     if (slot) {
                         const item = itemsData[slot.itemIndex];
                         const buyEntry = shop.buyList?.find(b => b.itemIndex === slot.itemIndex);
                         const sellPrice = buyEntry ? buyEntry.sellPrice : Math.floor((item?.basePrice || 10) * (shop.defaultSellRate || 50) / 100);
-                        items.push({
+                        shopItemsList.push({
                             name: item?.name || 'Item',
                             price: sellPrice,
                             quantity: slot.quantity,
                             slotIndex: i,
-                            index: items.length
+                            index: shopItemsList.length
                         });
                     }
                 });
             }
 
-            ctx.font = '11px monospace';
+            // Draw items (clickable)
+            ctx.font = '12px monospace';
             ctx.textAlign = 'left';
-            const itemH = 22;
+            const itemH = 26;
             const maxVisible = Math.floor(listH / itemH);
-            const startIdx = Math.max(0, shopSelectedIndex - maxVisible + 1);
+            const startIdx = Math.max(0, Math.min(shopSelectedIndex, shopItemsList.length - maxVisible));
 
-            items.slice(startIdx, startIdx + maxVisible).forEach((item, i) => {
+            shopUIButtons.items = [];
+            shopItemsList.slice(startIdx, startIdx + maxVisible).forEach((item, i) => {
                 const idx = startIdx + i;
-                const itemY = listY + 5 + i * itemH;
+                const itemY = listY + 4 + i * itemH;
+                const itemRect = { x: panelX + 17, y: itemY, w: panelW - 34, h: itemH - 2, index: idx };
+                shopUIButtons.items.push(itemRect);
+
+                // Highlight selected item
                 if (idx === shopSelectedIndex) {
-                    ctx.fillStyle = '#4a4a6a';
-                    ctx.fillRect(panelX + 17, itemY - 2, panelW - 34, itemH - 2);
+                    ctx.fillStyle = '#5a5a8a';
+                    ctx.fillRect(itemRect.x, itemRect.y, itemRect.w, itemRect.h);
+                    ctx.strokeStyle = '#8af';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(itemRect.x, itemRect.y, itemRect.w, itemRect.h);
                 }
-                ctx.fillStyle = '#fff';
-                ctx.fillText(item.name, panelX + 25, itemY + 12);
+
+                ctx.fillStyle = idx === shopSelectedIndex ? '#fff' : '#ccc';
+                ctx.fillText(item.name, panelX + 25, itemY + 17);
                 ctx.fillStyle = '#fa0';
                 ctx.textAlign = 'right';
-                ctx.fillText(item.price + 'g', panelX + panelW - 25, itemY + 12);
+                ctx.fillText(item.price + 'g', panelX + panelW - 25, itemY + 17);
                 if (item.quantity) {
                     ctx.fillStyle = '#888';
-                    ctx.fillText('x' + item.quantity + ' ', panelX + panelW - 60, itemY + 12);
+                    ctx.fillText('x' + item.quantity + ' ', panelX + panelW - 65, itemY + 17);
                 }
                 ctx.textAlign = 'left';
             });
 
-            if (items.length === 0) {
+            if (shopItemsList.length === 0) {
                 ctx.fillStyle = '#666';
                 ctx.textAlign = 'center';
                 ctx.fillText(shopTab === 'buy' ? 'Nothing for sale' : 'Nothing to sell', panelX + panelW / 2, listY + listH / 2);
             }
 
-            // Instructions
-            ctx.fillStyle = '#888';
-            ctx.font = '10px monospace';
+            // Bottom buttons
+            const btnY = panelY + panelH - 45;
+            const btnW = 120;
+            const btnH = 32;
+
+            // Confirm button (Buy/Sell)
+            const canConfirm = shopSelectedIndex >= 0 && shopSelectedIndex < shopItemsList.length;
+            ctx.fillStyle = canConfirm ? (shopTab === 'buy' ? '#4a7c59' : '#7c594a') : '#333';
+            ctx.fillRect(panelX + 30, btnY, btnW, btnH);
+            ctx.strokeStyle = canConfirm ? '#fff' : '#555';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(panelX + 30, btnY, btnW, btnH);
+            ctx.fillStyle = canConfirm ? '#fff' : '#666';
+            ctx.font = 'bold 14px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('Arrow keys: navigate | Z: ' + (shopTab === 'buy' ? 'buy' : 'sell') + ' | X: close | Tab: switch', panelX + panelW / 2, panelY + panelH - 15);
+            ctx.fillText(shopTab === 'buy' ? 'BUY' : 'SELL', panelX + 30 + btnW / 2, btnY + 22);
+            shopUIButtons.confirm = { x: panelX + 30, y: btnY, w: btnW, h: btnH };
+
+            // Close button
+            ctx.fillStyle = '#633';
+            ctx.fillRect(panelX + panelW - 30 - btnW, btnY, btnW, btnH);
+            ctx.strokeStyle = '#a66';
+            ctx.strokeRect(panelX + panelW - 30 - btnW, btnY, btnW, btnH);
+            ctx.fillStyle = '#fff';
+            ctx.fillText('CLOSE', panelX + panelW - 30 - btnW / 2, btnY + 22);
+            shopUIButtons.closeBtn = { x: panelX + panelW - 30 - btnW, y: btnY, w: btnW, h: btnH };
+
+            // Show selected item info
+            if (shopSelectedIndex >= 0 && shopSelectedIndex < shopItemsList.length) {
+                const selItem = shopItemsList[shopSelectedIndex];
+                ctx.fillStyle = '#aaa';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                const infoText = shopTab === 'buy'
+                    ? 'Click BUY to purchase for ' + selItem.price + 'g'
+                    : 'Click SELL to sell for ' + selItem.price + 'g';
+                ctx.fillText(infoText, panelX + panelW / 2, btnY - 8);
+            } else {
+                ctx.fillStyle = '#666';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('Click an item to select it', panelX + panelW / 2, btnY - 8);
+            }
+        }
+
+        function handleShopClick(clickX, clickY) {
+            if (!shopOpen) return false;
+
+            // Close X button
+            if (shopUIButtons.close && isInRect(clickX, clickY, shopUIButtons.close)) {
+                closeShop();
+                return true;
+            }
+
+            // Close button
+            if (shopUIButtons.closeBtn && isInRect(clickX, clickY, shopUIButtons.closeBtn)) {
+                closeShop();
+                return true;
+            }
+
+            // Buy tab
+            if (shopUIButtons.buyTab && isInRect(clickX, clickY, shopUIButtons.buyTab)) {
+                shopTab = 'buy';
+                shopSelectedIndex = -1;
+                return true;
+            }
+
+            // Sell tab
+            if (shopUIButtons.sellTab && isInRect(clickX, clickY, shopUIButtons.sellTab)) {
+                shopTab = 'sell';
+                shopSelectedIndex = -1;
+                return true;
+            }
+
+            // Items list
+            if (shopUIButtons.items) {
+                for (const itemBtn of shopUIButtons.items) {
+                    if (isInRect(clickX, clickY, itemBtn)) {
+                        shopSelectedIndex = itemBtn.index;
+                        return true;
+                    }
+                }
+            }
+
+            // Confirm button
+            if (shopUIButtons.confirm && isInRect(clickX, clickY, shopUIButtons.confirm)) {
+                if (shopSelectedIndex >= 0) {
+                    if (shopTab === 'buy') {
+                        shopBuyItem();
+                    } else {
+                        shopSellItem();
+                    }
+                }
+                return true;
+            }
+
+            return true; // Consume click even if not on a button (don't let it through)
+        }
+
+        function isInRect(x, y, rect) {
+            return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
         }
 
         function shopBuyItem() {
