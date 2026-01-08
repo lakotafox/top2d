@@ -3636,16 +3636,16 @@
                 <!-- Buy List -->
                 <div style="background:#2a1a1a; padding:10px; border-radius:4px; border:1px solid #a64;">
                     <label style="font-size:12px; color:#f84; font-weight:bold; display:block; margin-bottom:8px;">Items Shop Will Buy</label>
-                    <div id="shopBuyListDisplay" style="max-height:100px; overflow-y:auto; margin-bottom:8px; min-height:40px;">
+                    <div id="shopBuyList" style="max-height:100px; overflow-y:auto; margin-bottom:8px; min-height:40px;">
                         <div style="color:#666; font-size:11px; text-align:center; padding:10px;">Shop uses default rate for all items</div>
                     </div>
                     <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
-                        <select id="shopBuyItemSelect" style="flex:1; min-width:120px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;">
+                        <select id="shopAddBuyItemSelect" style="flex:1; min-width:120px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;">
                             <option value="">(Select item)</option>
                         </select>
                         <div style="display:flex; align-items:center; gap:3px;">
                             <span style="font-size:10px; color:#4a8;">Pays:</span>
-                            <input type="number" id="shopBuyItemPrice" style="width:55px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="1" value="5" title="Price shop pays">
+                            <input type="number" id="shopAddBuyItemPrice" style="width:55px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="1" value="5" title="Price shop pays">
                         </div>
                         <button onclick="shopAddBuyListItem()" style="padding:6px 12px; background:#844; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">Add</button>
                     </div>
@@ -17148,16 +17148,26 @@
                 return;
             }
 
-            container.innerHTML = inventory.map((inv, i) => {
+            // Column headers
+            let html = '<div style="display:flex; justify-content:space-between; align-items:center; padding:2px 4px; font-size:9px; color:#888; border-bottom:1px solid #444;">' +
+                '<span style="flex:1;">Item</span>' +
+                '<span style="width:50px; text-align:center; margin:0 4px;">Price</span>' +
+                '<span style="width:40px; text-align:center; margin:0 4px;">Stock</span>' +
+                '<span style="width:26px;"></span>' +
+                '</div>';
+
+            html += inventory.map((inv, i) => {
                 const item = items[inv.itemIndex];
                 const itemName = item ? item.name : '(Unknown)';
                 return '<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:#333; border-radius:3px; font-size:10px;">' +
                     '<span style="flex:1; color:#fff;">' + itemName + '</span>' +
-                    '<input type="number" value="' + (inv.buyPrice || 0) + '" onchange="updateShopInventoryPrice(' + i + ', this.value)" style="width:50px; margin:0 4px;" title="Buy price">' +
-                    '<input type="number" value="' + (inv.stock === -1 ? -1 : (inv.stock || 1)) + '" onchange="updateShopInventoryStock(' + i + ', this.value)" style="width:40px; margin:0 4px;" title="Stock (-1=unlimited)">' +
+                    '<input type="number" value="' + (inv.buyPrice || 0) + '" onchange="updateShopInventoryPrice(' + i + ', this.value)" style="width:50px; margin:0 4px; text-align:center;">' +
+                    '<input type="number" value="' + (inv.stock === -1 ? -1 : (inv.stock || 1)) + '" onchange="updateShopInventoryStock(' + i + ', this.value)" style="width:40px; margin:0 4px; text-align:center;">' +
                     '<button onclick="removeShopInventoryItem(' + i + ')" style="padding:2px 6px; font-size:9px; background:#a55;">×</button>' +
                 '</div>';
             }).join('');
+
+            container.innerHTML = html;
         }
 
         function updateShopInventoryPrice(index, value) {
@@ -17188,11 +17198,14 @@
         function shopAddInventoryItem() {
             if (editingShopIndex < 0) return;
             const select = document.getElementById('shopAddItemSelect');
+            const priceInput = document.getElementById('shopAddItemPrice');
+            const stockInput = document.getElementById('shopAddItemStock');
             const itemIndex = parseInt(select.value);
             if (isNaN(itemIndex) || itemIndex < 0) return;
 
             const shop = shops[editingShopIndex];
             if (!shop.inventory) shop.inventory = [];
+            if (!shop.buyList) shop.buyList = [];
 
             // Check if item already exists
             if (shop.inventory.find(inv => inv.itemIndex === itemIndex)) {
@@ -17200,11 +17213,26 @@
                 return;
             }
 
+            // Get values from inputs
+            const buyPrice = parseInt(priceInput.value) || 10;
+            const stock = parseInt(stockInput.value);
+
             shop.inventory.push({
                 itemIndex: itemIndex,
-                buyPrice: 100,
-                stock: -1  // Unlimited by default
+                buyPrice: buyPrice,
+                stock: isNaN(stock) ? -1 : stock
             });
+
+            // Auto-add to buyList if not already there (shop will also buy this item)
+            if (!shop.buyList.find(b => b.itemIndex === itemIndex)) {
+                const sellRate = shop.defaultSellRate || 50;
+                const sellPrice = Math.floor(buyPrice * sellRate / 100);
+                shop.buyList.push({
+                    itemIndex: itemIndex,
+                    sellPrice: sellPrice
+                });
+                renderShopBuyListEditor();
+            }
 
             renderShopInventoryEditor();
             select.value = '';
@@ -17222,15 +17250,24 @@
                 return;
             }
 
-            container.innerHTML = buyList.map((buy, i) => {
+            // Column headers
+            let html = '<div style="display:flex; justify-content:space-between; align-items:center; padding:2px 4px; font-size:9px; color:#888; border-bottom:1px solid #444;">' +
+                '<span style="flex:1;">Item</span>' +
+                '<span style="width:50px; text-align:center; margin:0 4px;">Pays</span>' +
+                '<span style="width:26px;"></span>' +
+                '</div>';
+
+            html += buyList.map((buy, i) => {
                 const item = items[buy.itemIndex];
                 const itemName = item ? item.name : '(Unknown)';
                 return '<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:#333; border-radius:3px; font-size:10px;">' +
                     '<span style="flex:1; color:#fff;">' + itemName + '</span>' +
-                    '<input type="number" value="' + (buy.sellPrice || 0) + '" onchange="updateShopBuyPrice(' + i + ', this.value)" style="width:50px; margin:0 4px;" title="Sell price">' +
+                    '<input type="number" value="' + (buy.sellPrice || 0) + '" onchange="updateShopBuyPrice(' + i + ', this.value)" style="width:50px; margin:0 4px; text-align:center;">' +
                     '<button onclick="removeShopBuyItem(' + i + ')" style="padding:2px 6px; font-size:9px; background:#a55;">×</button>' +
                 '</div>';
             }).join('');
+
+            container.innerHTML = html;
         }
 
         function updateShopBuyPrice(index, value) {
@@ -17253,6 +17290,7 @@
         function shopAddBuyListItem() {
             if (editingShopIndex < 0) return;
             const select = document.getElementById('shopAddBuyItemSelect');
+            const priceInput = document.getElementById('shopAddBuyItemPrice');
             const itemIndex = parseInt(select.value);
             if (isNaN(itemIndex) || itemIndex < 0) return;
 
@@ -17265,9 +17303,12 @@
                 return;
             }
 
+            // Get price from input
+            const sellPrice = parseInt(priceInput.value) || 5;
+
             shop.buyList.push({
                 itemIndex: itemIndex,
-                sellPrice: 50  // Default sell price
+                sellPrice: sellPrice
             });
 
             renderShopBuyListEditor();
