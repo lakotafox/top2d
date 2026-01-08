@@ -28141,10 +28141,10 @@ Item Receive Display:
                         const quest = questsData?.find(q => q.id === pendingQuestAction.questId);
                         if (quest?.declineDialogId !== undefined && quest.declineDialogId !== '') {
                             const declineDialogIndex = parseInt(quest.declineDialogId);
-                            if (dialogsData[declineDialogIndex]) {
+                            if (dialogs[declineDialogIndex]) {
                                 pendingQuestAction = null; // Cancel quest offer
                                 activeDialog = {
-                                    dialog: dialogsData[declineDialogIndex],
+                                    dialog: dialogs[declineDialogIndex],
                                     pageIndex: 0,
                                     npc: activeDialog.npc
                                 };
@@ -28163,9 +28163,9 @@ Item Receive Display:
                     // Go to specific dialog
                     if (choice.targetDialogId !== undefined) {
                         const targetIdx = parseInt(choice.targetDialogId);
-                        if (dialogsData[targetIdx]) {
+                        if (dialogs[targetIdx]) {
                             activeDialog = {
-                                dialog: dialogsData[targetIdx],
+                                dialog: dialogs[targetIdx],
                                 pageIndex: 0,
                                 npc: activeDialog.npc
                             };
