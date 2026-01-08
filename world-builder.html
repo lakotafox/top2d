@@ -29079,23 +29079,31 @@ Item Receive Display:
         }
 
         // === SHOP SYSTEM ===
-        // Store button hitboxes for click detection
         let shopUIButtons = {};
-        let shopItemsList = [];
+        let shopCart = []; // { type: 'buy'|'sell', shopInvIdx, playerSlotIdx, itemIndex, price, name }
+        const SHOP_SLOT_SIZE = 36;
 
         function openShop(shopIndex) {
             if (shopIndex < 0 || shopIndex >= shopsData.length) return;
             shopOpen = true;
             activeShopIndex = shopIndex;
-            shopTab = 'buy';
-            shopSelectedIndex = -1; // No item selected initially
+            shopCart = [];
             console.log('[SHOP] Opened shop:', shopsData[shopIndex].name);
         }
 
         function closeShop() {
             shopOpen = false;
             activeShopIndex = -1;
-            shopSelectedIndex = -1;
+            shopCart = [];
+        }
+
+        function getCartTotal() {
+            let total = 0;
+            shopCart.forEach(c => {
+                if (c.type === 'buy') total -= c.price;
+                else total += c.price;
+            });
+            return total;
         }
 
         function drawShopUI() {
@@ -29105,34 +29113,12 @@ Item Receive Display:
             if (!shop) return;
 
             // Darken background
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Calculate greeting height for dynamic panel sizing
-            const greeting = shop.greeting || '';
-            let greetingHeight = 0;
-            if (greeting) {
-                ctx.font = '11px monospace';
-                const maxWidth = 300;
-                const words = greeting.split(' ');
-                let lines = 0, line = '';
-                for (const word of words) {
-                    const test = line + (line ? ' ' : '') + word;
-                    if (ctx.measureText(test).width > maxWidth) {
-                        if (line) lines++;
-                        line = word;
-                    } else {
-                        line = test;
-                    }
-                }
-                if (line) lines++;
-                lines = Math.min(lines, 2);
-                greetingHeight = lines * 14 + 5;
-            }
-
-            // Shop panel
-            const panelW = 340;
-            const panelH = 320 + greetingHeight;
+            // Main panel
+            const panelW = 500;
+            const panelH = 340;
             const panelX = (canvas.width - panelW) / 2;
             const panelY = (canvas.height - panelH) / 2;
 
@@ -29142,322 +29128,380 @@ Item Receive Display:
             ctx.lineWidth = 3;
             ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-            // Shop name
+            // Header
             ctx.fillStyle = '#fa0';
             ctx.font = 'bold 16px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText(shop.name || 'Shop', panelX + panelW / 2, panelY + 25);
+            ctx.fillText(shop.name || 'Shop', panelX + panelW / 2, panelY + 22);
+
+            // Close X button
+            const closeBtnX = panelX + panelW - 28;
+            const closeBtnY = panelY + 6;
+            ctx.fillStyle = '#633';
+            ctx.fillRect(closeBtnX, closeBtnY, 22, 22);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px monospace';
+            ctx.fillText('X', closeBtnX + 11, closeBtnY + 16);
+            shopUIButtons.close = { x: closeBtnX, y: closeBtnY, w: 22, h: 22 };
 
             // Gold display
-            ctx.fillStyle = '#fff';
-            ctx.font = '12px monospace';
-            ctx.textAlign = 'right';
-            ctx.fillText('Gold: ' + playerGold, panelX + panelW - 15, panelY + 25);
-
-            // Close button (X)
-            const closeBtnX = panelX + panelW - 30;
-            const closeBtnY = panelY + 8;
-            const closeBtnSize = 20;
-            ctx.fillStyle = '#633';
-            ctx.fillRect(closeBtnX, closeBtnY, closeBtnSize, closeBtnSize);
-            ctx.fillStyle = '#fff';
+            ctx.fillStyle = '#fa0';
             ctx.font = 'bold 14px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText('X', closeBtnX + closeBtnSize/2, closeBtnY + 15);
-            shopUIButtons.close = { x: closeBtnX, y: closeBtnY, w: closeBtnSize, h: closeBtnSize };
-
-            // Greeting message (if exists)
-            if (greeting) {
-                ctx.fillStyle = '#aaa';
-                ctx.font = '11px monospace';
-                ctx.textAlign = 'center';
-                const maxWidth = panelW - 40;
-                const words = greeting.split(' ');
-                let lines = [];
-                let line = '';
-                for (const word of words) {
-                    const test = line + (line ? ' ' : '') + word;
-                    if (ctx.measureText(test).width > maxWidth) {
-                        if (line) lines.push(line);
-                        line = word;
-                    } else {
-                        line = test;
-                    }
-                }
-                if (line) lines.push(line);
-                lines = lines.slice(0, 2);
-                lines.forEach((l, i) => {
-                    ctx.fillText(l, panelX + panelW / 2, panelY + 42 + i * 14);
-                });
-            }
-
-            // Tabs
-            const tabY = panelY + 45 + greetingHeight;
-            const tabW = 100;
-            const tabH = 28;
-
-            // Buy tab button
-            ctx.fillStyle = shopTab === 'buy' ? '#4a7c59' : '#333';
-            ctx.fillRect(panelX + 30, tabY, tabW, tabH);
-            ctx.strokeStyle = shopTab === 'buy' ? '#6a9' : '#555';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(panelX + 30, tabY, tabW, tabH);
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 13px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText('BUY', panelX + 30 + tabW / 2, tabY + 19);
-            shopUIButtons.buyTab = { x: panelX + 30, y: tabY, w: tabW, h: tabH };
-
-            // Sell tab button
-            ctx.fillStyle = shopTab === 'sell' ? '#7c594a' : '#333';
-            ctx.fillRect(panelX + 140, tabY, tabW, tabH);
-            ctx.strokeStyle = shopTab === 'sell' ? '#a96' : '#555';
-            ctx.strokeRect(panelX + 140, tabY, tabW, tabH);
-            ctx.fillStyle = '#fff';
-            ctx.fillText('SELL', panelX + 140 + tabW / 2, tabY + 19);
-            shopUIButtons.sellTab = { x: panelX + 140, y: tabY, w: tabW, h: tabH };
-
-            // Item list area
-            const listY = tabY + 40;
-            const listH = panelH - 180 - greetingHeight;
-            ctx.fillStyle = '#252540';
-            ctx.fillRect(panelX + 15, listY, panelW - 30, listH);
-
-            // Build items list
-            shopItemsList = [];
-            if (shopTab === 'buy' && shop.inventory) {
-                shopItemsList = shop.inventory.map((inv, i) => ({
-                    name: itemsData[inv.itemIndex]?.name || 'Unknown',
-                    price: inv.buyPrice,
-                    stock: inv.stock,
-                    itemIndex: inv.itemIndex,
-                    index: i
-                }));
-            } else if (shopTab === 'sell') {
-                inventorySlots.forEach((slot, i) => {
-                    if (slot) {
-                        const item = itemsData[slot.itemIndex];
-                        const buyEntry = shop.buyList?.find(b => b.itemIndex === slot.itemIndex);
-                        const sellPrice = buyEntry ? buyEntry.sellPrice : Math.floor((item?.basePrice || 10) * (shop.defaultSellRate || 50) / 100);
-                        shopItemsList.push({
-                            name: item?.name || 'Item',
-                            price: sellPrice,
-                            quantity: slot.quantity,
-                            slotIndex: i,
-                            index: shopItemsList.length
-                        });
-                    }
-                });
-            }
-
-            // Draw items (clickable)
-            ctx.font = '12px monospace';
             ctx.textAlign = 'left';
-            const itemH = 26;
-            const maxVisible = Math.floor(listH / itemH);
-            const startIdx = Math.max(0, Math.min(shopSelectedIndex, shopItemsList.length - maxVisible));
+            ctx.fillText('Your Gold: ' + playerGold, panelX + 15, panelY + 22);
 
-            shopUIButtons.items = [];
-            shopItemsList.slice(startIdx, startIdx + maxVisible).forEach((item, i) => {
-                const idx = startIdx + i;
-                const itemY = listY + 4 + i * itemH;
-                const itemRect = { x: panelX + 17, y: itemY, w: panelW - 34, h: itemH - 2, index: idx };
-                shopUIButtons.items.push(itemRect);
+            // === LEFT SIDE: Shop Inventory ===
+            const shopAreaX = panelX + 15;
+            const shopAreaY = panelY + 40;
+            const shopAreaW = 180;
+            const shopAreaH = 200;
 
-                // Highlight selected item
-                if (idx === shopSelectedIndex) {
-                    ctx.fillStyle = '#5a5a8a';
-                    ctx.fillRect(itemRect.x, itemRect.y, itemRect.w, itemRect.h);
-                    ctx.strokeStyle = '#8af';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(itemRect.x, itemRect.y, itemRect.w, itemRect.h);
+            ctx.fillStyle = '#252540';
+            ctx.fillRect(shopAreaX, shopAreaY, shopAreaW, shopAreaH);
+            ctx.strokeStyle = '#4a7c59';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(shopAreaX, shopAreaY, shopAreaW, shopAreaH);
+
+            ctx.fillStyle = '#4f8';
+            ctx.font = 'bold 11px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('SHOP (click to buy)', shopAreaX + shopAreaW/2, shopAreaY - 5);
+
+            // Draw shop items as grid
+            shopUIButtons.shopItems = [];
+            const cols = 4;
+            const shopInv = shop.inventory || [];
+            shopInv.forEach((inv, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                const slotX = shopAreaX + 8 + col * (SHOP_SLOT_SIZE + 4);
+                const slotY = shopAreaY + 8 + row * (SHOP_SLOT_SIZE + 4);
+
+                if (slotY + SHOP_SLOT_SIZE > shopAreaY + shopAreaH - 5) return;
+
+                // Check if in cart
+                const inCart = shopCart.some(c => c.type === 'buy' && c.shopInvIdx === i);
+
+                ctx.fillStyle = inCart ? '#3a5a3a' : '#1a1a2a';
+                ctx.fillRect(slotX, slotY, SHOP_SLOT_SIZE, SHOP_SLOT_SIZE);
+                ctx.strokeStyle = inCart ? '#8f8' : '#444';
+                ctx.lineWidth = inCart ? 2 : 1;
+                ctx.strokeRect(slotX, slotY, SHOP_SLOT_SIZE, SHOP_SLOT_SIZE);
+
+                // Draw item sprite
+                const itemDef = itemsData[inv.itemIndex];
+                if (itemDef && itemImages[inv.itemIndex]) {
+                    const img = itemImages[inv.itemIndex];
+                    const frameW = itemDef.frameWidth || 16;
+                    const frameH = itemDef.frameHeight || 16;
+                    const scale = Math.min((SHOP_SLOT_SIZE - 4) / frameW, (SHOP_SLOT_SIZE - 4) / frameH);
+                    const drawW = frameW * scale;
+                    const drawH = frameH * scale;
+                    ctx.drawImage(img, 0, 0, frameW, frameH,
+                        slotX + (SHOP_SLOT_SIZE - drawW)/2, slotY + (SHOP_SLOT_SIZE - drawH)/2, drawW, drawH);
                 }
 
-                ctx.fillStyle = idx === shopSelectedIndex ? '#fff' : '#ccc';
-                ctx.fillText(item.name, panelX + 25, itemY + 17);
+                // Price label
                 ctx.fillStyle = '#fa0';
-                ctx.textAlign = 'right';
-                ctx.fillText(item.price + 'g', panelX + panelW - 25, itemY + 17);
-                if (item.quantity) {
-                    ctx.fillStyle = '#888';
-                    ctx.fillText('x' + item.quantity + ' ', panelX + panelW - 65, itemY + 17);
-                }
-                ctx.textAlign = 'left';
+                ctx.font = '8px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(inv.buyPrice + 'g', slotX + SHOP_SLOT_SIZE/2, slotY + SHOP_SLOT_SIZE + 8);
+
+                shopUIButtons.shopItems.push({ x: slotX, y: slotY, w: SHOP_SLOT_SIZE, h: SHOP_SLOT_SIZE, idx: i });
             });
 
-            if (shopItemsList.length === 0) {
+            if (shopInv.length === 0) {
                 ctx.fillStyle = '#666';
+                ctx.font = '11px monospace';
                 ctx.textAlign = 'center';
-                ctx.fillText(shopTab === 'buy' ? 'Nothing for sale' : 'Nothing to sell', panelX + panelW / 2, listY + listH / 2);
+                ctx.fillText('Empty', shopAreaX + shopAreaW/2, shopAreaY + shopAreaH/2);
             }
 
-            // Bottom buttons
-            const btnY = panelY + panelH - 45;
-            const btnW = 120;
-            const btnH = 32;
+            // === RIGHT SIDE: Player Inventory ===
+            const invAreaX = panelX + panelW - 195;
+            const invAreaY = panelY + 40;
+            const invAreaW = 180;
+            const invAreaH = 200;
 
-            // Confirm button (Buy/Sell)
-            const canConfirm = shopSelectedIndex >= 0 && shopSelectedIndex < shopItemsList.length;
-            ctx.fillStyle = canConfirm ? (shopTab === 'buy' ? '#4a7c59' : '#7c594a') : '#333';
-            ctx.fillRect(panelX + 30, btnY, btnW, btnH);
-            ctx.strokeStyle = canConfirm ? '#fff' : '#555';
+            ctx.fillStyle = '#252540';
+            ctx.fillRect(invAreaX, invAreaY, invAreaW, invAreaH);
+            ctx.strokeStyle = '#7c594a';
             ctx.lineWidth = 2;
-            ctx.strokeRect(panelX + 30, btnY, btnW, btnH);
+            ctx.strokeRect(invAreaX, invAreaY, invAreaW, invAreaH);
+
+            ctx.fillStyle = '#f84';
+            ctx.font = 'bold 11px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('YOUR ITEMS (click to sell)', invAreaX + invAreaW/2, invAreaY - 5);
+
+            // Draw player inventory as grid
+            shopUIButtons.playerItems = [];
+            for (let i = 0; i < 20; i++) { // Show first 20 slots
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                const slotX = invAreaX + 8 + col * (SHOP_SLOT_SIZE + 4);
+                const slotY = invAreaY + 8 + row * (SHOP_SLOT_SIZE + 4);
+
+                const slot = inventorySlots[i];
+                const inCart = shopCart.some(c => c.type === 'sell' && c.playerSlotIdx === i);
+
+                ctx.fillStyle = inCart ? '#5a3a3a' : '#1a1a2a';
+                ctx.fillRect(slotX, slotY, SHOP_SLOT_SIZE, SHOP_SLOT_SIZE);
+                ctx.strokeStyle = inCart ? '#f88' : '#444';
+                ctx.lineWidth = inCart ? 2 : 1;
+                ctx.strokeRect(slotX, slotY, SHOP_SLOT_SIZE, SHOP_SLOT_SIZE);
+
+                if (slot) {
+                    const itemDef = itemsData[slot.itemIndex];
+                    if (itemDef && itemImages[slot.itemIndex]) {
+                        const img = itemImages[slot.itemIndex];
+                        const frameW = itemDef.frameWidth || 16;
+                        const frameH = itemDef.frameHeight || 16;
+                        const scale = Math.min((SHOP_SLOT_SIZE - 4) / frameW, (SHOP_SLOT_SIZE - 4) / frameH);
+                        const drawW = frameW * scale;
+                        const drawH = frameH * scale;
+                        ctx.drawImage(img, 0, 0, frameW, frameH,
+                            slotX + (SHOP_SLOT_SIZE - drawW)/2, slotY + (SHOP_SLOT_SIZE - drawH)/2, drawW, drawH);
+                    }
+
+                    // Quantity
+                    if (slot.quantity > 1) {
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 9px monospace';
+                        ctx.textAlign = 'right';
+                        ctx.fillText('x' + slot.quantity, slotX + SHOP_SLOT_SIZE - 2, slotY + SHOP_SLOT_SIZE - 2);
+                    }
+
+                    // Sell price
+                    const buyEntry = shop.buyList?.find(b => b.itemIndex === slot.itemIndex);
+                    const sellPrice = buyEntry ? buyEntry.sellPrice : Math.floor((itemDef?.basePrice || 10) * (shop.defaultSellRate || 50) / 100);
+                    ctx.fillStyle = '#4a8';
+                    ctx.font = '8px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(sellPrice + 'g', slotX + SHOP_SLOT_SIZE/2, slotY + SHOP_SLOT_SIZE + 8);
+                }
+
+                shopUIButtons.playerItems.push({ x: slotX, y: slotY, w: SHOP_SLOT_SIZE, h: SHOP_SLOT_SIZE, idx: i });
+            }
+
+            // === CENTER: Cart Summary ===
+            const cartX = panelX + 200;
+            const cartY = panelY + 50;
+            const cartW = 100;
+            const cartH = 180;
+
+            ctx.fillStyle = '#2a2a3e';
+            ctx.fillRect(cartX, cartY, cartW, cartH);
+            ctx.strokeStyle = '#888';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(cartX, cartY, cartW, cartH);
+
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('CART', cartX + cartW/2, cartY + 12);
+
+            // List cart items
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'left';
+            let cartListY = cartY + 25;
+            shopCart.slice(0, 8).forEach((c, i) => {
+                ctx.fillStyle = c.type === 'buy' ? '#f88' : '#8f8';
+                const prefix = c.type === 'buy' ? '-' : '+';
+                ctx.fillText(prefix + c.price + 'g ' + (c.name || '').substring(0, 8), cartX + 5, cartListY + i * 12);
+            });
+            if (shopCart.length > 8) {
+                ctx.fillStyle = '#888';
+                ctx.fillText('...+' + (shopCart.length - 8) + ' more', cartX + 5, cartListY + 8 * 12);
+            }
+            if (shopCart.length === 0) {
+                ctx.fillStyle = '#666';
+                ctx.textAlign = 'center';
+                ctx.fillText('Empty', cartX + cartW/2, cartY + cartH/2);
+            }
+
+            // Cart total
+            const cartTotal = getCartTotal();
+            ctx.fillStyle = cartTotal >= 0 ? '#8f8' : '#f88';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'center';
+            const totalText = (cartTotal >= 0 ? '+' : '') + cartTotal + 'g';
+            ctx.fillText('Total: ' + totalText, cartX + cartW/2, cartY + cartH - 8);
+
+            // === BOTTOM: Buttons ===
+            const btnY = panelY + panelH - 50;
+
+            // Clear cart button
+            const clearW = 80;
+            ctx.fillStyle = '#444';
+            ctx.fillRect(panelX + 20, btnY, clearW, 35);
+            ctx.strokeStyle = '#666';
+            ctx.strokeRect(panelX + 20, btnY, clearW, 35);
+            ctx.fillStyle = '#ccc';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('CLEAR', panelX + 20 + clearW/2, btnY + 23);
+            shopUIButtons.clear = { x: panelX + 20, y: btnY, w: clearW, h: 35 };
+
+            // Confirm button
+            const confirmW = 140;
+            const canConfirm = shopCart.length > 0 && (playerGold + cartTotal) >= 0;
+            ctx.fillStyle = canConfirm ? '#4a7c59' : '#333';
+            ctx.fillRect(panelX + panelW/2 - confirmW/2, btnY, confirmW, 35);
+            ctx.strokeStyle = canConfirm ? '#8f8' : '#555';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(panelX + panelW/2 - confirmW/2, btnY, confirmW, 35);
             ctx.fillStyle = canConfirm ? '#fff' : '#666';
             ctx.font = 'bold 14px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText(shopTab === 'buy' ? 'BUY' : 'SELL', panelX + 30 + btnW / 2, btnY + 22);
-            shopUIButtons.confirm = { x: panelX + 30, y: btnY, w: btnW, h: btnH };
+            ctx.fillText('CONFIRM', panelX + panelW/2, btnY + 24);
+            shopUIButtons.confirm = { x: panelX + panelW/2 - confirmW/2, y: btnY, w: confirmW, h: 35 };
 
             // Close button
+            const closeW = 80;
             ctx.fillStyle = '#633';
-            ctx.fillRect(panelX + panelW - 30 - btnW, btnY, btnW, btnH);
+            ctx.fillRect(panelX + panelW - 20 - closeW, btnY, closeW, 35);
             ctx.strokeStyle = '#a66';
-            ctx.strokeRect(panelX + panelW - 30 - btnW, btnY, btnW, btnH);
+            ctx.strokeRect(panelX + panelW - 20 - closeW, btnY, closeW, 35);
             ctx.fillStyle = '#fff';
-            ctx.fillText('CLOSE', panelX + panelW - 30 - btnW / 2, btnY + 22);
-            shopUIButtons.closeBtn = { x: panelX + panelW - 30 - btnW, y: btnY, w: btnW, h: btnH };
+            ctx.fillText('CLOSE', panelX + panelW - 20 - closeW/2, btnY + 23);
+            shopUIButtons.closeBtn = { x: panelX + panelW - 20 - closeW, y: btnY, w: closeW, h: 35 };
 
-            // Show selected item info
-            if (shopSelectedIndex >= 0 && shopSelectedIndex < shopItemsList.length) {
-                const selItem = shopItemsList[shopSelectedIndex];
-                ctx.fillStyle = '#aaa';
-                ctx.font = '10px monospace';
+            // Affordability warning
+            if (shopCart.length > 0 && (playerGold + cartTotal) < 0) {
+                ctx.fillStyle = '#f44';
+                ctx.font = 'bold 11px monospace';
                 ctx.textAlign = 'center';
-                const infoText = shopTab === 'buy'
-                    ? 'Click BUY to purchase for ' + selItem.price + 'g'
-                    : 'Click SELL to sell for ' + selItem.price + 'g';
-                ctx.fillText(infoText, panelX + panelW / 2, btnY - 8);
-            } else {
-                ctx.fillStyle = '#666';
-                ctx.font = '10px monospace';
-                ctx.textAlign = 'center';
-                ctx.fillText('Click an item to select it', panelX + panelW / 2, btnY - 8);
+                ctx.fillText('Not enough gold!', panelX + panelW/2, btnY - 8);
             }
         }
 
         function handleShopClick(clickX, clickY) {
             if (!shopOpen) return false;
 
-            // Close X button
+            const shop = shopsData[activeShopIndex];
+            if (!shop) return true;
+
+            // Close buttons
             if (shopUIButtons.close && isInRect(clickX, clickY, shopUIButtons.close)) {
                 closeShop();
                 return true;
             }
-
-            // Close button
             if (shopUIButtons.closeBtn && isInRect(clickX, clickY, shopUIButtons.closeBtn)) {
                 closeShop();
                 return true;
             }
 
-            // Buy tab
-            if (shopUIButtons.buyTab && isInRect(clickX, clickY, shopUIButtons.buyTab)) {
-                shopTab = 'buy';
-                shopSelectedIndex = -1;
+            // Clear cart
+            if (shopUIButtons.clear && isInRect(clickX, clickY, shopUIButtons.clear)) {
+                shopCart = [];
                 return true;
             }
 
-            // Sell tab
-            if (shopUIButtons.sellTab && isInRect(clickX, clickY, shopUIButtons.sellTab)) {
-                shopTab = 'sell';
-                shopSelectedIndex = -1;
+            // Confirm transaction
+            if (shopUIButtons.confirm && isInRect(clickX, clickY, shopUIButtons.confirm)) {
+                if (shopCart.length > 0 && (playerGold + getCartTotal()) >= 0) {
+                    executeShopTransaction();
+                }
                 return true;
             }
 
-            // Items list
-            if (shopUIButtons.items) {
-                for (const itemBtn of shopUIButtons.items) {
-                    if (isInRect(clickX, clickY, itemBtn)) {
-                        shopSelectedIndex = itemBtn.index;
+            // Click on shop item (add to cart as buy)
+            if (shopUIButtons.shopItems) {
+                for (const btn of shopUIButtons.shopItems) {
+                    if (isInRect(clickX, clickY, btn)) {
+                        const inv = shop.inventory[btn.idx];
+                        const existing = shopCart.findIndex(c => c.type === 'buy' && c.shopInvIdx === btn.idx);
+                        if (existing >= 0) {
+                            shopCart.splice(existing, 1); // Remove from cart
+                        } else {
+                            const itemDef = itemsData[inv.itemIndex];
+                            shopCart.push({
+                                type: 'buy',
+                                shopInvIdx: btn.idx,
+                                itemIndex: inv.itemIndex,
+                                price: inv.buyPrice,
+                                name: itemDef?.name || 'Item'
+                            });
+                        }
                         return true;
                     }
                 }
             }
 
-            // Confirm button
-            if (shopUIButtons.confirm && isInRect(clickX, clickY, shopUIButtons.confirm)) {
-                if (shopSelectedIndex >= 0) {
-                    if (shopTab === 'buy') {
-                        shopBuyItem();
-                    } else {
-                        shopSellItem();
+            // Click on player item (add to cart as sell)
+            if (shopUIButtons.playerItems) {
+                for (const btn of shopUIButtons.playerItems) {
+                    if (isInRect(clickX, clickY, btn)) {
+                        const slot = inventorySlots[btn.idx];
+                        if (slot) {
+                            const existing = shopCart.findIndex(c => c.type === 'sell' && c.playerSlotIdx === btn.idx);
+                            if (existing >= 0) {
+                                shopCart.splice(existing, 1); // Remove from cart
+                            } else {
+                                const itemDef = itemsData[slot.itemIndex];
+                                const buyEntry = shop.buyList?.find(b => b.itemIndex === slot.itemIndex);
+                                const sellPrice = buyEntry ? buyEntry.sellPrice : Math.floor((itemDef?.basePrice || 10) * (shop.defaultSellRate || 50) / 100);
+                                shopCart.push({
+                                    type: 'sell',
+                                    playerSlotIdx: btn.idx,
+                                    itemIndex: slot.itemIndex,
+                                    price: sellPrice,
+                                    name: itemDef?.name || 'Item'
+                                });
+                            }
+                        }
+                        return true;
                     }
                 }
-                return true;
             }
 
-            return true; // Consume click even if not on a button (don't let it through)
+            return true;
+        }
+
+        function executeShopTransaction() {
+            // Process all cart items
+            shopCart.forEach(c => {
+                if (c.type === 'buy') {
+                    // Add item to player inventory
+                    const itemDef = itemsData[c.itemIndex];
+                    let added = false;
+                    if (itemDef?.stackable) {
+                        for (let i = 0; i < inventorySlots.length; i++) {
+                            if (inventorySlots[i]?.itemIndex === c.itemIndex) {
+                                inventorySlots[i].quantity++;
+                                added = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!added) {
+                        for (let i = 0; i < inventorySlots.length; i++) {
+                            if (!inventorySlots[i]) {
+                                inventorySlots[i] = { itemIndex: c.itemIndex, quantity: 1 };
+                                added = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (added) playerGold -= c.price;
+                } else {
+                    // Remove item from player inventory
+                    const slot = inventorySlots[c.playerSlotIdx];
+                    if (slot) {
+                        playerGold += c.price;
+                        slot.quantity--;
+                        if (slot.quantity <= 0) {
+                            inventorySlots[c.playerSlotIdx] = null;
+                        }
+                    }
+                }
+            });
+            shopCart = [];
+            console.log('[SHOP] Transaction complete. Gold:', playerGold);
         }
 
         function isInRect(x, y, rect) {
             return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
-        }
-
-        function shopBuyItem() {
-            if (!shopOpen || activeShopIndex < 0 || shopTab !== 'buy') return;
-            const shop = shopsData[activeShopIndex];
-            if (!shop?.inventory || shopSelectedIndex >= shop.inventory.length) return;
-
-            const inv = shop.inventory[shopSelectedIndex];
-            if (playerGold < inv.buyPrice) {
-                console.log('[SHOP] Not enough gold!');
-                return;
-            }
-
-            // Find empty slot or stackable slot
-            const item = itemsData[inv.itemIndex];
-            let added = false;
-            if (item?.stackable) {
-                for (let i = 0; i < inventorySlots.length; i++) {
-                    if (inventorySlots[i]?.itemIndex === inv.itemIndex) {
-                        inventorySlots[i].quantity++;
-                        added = true;
-                        break;
-                    }
-                }
-            }
-            if (!added) {
-                for (let i = 0; i < inventorySlots.length; i++) {
-                    if (!inventorySlots[i]) {
-                        inventorySlots[i] = { itemIndex: inv.itemIndex, quantity: 1 };
-                        added = true;
-                        break;
-                    }
-                }
-            }
-
-            if (added) {
-                playerGold -= inv.buyPrice;
-                console.log('[SHOP] Bought', item?.name, 'for', inv.buyPrice, 'gold');
-            } else {
-                console.log('[SHOP] Inventory full!');
-            }
-        }
-
-        function shopSellItem() {
-            if (!shopOpen || activeShopIndex < 0 || shopTab !== 'sell') return;
-
-            // Build sellable items list
-            const sellableItems = [];
-            inventorySlots.forEach((slot, i) => {
-                if (slot) sellableItems.push({ slot, slotIndex: i });
-            });
-
-            if (shopSelectedIndex >= sellableItems.length) return;
-
-            const { slot, slotIndex } = sellableItems[shopSelectedIndex];
-            const shop = shopsData[activeShopIndex];
-            const item = itemsData[slot.itemIndex];
-            const buyEntry = shop?.buyList?.find(b => b.itemIndex === slot.itemIndex);
-            const sellPrice = buyEntry ? buyEntry.sellPrice : Math.floor((item?.basePrice || 10) * (shop?.defaultSellRate || 50) / 100);
-
-            playerGold += sellPrice;
-            slot.quantity--;
-            if (slot.quantity <= 0) {
-                inventorySlots[slotIndex] = null;
-            }
-            console.log('[SHOP] Sold', item?.name, 'for', sellPrice, 'gold');
         }
 
         function checkShopInteraction() {
