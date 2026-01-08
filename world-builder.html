@@ -20109,6 +20109,16 @@
             console.log('Loaded', quests.length, 'quests');
             renderQuestList();
 
+            // Load shops
+            shops = p.shops || [];
+            placedShops = p.placedShops || [];
+            startingGold = p.startingGold !== undefined ? p.startingGold : 100;
+            console.log('Loaded', shops.length, 'shops, starting gold:', startingGold);
+            updateShopList();
+            // Update gold input display
+            const goldInput = document.getElementById('startingGoldInput');
+            if (goldInput) goldInput.value = startingGold;
+
             // Load player characters
             playerCharacters = [];
             activePlayerIndex = -1;
@@ -22361,7 +22371,7 @@
         let animatedTileRegistry = [];
 
         // ===== QUEST SYSTEM RUNTIME =====
-        let questsData = [];  // Loaded from projectData
+        let quests = [];  // Loaded from projectData
         let questSoundsData = [];  // Quest sounds library
         let playerInventory = {};  // { [itemId]: quantity }
         let gameProgress = {
@@ -22378,7 +22388,7 @@
         };
 
         // NPC data for live sync
-        let npcsData = [];
+        let npcs = [];
         let npcImages = [];
         let npcRuntimeState = [];
         let gridSize = 16; // Will be set from projectData
@@ -22522,8 +22532,8 @@
 
                 case 'updateNpc':
                     // NPC definition updated (template, not placed instance)
-                    if (typeof npcsData !== 'undefined' && edit.index >= 0 && edit.index < npcsData.length && edit.npc) {
-                        npcsData[edit.index] = edit.npc;
+                    if (typeof npcs !== 'undefined' && edit.index >= 0 && edit.index < npcs.length && edit.npc) {
+                        npcs[edit.index] = edit.npc;
                         // Reload sprite image if changed
                         if (edit.npc.spriteData && npcImages) {
                             const img = new Image();
@@ -22536,8 +22546,8 @@
 
                 case 'addNpc':
                     // NPC definition added (not placed NPC)
-                    if (typeof npcsData !== 'undefined' && edit.npc) {
-                        npcsData.push(edit.npc);
+                    if (typeof npcs !== 'undefined' && edit.npc) {
+                        npcs.push(edit.npc);
                         // Load sprite image
                         if (edit.npc.spriteData) {
                             const img = new Image();
@@ -23157,22 +23167,22 @@
 
         // Quest state management
         function initializeQuestStates() {
-            if (!questsData || questsData.length === 0) return;
+            if (!quests || quests.length === 0) return;
 
-            questsData.forEach(quest => {
+            quests.forEach(quest => {
                 if (!gameProgress.questStates[quest.id]) {
                     gameProgress.questStates[quest.id] = { status: QUEST_STATUS.LOCKED };
                 }
             });
 
             updateQuestAvailability();
-            console.log('[QUEST] Initialized', questsData.length, 'quests');
+            console.log('[QUEST] Initialized', quests.length, 'quests');
         }
 
         function updateQuestAvailability() {
-            if (!questsData) return;
+            if (!quests) return;
 
-            questsData.forEach(quest => {
+            quests.forEach(quest => {
                 const state = gameProgress.questStates[quest.id];
                 if (!state) return;
 
@@ -23205,9 +23215,9 @@
         }
 
         function checkQuestConditions() {
-            if (!questsData) return;
+            if (!quests) return;
 
-            questsData.forEach(quest => {
+            quests.forEach(quest => {
                 const state = gameProgress.questStates[quest.id];
                 if (!state || state.status !== QUEST_STATUS.ACTIVE) return;
 
@@ -23291,7 +23301,7 @@
         }
 
         function acceptQuest(questId) {
-            const quest = questsData.find(q => q.id === questId);
+            const quest = quests.find(q => q.id === questId);
             if (!quest) return;
 
             const state = gameProgress.questStates[questId];
@@ -23320,14 +23330,14 @@
         }
 
         function getActiveQuest() {
-            if (!questsData) return null;
-            return questsData.find(q =>
+            if (!quests) return null;
+            return quests.find(q =>
                 gameProgress.questStates[q.id]?.status === QUEST_STATUS.ACTIVE
             );
         }
 
         function getQuestById(questId) {
-            return questsData?.find(q => q.id === questId);
+            return quests?.find(q => q.id === questId);
         }
 
         function showQuestNotification(type, questName) {
@@ -23407,12 +23417,12 @@
 
         function renderQuestLog() {
             const content = document.getElementById('questLogContent');
-            if (!content || !questsData) return;
+            if (!content || !quests) return;
 
             let html = '';
 
             // Active quests - just show name, no objectives
-            const active = questsData.filter(q => gameProgress.questStates[q.id]?.status === QUEST_STATUS.ACTIVE);
+            const active = quests.filter(q => gameProgress.questStates[q.id]?.status === QUEST_STATUS.ACTIVE);
             if (active.length > 0) {
                 html += '<div style="color:#0ff; font-weight:bold; margin-bottom:8px;">ACTIVE QUESTS</div>';
                 active.forEach(q => {
@@ -23426,7 +23436,7 @@
             }
 
             // Completed quests
-            const completed = questsData.filter(q => gameProgress.questStates[q.id]?.status === QUEST_STATUS.COMPLETED);
+            const completed = quests.filter(q => gameProgress.questStates[q.id]?.status === QUEST_STATUS.COMPLETED);
             if (completed.length > 0) {
                 html += '<div style="color:#4f4; font-weight:bold; margin:12px 0 8px;">COMPLETED</div>';
                 completed.forEach(q => {
@@ -23548,16 +23558,16 @@
         const staticObjectImages = [];
 
         // Quest system data
-        questsData = projectData.quests || [];
+        quests = projectData.quests || [];
         questSoundsData = projectData.questSounds || [];
         initializeQuestStates();
         // Update quest tracker after a short delay to ensure UI elements exist
         setTimeout(updateQuestTracker, 100);
 
         // Shop system data
-        let shopsData = projectData.shops || [];
+        let shops = projectData.shops || [];
         let playerGold = projectData.startingGold !== undefined ? projectData.startingGold : 100;
-        console.log('[SHOP] Loaded', shopsData.length, 'shops, starting gold:', playerGold);
+        console.log('[SHOP] Loaded', shops.length, 'shops, starting gold:', playerGold);
 
         // Track all images that need to load before starting the game
         let imagesToLoad = 0;
@@ -24460,7 +24470,7 @@
                 if (player.attackHitNpcs[i]) continue;
 
                 // Get NPC definition for collision mask
-                const npc = npcsData[placed.npcIndex];
+                const npc = npcs[placed.npcIndex];
                 if (!npc) continue;
 
                 // Calculate NPC collision bounds from collision mask
@@ -24856,7 +24866,7 @@
         let activeShopIndex = -1;   // Index of currently open shop
         let shopTab = 'buy';        // 'buy' or 'sell'
         let shopSelectedIndex = 0;  // Selected item in shop list
-        // shopsData already loaded above with projectData.shops
+        // shops already loaded above with projectData.shops
 
         // Initialize empty inventory slots
         function initInventory() {
@@ -25057,13 +25067,13 @@
 
         // === NPC SYSTEM ===
         // Use outer scope variables for live sync
-        npcsData = projectData.npcs || [];
+        npcs = projectData.npcs || [];
         placedNpcs = projectData.placedNpcs || [];
         npcImages = [];
         // gridSize is already set from projectData above
 
         // Migrate old collisionMask/collisionBox to collisionInsets (backwards compatibility)
-        npcsData.forEach(npc => {
+        npcs.forEach(npc => {
             if (npc && !npc.collisionInsets) {
                 const frameW = npc.frameWidth || 32;
                 const frameH = npc.frameHeight || 32;
@@ -25109,7 +25119,7 @@
         });
 
         // Load NPC sprites (counted in imagesToLoad)
-        npcsData.forEach((npc, i) => {
+        npcs.forEach((npc, i) => {
             if (npc && npc.spriteData) {
                 const img = new Image();
                 img.onload = () => {
@@ -25163,7 +25173,7 @@
             };
         }
 
-        console.log('NPCs loaded:', npcsData.length, 'Placed:', placedNpcs.length);
+        console.log('NPCs loaded:', npcs.length, 'Placed:', placedNpcs.length);
 
         // Cycle phases: long night with peak darkness held for 50% of each night period
         // Night1: 0-30% (peak 0-15%), EarlyMorn: 30-38%, Dawn: 38-45%, Day: 45-55%,
@@ -25272,7 +25282,7 @@
                     continue;
                 }
 
-                const npc = npcsData[placed.npcIndex];
+                const npc = npcs[placed.npcIndex];
                 if (!npc) continue;
 
                 const path = placed.path || [];
@@ -26554,13 +26564,13 @@ Item Receive Display:
                 const shopResult = checkShopInteraction();
                 if (shopResult && shopResult.shopIndex >= 0 && !activeDialog) {
                     // Show shop greeting dialog with Open Shop / Leave choices
-                    const shop = shopsData[shopResult.shopIndex];
+                    const shop = shops[shopResult.shopIndex];
                     const shopName = shop?.name || 'Shop';
 
                     // Check if shop has a custom greeting dialog
-                    if (shop?.greetingDialogId && dialogsData[parseInt(shop.greetingDialogId)]) {
+                    if (shop?.greetingDialogId && dialogs[parseInt(shop.greetingDialogId)]) {
                         // Use custom greeting dialog - add shop choices if not already present
-                        const greetingDialog = dialogsData[parseInt(shop.greetingDialogId)];
+                        const greetingDialog = dialogs[parseInt(shop.greetingDialogId)];
                         activeDialog = {
                             dialog: greetingDialog,
                             pageIndex: 0,
@@ -27328,7 +27338,7 @@ Item Receive Display:
 
                 const state = npcRuntimeState[i];
                 if (!state) continue;
-                const npc = npcsData[placed.npcIndex];
+                const npc = npcs[placed.npcIndex];
                 if (!npc) continue;
 
                 // Skip collision with enemy NPCs on damage cooldown (lets player escape)
@@ -27380,7 +27390,7 @@ Item Receive Display:
         function checkNPCPlayerCollision(npcTileX, npcTileY, npcIndex) {
             const tileSize = gridSize * TILE_SCALE;
             const placed = placedNpcs[npcIndex];
-            const npc = npcsData[placed?.npcIndex];
+            const npc = npcs[placed?.npcIndex];
             if (!npc) return false;
 
             // Get NPC dimensions
@@ -27893,7 +27903,7 @@ Item Receive Display:
                 if (!inCone) continue;
 
                 // Debug: show NPC info when in range
-                const npcDef = npcsData[npc.npcIndex];
+                const npcDef = npcs[npc.npcIndex];
                 console.log('[DIALOG] NPC in cone:', npcDef?.name || 'unknown', 'dialogIndex:', npc.dialogIndex, 'uid:', npc.uid);
 
                 // Check for quest dialog first
@@ -27928,9 +27938,9 @@ Item Receive Display:
 
         // Get the appropriate quest dialog for an NPC based on quest state
         function getQuestDialogForNpc(npc) {
-            if (!npc.uid || !questsData) return null;
+            if (!npc.uid || !quests) return null;
 
-            for (const quest of questsData) {
+            for (const quest of quests) {
                 const state = gameProgress.questStates[quest.id];
                 if (!state) continue;
 
@@ -28138,7 +28148,7 @@ Item Receive Display:
                 case 'decline':
                     // Decline quest - show decline dialog if available
                     if (pendingQuestAction && pendingQuestAction.type === 'offer') {
-                        const quest = questsData?.find(q => q.id === pendingQuestAction.questId);
+                        const quest = quests?.find(q => q.id === pendingQuestAction.questId);
                         if (quest?.declineDialogId !== undefined && quest.declineDialogId !== '') {
                             const declineDialogIndex = parseInt(quest.declineDialogId);
                             if (dialogs[declineDialogIndex]) {
@@ -28225,7 +28235,7 @@ Item Receive Display:
 
         // Complete a quest and give rewards
         function completeQuest(questId) {
-            const quest = questsData?.find(q => q.id === questId);
+            const quest = quests?.find(q => q.id === questId);
             if (!quest) return;
 
             const state = gameProgress.questStates[questId];
@@ -29210,11 +29220,11 @@ Item Receive Display:
         const SHOP_SLOT_SIZE = 36;
 
         function openShop(shopIndex) {
-            if (shopIndex < 0 || shopIndex >= shopsData.length) return;
+            if (shopIndex < 0 || shopIndex >= shops.length) return;
             shopOpen = true;
             activeShopIndex = shopIndex;
             shopCart = [];
-            console.log('[SHOP] Opened shop:', shopsData[shopIndex].name);
+            console.log('[SHOP] Opened shop:', shops[shopIndex].name);
         }
 
         function closeShop() {
@@ -29235,7 +29245,7 @@ Item Receive Display:
         function drawShopUI() {
             if (!shopOpen || activeShopIndex < 0) return;
 
-            const shop = shopsData[activeShopIndex];
+            const shop = shops[activeShopIndex];
             if (!shop) return;
 
             // Use same slot size as regular inventory
@@ -29568,7 +29578,7 @@ Item Receive Display:
         function handleShopClick(clickX, clickY) {
             if (!shopOpen) return false;
 
-            const shop = shopsData[activeShopIndex];
+            const shop = shops[activeShopIndex];
             if (!shop) return true;
 
             // Close buttons
@@ -30048,7 +30058,7 @@ Item Receive Display:
                 if (placed.mapName && placed.mapName !== currentGameMap) continue;
                 const state = npcRuntimeState[i];
                 if (!state) continue;
-                const npc = npcsData[placed.npcIndex];
+                const npc = npcs[placed.npcIndex];
                 if (!npc) continue;
 
                 const npcGridY = Math.floor((state.y + gridSize) / gridSize);
@@ -31236,7 +31246,7 @@ Item Receive Display:
         function drawNPC(npcIdx, camX, camY, tileSize) {
             const placed = placedNpcs[npcIdx];
             const state = npcRuntimeState[npcIdx];
-            const npc = npcsData[placed.npcIndex];
+            const npc = npcs[placed.npcIndex];
             const img = npcImages[placed.npcIndex];
 
             if (!placed || !state || !npc || !img || !img.complete) return;
@@ -31435,9 +31445,9 @@ Item Receive Display:
 
         // Get quest indicator for an NPC (! = available, ? = can turn in)
         function getQuestIndicatorForNpc(npc) {
-            if (!npc.uid || !questsData) return null;
+            if (!npc.uid || !quests) return null;
 
-            for (const quest of questsData) {
+            for (const quest of quests) {
                 const state = gameProgress.questStates[quest.id];
                 if (!state) continue;
 

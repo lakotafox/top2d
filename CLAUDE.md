@@ -1,7 +1,17 @@
 # World Builder - Project Understanding
 
+## IMPORTANT: Session Workflow
+
+**START of session:** Read `WORLD-BUILDER-REFERENCE.md` for detailed architecture, variable names, line numbers, and common bugs/fixes.
+
+**DURING session:** When you learn something new about the codebase (bugs, patterns, gotchas), add it to `WORLD-BUILDER-REFERENCE.md`.
+
+**END of session / low context:** Update `WORLD-BUILDER-REFERENCE.md` with any new learnings before context runs out.
+
+---
+
 ## Overview
-**Adventure Crafter - World Builder** is a single-file (~22,800 lines) HTML/JavaScript application that serves as both a 2D Zelda-like game editor AND runtime engine. Everything lives in `world-builder.html`.
+**Adventure Crafter - World Builder** is a single-file (~31,730 lines) HTML/JavaScript application that serves as both a 2D Zelda-like game editor AND runtime engine. Everything lives in `world-builder.html`.
 
 ---
 
