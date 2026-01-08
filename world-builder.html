@@ -17536,148 +17536,9 @@
 
         // ===== SAVE/LOAD =====
         async function saveProject() {
-            // Count tiles in first layer for debugging
-            let tileCount = 0;
-            if (layers[0]) {
-                for (let y = 0; y < layers[0].length; y++) {
-                    if (layers[0][y]) {
-                        for (let x = 0; x < layers[0][y].length; x++) {
-                            if (layers[0][y][x]) tileCount++;
-                        }
-                    }
-                }
-            }
-            console.log('Saving project with', layers.length, 'layers,', tileCount, 'tiles in first layer,', tilesets.length, 'tilesets,', props.length, 'props');
-
-            // Save current prop's collision masks before saving
-            if (currentPropIndex >= 0 && props[currentPropIndex]) {
-                props[currentPropIndex].collisionMasks = { ...propCollisionMasks };
-            }
-
-            // Save all tilesets
-            const tilesetsData = tilesets.map(ts => ({ name: ts.name, data: ts.data }));
-
-            // Save all props
-            const propsData = props.map(p => ({
-                name: p.name,
-                data: p.data,
-                collisionMasks: p.collisionMasks || {}
-            }));
-
-            // Save all animated props
-            const animPropsData = animatedProps.map(prop => ({
-                name: prop.name,
-                spriteData: prop.spriteData,
-                frameWidth: prop.frameWidth,
-                frameHeight: prop.frameHeight,
-                frames: prop.frames,
-                type: prop.type,
-                fps: prop.fps,
-                collisionMasks: prop.collisionMasks || null,
-                splitLine: prop.splitLine || null,
-                giveItem: prop.giveItem || false,
-                giveItemIndex: prop.giveItemIndex ?? -1
-            }));
-
-            // Save sounds
-            const soundsData = sounds.map(s => ({
-                name: s.name,
-                data: s.data,
-                duration: s.duration,
-                type: s.type
-            }));
-            console.log('=== SAVING SOUNDS ===');
-            console.log('Sounds to save:', sounds.length);
-            console.log('Tile sounds to save:', Object.keys(tileSounds).length, tileSounds);
-            console.log('Player sounds to save:', playerSounds);
-
-            const data = {
-                gridSize, mapCols, mapRows,
-                layers, layerVisibility, layerNames, currentLayer,
-                tileCollisions, collisionMasks,
-                tileSplitLines, // Depth split lines for Y-sorting
-                tileSplitLineFlipped, // Flipped split lines (bottom covers player)
-                tilesets: tilesetsData,
-                currentTilesetIndex,
-                // Keep for backwards compatibility
-                tilesetData: tilesets[0]?.data,
-                // Save multiple props
-                props: propsData,
-                currentPropIndex,
-                // Keep old format for backwards compatibility
-                propImageData: props[0]?.data || null,
-                propCollisionMasks: props[0]?.collisionMasks || {},
-                // Save animated props
-                animatedProps: animPropsData,
-                currentAnimPropIndex,
-                placedAnimProps,
-                // Save NPCs
-                npcs: npcs.map(npc => ({
-                    name: npc.name,
-                    spriteData: npc.spriteData,
-                    frameWidth: npc.frameWidth,
-                    frameHeight: npc.frameHeight,
-                    animations: npc.animations,
-                    animMirrors: npc.animMirrors || {},
-                    fps: npc.fps,
-                    pingPong: npc.pingPong || false,
-                    collisionInsets: npc.collisionInsets || null,
-                    shadowOffsetX: npc.shadowOffsetX ?? 0,
-                    shadowOffsetY: npc.shadowOffsetY ?? 4,
-                    shadowWidth: npc.shadowWidth ?? 0.35,
-                    shadowHeight: npc.shadowHeight ?? 0.12
-                })),
-                currentNpcIndex,
-                placedNpcs,
-                // Save static objects
-                staticObjects: staticObjects.map(obj => ({
-                    name: obj.name,
-                    spriteData: obj.spriteData,
-                    width: obj.width,
-                    height: obj.height,
-                    tilesetIndex: obj.tilesetIndex,
-                    sourceTiles: obj.sourceTiles,
-                    sourceOrigin: obj.sourceOrigin
-                })),
-                placedStaticObjects,
-                // Save player layer settings
-                playerLayerIndex,
-                playerPreviewPos,
-                spawnMapName,
-                playerPreviewVisible,
-                // Save sound data
-                sounds: soundsData,
-                tileSounds,
-                playerSounds,
-                // Quest sounds library
-                questSounds: questSounds.map(s => ({ name: s.name, data: s.data })),
-                // Save lighting data
-                lightingSettings,
-                pointLights,
-                // Save player characters with all data
-                playerCharacters: playerCharacters.map(c => ({
-                    name: c.name,
-                    spriteData: c.spriteData,
-                    spriteSheets: c.spriteSheets || (c.spriteData ? [c.spriteData] : []),
-                    frameWidth: c.frameWidth,
-                    frameHeight: c.frameHeight,
-                    animations: c.animations,
-                    animMirrors: c.animMirrors || {},
-                    hitboxMasks: c.hitboxMasks || {},
-                    animFps: c.animFps || {},
-                    fps: c.fps || 8,
-                    pingPong: c.pingPong || false,
-                    attackMovement: c.attackMovement || 'stop',
-                    gameOverSoundIndex: c.gameOverSoundIndex !== undefined ? c.gameOverSoundIndex : -1
-                })),
-                activePlayerIndex,
-                // Multi-map support
-                maps,
-                currentMapName,
-                placedTriggers,
-                // Dialogs
-                dialogs
-            };
+            // Use getProjectData() to ensure both save methods have identical data
+            const data = getProjectData();
+            console.log('Saving project - shops:', data.shops?.length || 0, 'items:', data.items?.length || 0, 'quests:', data.quests?.length || 0);
             console.log('Saving playerPreviewPos:', playerPreviewPos, 'on map:', spawnMapName);
             try {
                 // Try IndexedDB first (much larger storage)
@@ -24069,6 +23930,12 @@
         let attackSlideDuration = 30; // How many frames the slide lasts
         let playerScale = 1.7; // Player sprite scale (loaded from character data)
 
+        // Shadow settings (loaded from player character or defaults)
+        let playerShadowWidth = 21;
+        let playerShadowHeight = 8;
+        let playerShadowYOffset = 17;
+        let playerNoShadow = false;
+
         let playerGameOverSoundIndex = -1; // Index of game over sound (-1 = none, 0-99 = builtin, 100+ = project)
         let playerSpriteSheets = []; // Array of loaded sprite sheet images
 
@@ -25185,11 +25052,8 @@
         let currentLighting = { r: 0, g: 0, b: 0, a: 0 }; // interpolated values
         let manualDarkness = 0; // 0-100, used when cycle is off
 
-        // Shadow settings (loaded from player character or defaults)
-        let playerShadowWidth = 21;
-        let playerShadowHeight = 8;
-        let playerShadowYOffset = 17;
-        let playerNoShadow = false;
+        // playerShadowWidth, playerShadowHeight, playerShadowYOffset, playerNoShadow
+        // are declared earlier (~line 24072) and loaded from character data
 
         // === NPC SYSTEM ===
         // Use outer scope variables for live sync
