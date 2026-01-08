@@ -29553,8 +29553,7 @@ Item Receive Display:
                 ctx.fillText('to add', cartX + cartW/2, cartY + cartH/2 + 6);
             }
 
-            // Cart total
-            const cartTotal = getCartTotal();
+            // Cart total (using cartTotal from earlier in function)
             ctx.fillStyle = cartTotal >= 0 ? '#8f8' : '#f88';
             ctx.font = 'bold 12px monospace';
             ctx.textAlign = 'center';
