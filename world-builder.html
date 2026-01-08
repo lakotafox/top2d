@@ -26567,10 +26567,18 @@ Item Receive Display:
                     const shop = shops[shopResult.shopIndex];
                     const shopName = shop?.name || 'Shop';
 
-                    // Check if shop has a custom greeting dialog
-                    if (shop?.greetingDialogId && dialogs[parseInt(shop.greetingDialogId)]) {
-                        // Use custom greeting dialog - add shop choices if not already present
-                        const greetingDialog = dialogs[parseInt(shop.greetingDialogId)];
+                    // Check if shop has a custom greeting dialog by ID
+                    const dialogId = parseInt(shop?.greetingDialogId);
+                    if (!isNaN(dialogId) && dialogs[dialogId]) {
+                        // Use existing dialog - but add shop choices to last page if not present
+                        const greetingDialog = JSON.parse(JSON.stringify(dialogs[dialogId])); // Deep copy
+                        const lastPage = greetingDialog.pages[greetingDialog.pages.length - 1];
+                        if (!lastPage.choices || lastPage.choices.length === 0) {
+                            lastPage.choices = [
+                                { text: 'Open Shop', action: 'shop' },
+                                { text: 'Leave', action: 'close' }
+                            ];
+                        }
                         activeDialog = {
                             dialog: greetingDialog,
                             pageIndex: 0,
@@ -26578,12 +26586,13 @@ Item Receive Display:
                             isShopGreeting: true
                         };
                     } else {
-                        // Create simple shop prompt dialog
+                        // Use custom greeting text or default
+                        const greetingText = (shop?.greetingDialogId || shop?.greeting || 'Welcome! Would you like to browse my wares?').trim();
                         activeDialog = {
                             dialog: {
                                 name: shopName,
                                 pages: [{
-                                    text: 'Welcome! Would you like to browse my wares?',
+                                    text: greetingText || 'Welcome! Would you like to browse my wares?',
                                     choices: [
                                         { text: 'Open Shop', action: 'shop' },
                                         { text: 'Leave', action: 'close' }
@@ -27441,8 +27450,8 @@ Item Receive Display:
             let dx = 0, dy = 0;
             player.moving = false;
 
-            // Check if player can move (based on attack movement setting, receive item state, and inventory)
-            let canMove = !player.attacking && !isReceivingItem && !inventoryOpen;
+            // Check if player can move (based on attack movement setting, receive item state, inventory, dialog, shop)
+            let canMove = !player.attacking && !isReceivingItem && !inventoryOpen && !activeDialog && !shopOpen;
             let moveMultiplier = 1;
 
             if (player.attacking && playerAttackMovement !== 'stop') {
@@ -28202,6 +28211,7 @@ Item Receive Display:
                     break;
             }
         }
+        window.selectDialogChoice = selectDialogChoice; // Expose to onclick
 
         function closeDialog() {
             // Resume NPC movement
@@ -28318,7 +28328,6 @@ Item Receive Display:
             const choices = page.choices || [];
             if (choices.length > 0 && dialogTypingState.complete) {
                 html += '<div style="margin-top:8px; padding:6px; background:rgba(0,0,0,0.3); border-radius:4px;">';
-                html += '<div style="font-size:10px; color:#aaa; margin-bottom:6px; text-align:center;">Choose a response:</div>';
                 choices.forEach((choice, i) => {
                     const isSelected = i === dialogSelectedChoice;
                     const cursor = isSelected ? '► ' : '  ';
@@ -28330,7 +28339,6 @@ Item Receive Display:
                             '</div>';
                 });
                 html += '</div>';
-                html += '<div style="text-align:center; margin-top:6px; font-size:9px; color:#888;">Click a choice or use Arrow Keys + Z</div>';
             } else {
                 // Show different prompt based on typing state
                 const prompt = dialogTypingState.complete ? '[A]' : '[A] skip';
@@ -29329,7 +29337,7 @@ Item Receive Display:
             ctx.fillStyle = '#8f8';
             ctx.font = 'bold 12px monospace';
             ctx.textAlign = 'left';
-            ctx.fillText('FOR SALE (click to buy)', shopAreaX + 8, shopAreaY + 16);
+            ctx.fillText('FOR SALE', shopAreaX + 8, shopAreaY + 16);
 
             // Draw shop items
             shopUIButtons.shopItems = [];
@@ -29403,7 +29411,7 @@ Item Receive Display:
             ctx.fillStyle = '#aaf';
             ctx.font = 'bold 12px monospace';
             ctx.textAlign = 'left';
-            ctx.fillText('YOUR INVENTORY (click to sell)', invAreaX + 8, invAreaY + 16);
+            ctx.fillText('YOUR INVENTORY', invAreaX + 8, invAreaY + 16);
 
             // Draw player inventory slots (same style as drawInventoryPopup)
             shopUIButtons.playerItems = [];
