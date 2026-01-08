@@ -29119,27 +29119,45 @@ Item Receive Display:
             const shop = shopsData[activeShopIndex];
             if (!shop) return;
 
-            // Darken background
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Use same slot size as regular inventory
+            const cols = 10;
+            const padding = 15;
+            const slotGap = 2;
+            const invWidth = cols * SLOT_SIZE + (cols - 1) * slotGap + padding * 2;
 
-            // Main panel
-            const panelW = 500;
-            const panelH = 340;
+            // Calculate heights for two inventory sections
+            const shopRows = Math.max(2, Math.ceil((shop.inventory?.length || 0) / cols));
+            const playerRows = 4; // Show 4 rows of player inventory
+            const sectionH = playerRows * SLOT_SIZE + (playerRows - 1) * slotGap + 35; // +35 for header
+            const shopSectionH = shopRows * SLOT_SIZE + (shopRows - 1) * slotGap + 35;
+
+            // Total panel size
+            const panelW = invWidth + 120; // Extra space for cart summary on right
+            const panelH = shopSectionH + sectionH + 90; // +90 for title, gold, buttons
             const panelX = (canvas.width - panelW) / 2;
             const panelY = (canvas.height - panelH) / 2;
 
-            ctx.fillStyle = '#1a1a2e';
+            // Darken background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Main panel
+            ctx.fillStyle = 'rgba(30, 30, 40, 0.95)';
             ctx.fillRect(panelX, panelY, panelW, panelH);
             ctx.strokeStyle = '#fa0';
             ctx.lineWidth = 3;
             ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-            // Header
+            // Header with shop name and gold
             ctx.fillStyle = '#fa0';
             ctx.font = 'bold 16px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText(shop.name || 'Shop', panelX + panelW / 2, panelY + 22);
+            ctx.fillText(shop.name || 'Shop', panelX + panelW / 2, panelY + 20);
+
+            ctx.fillStyle = '#fc0';
+            ctx.font = 'bold 14px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText('Gold: ' + playerGold, panelX + 15, panelY + 20);
 
             // Close X button
             const closeBtnX = panelX + panelW - 28;
@@ -29148,183 +29166,194 @@ Item Receive Display:
             ctx.fillRect(closeBtnX, closeBtnY, 22, 22);
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 14px monospace';
+            ctx.textAlign = 'center';
             ctx.fillText('X', closeBtnX + 11, closeBtnY + 16);
             shopUIButtons.close = { x: closeBtnX, y: closeBtnY, w: 22, h: 22 };
 
-            // Gold display
-            ctx.fillStyle = '#fa0';
-            ctx.font = 'bold 14px monospace';
-            ctx.textAlign = 'left';
-            ctx.fillText('Your Gold: ' + playerGold, panelX + 15, panelY + 22);
+            // === SHOP INVENTORY (top, green theme) ===
+            const shopAreaX = panelX + padding;
+            const shopAreaY = panelY + 35;
+            const shopAreaW = invWidth - padding;
 
-            // === LEFT SIDE: Shop Inventory ===
-            const shopAreaX = panelX + 15;
-            const shopAreaY = panelY + 40;
-            const shopAreaW = 180;
-            const shopAreaH = 200;
-
-            ctx.fillStyle = '#252540';
-            ctx.fillRect(shopAreaX, shopAreaY, shopAreaW, shopAreaH);
+            ctx.fillStyle = 'rgba(40, 60, 40, 0.5)';
+            ctx.fillRect(shopAreaX, shopAreaY, shopAreaW, shopSectionH);
             ctx.strokeStyle = '#4a7c59';
             ctx.lineWidth = 2;
-            ctx.strokeRect(shopAreaX, shopAreaY, shopAreaW, shopAreaH);
+            ctx.strokeRect(shopAreaX, shopAreaY, shopAreaW, shopSectionH);
 
-            ctx.fillStyle = '#4f8';
-            ctx.font = 'bold 11px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText('SHOP (click to buy)', shopAreaX + shopAreaW/2, shopAreaY - 5);
+            ctx.fillStyle = '#8f8';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText('FOR SALE (click to buy)', shopAreaX + 8, shopAreaY + 16);
 
-            // Draw shop items as grid
+            // Draw shop items
             shopUIButtons.shopItems = [];
-            const cols = 4;
             const shopInv = shop.inventory || [];
-            shopInv.forEach((inv, i) => {
+            for (let i = 0; i < Math.max(shopInv.length, cols * 2); i++) {
                 const col = i % cols;
                 const row = Math.floor(i / cols);
-                const slotX = shopAreaX + 8 + col * (SHOP_SLOT_SIZE + 4);
-                const slotY = shopAreaY + 8 + row * (SHOP_SLOT_SIZE + 4);
+                const slotX = shopAreaX + padding + col * (SLOT_SIZE + slotGap);
+                const slotY = shopAreaY + 25 + row * (SLOT_SIZE + slotGap);
 
-                if (slotY + SHOP_SLOT_SIZE > shopAreaY + shopAreaH - 5) return;
+                if (row >= shopRows) break;
 
-                // Check if in cart
-                const inCart = shopCart.some(c => c.type === 'buy' && c.shopInvIdx === i);
+                const inv = shopInv[i];
+                const inCart = inv && shopCart.some(c => c.type === 'buy' && c.shopInvIdx === i);
 
-                ctx.fillStyle = inCart ? '#3a5a3a' : '#1a1a2a';
-                ctx.fillRect(slotX, slotY, SHOP_SLOT_SIZE, SHOP_SLOT_SIZE);
-                ctx.strokeStyle = inCart ? '#8f8' : '#444';
+                // Slot background
+                ctx.fillStyle = inCart ? '#3a5a3a' : '#2a3a2a';
+                ctx.fillRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+                ctx.strokeStyle = inCart ? '#8f8' : '#4a5a4a';
                 ctx.lineWidth = inCart ? 2 : 1;
-                ctx.strokeRect(slotX, slotY, SHOP_SLOT_SIZE, SHOP_SLOT_SIZE);
+                ctx.strokeRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
 
-                // Draw item sprite
-                const itemDef = itemsData[inv.itemIndex];
-                if (itemDef && itemImages[inv.itemIndex]) {
+                if (inv) {
+                    // Draw item sprite (same as regular inventory)
+                    const item = itemsData[inv.itemIndex];
                     const img = itemImages[inv.itemIndex];
-                    const frameW = itemDef.frameWidth || 16;
-                    const frameH = itemDef.frameHeight || 16;
-                    const scale = Math.min((SHOP_SLOT_SIZE - 4) / frameW, (SHOP_SLOT_SIZE - 4) / frameH);
-                    const drawW = frameW * scale;
-                    const drawH = frameH * scale;
-                    ctx.drawImage(img, 0, 0, frameW, frameH,
-                        slotX + (SHOP_SLOT_SIZE - drawW)/2, slotY + (SHOP_SLOT_SIZE - drawH)/2, drawW, drawH);
+                    if (item && img && img.complete) {
+                        const frame = item.frames?.[item.idleFrame || 0];
+                        if (frame) {
+                            const scale = Math.min((SLOT_SIZE - 4) / frame.w, (SLOT_SIZE - 4) / frame.h);
+                            const drawW = frame.w * scale;
+                            const drawH = frame.h * scale;
+                            const drawX = slotX + (SLOT_SIZE - drawW) / 2;
+                            const drawY = slotY + (SLOT_SIZE - drawH) / 2;
+                            ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
+                        }
+                    }
+
+                    // Price below slot
+                    ctx.fillStyle = '#fc0';
+                    ctx.font = '9px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(inv.buyPrice + 'g', slotX + SLOT_SIZE/2, slotY + SLOT_SIZE + 10);
+
+                    shopUIButtons.shopItems.push({ x: slotX, y: slotY, w: SLOT_SIZE, h: SLOT_SIZE, idx: i });
                 }
-
-                // Price label
-                ctx.fillStyle = '#fa0';
-                ctx.font = '8px monospace';
-                ctx.textAlign = 'center';
-                ctx.fillText(inv.buyPrice + 'g', slotX + SHOP_SLOT_SIZE/2, slotY + SHOP_SLOT_SIZE + 8);
-
-                shopUIButtons.shopItems.push({ x: slotX, y: slotY, w: SHOP_SLOT_SIZE, h: SHOP_SLOT_SIZE, idx: i });
-            });
-
-            if (shopInv.length === 0) {
-                ctx.fillStyle = '#666';
-                ctx.font = '11px monospace';
-                ctx.textAlign = 'center';
-                ctx.fillText('Empty', shopAreaX + shopAreaW/2, shopAreaY + shopAreaH/2);
             }
 
-            // === RIGHT SIDE: Player Inventory ===
-            const invAreaX = panelX + panelW - 195;
-            const invAreaY = panelY + 40;
-            const invAreaW = 180;
-            const invAreaH = 200;
+            // === PLAYER INVENTORY (bottom, blue theme - same as pressing I) ===
+            const invAreaX = panelX + padding;
+            const invAreaY = shopAreaY + shopSectionH + 10;
+            const invAreaW = invWidth - padding;
 
-            ctx.fillStyle = '#252540';
-            ctx.fillRect(invAreaX, invAreaY, invAreaW, invAreaH);
-            ctx.strokeStyle = '#7c594a';
+            ctx.fillStyle = 'rgba(30, 30, 50, 0.5)';
+            ctx.fillRect(invAreaX, invAreaY, invAreaW, sectionH);
+            ctx.strokeStyle = '#557';
             ctx.lineWidth = 2;
-            ctx.strokeRect(invAreaX, invAreaY, invAreaW, invAreaH);
+            ctx.strokeRect(invAreaX, invAreaY, invAreaW, sectionH);
 
-            ctx.fillStyle = '#f84';
-            ctx.font = 'bold 11px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText('YOUR ITEMS (click to sell)', invAreaX + invAreaW/2, invAreaY - 5);
+            ctx.fillStyle = '#aaf';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText('YOUR INVENTORY (click to sell)', invAreaX + 8, invAreaY + 16);
 
-            // Draw player inventory as grid
+            // Draw player inventory slots (same style as drawInventoryPopup)
             shopUIButtons.playerItems = [];
-            for (let i = 0; i < 20; i++) { // Show first 20 slots
+            const totalSlots = cols * playerRows;
+            for (let i = 0; i < totalSlots; i++) {
                 const col = i % cols;
                 const row = Math.floor(i / cols);
-                const slotX = invAreaX + 8 + col * (SHOP_SLOT_SIZE + 4);
-                const slotY = invAreaY + 8 + row * (SHOP_SLOT_SIZE + 4);
+                const slotX = invAreaX + padding + col * (SLOT_SIZE + slotGap);
+                const slotY = invAreaY + 25 + row * (SLOT_SIZE + slotGap);
 
                 const slot = inventorySlots[i];
-                const inCart = shopCart.some(c => c.type === 'sell' && c.playerSlotIdx === i);
+                const inCart = slot && shopCart.some(c => c.type === 'sell' && c.playerSlotIdx === i);
 
-                ctx.fillStyle = inCart ? '#5a3a3a' : '#1a1a2a';
-                ctx.fillRect(slotX, slotY, SHOP_SLOT_SIZE, SHOP_SLOT_SIZE);
-                ctx.strokeStyle = inCart ? '#f88' : '#444';
+                // Slot background - hotbar slots get slight highlight
+                if (i < HOTBAR_SIZE) {
+                    ctx.fillStyle = inCart ? '#5a3a5a' : '#3a3a4a';
+                } else {
+                    ctx.fillStyle = inCart ? '#5a3a5a' : '#333';
+                }
+                ctx.fillRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+                ctx.strokeStyle = inCart ? '#f8f' : (i < HOTBAR_SIZE ? '#666' : '#444');
                 ctx.lineWidth = inCart ? 2 : 1;
-                ctx.strokeRect(slotX, slotY, SHOP_SLOT_SIZE, SHOP_SLOT_SIZE);
+                ctx.strokeRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
 
                 if (slot) {
-                    const itemDef = itemsData[slot.itemIndex];
-                    if (itemDef && itemImages[slot.itemIndex]) {
-                        const img = itemImages[slot.itemIndex];
-                        const frameW = itemDef.frameWidth || 16;
-                        const frameH = itemDef.frameHeight || 16;
-                        const scale = Math.min((SHOP_SLOT_SIZE - 4) / frameW, (SHOP_SLOT_SIZE - 4) / frameH);
-                        const drawW = frameW * scale;
-                        const drawH = frameH * scale;
-                        ctx.drawImage(img, 0, 0, frameW, frameH,
-                            slotX + (SHOP_SLOT_SIZE - drawW)/2, slotY + (SHOP_SLOT_SIZE - drawH)/2, drawW, drawH);
+                    // Draw item sprite (same as regular inventory)
+                    const item = itemsData[slot.itemIndex];
+                    const img = itemImages[slot.itemIndex];
+                    if (item && img && img.complete) {
+                        const frame = item.frames?.[item.idleFrame || 0];
+                        if (frame) {
+                            const scale = Math.min((SLOT_SIZE - 4) / frame.w, (SLOT_SIZE - 4) / frame.h);
+                            const drawW = frame.w * scale;
+                            const drawH = frame.h * scale;
+                            const drawX = slotX + (SLOT_SIZE - drawW) / 2;
+                            const drawY = slotY + (SLOT_SIZE - drawH) / 2;
+                            ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
+                        }
                     }
 
                     // Quantity
                     if (slot.quantity > 1) {
                         ctx.fillStyle = '#fff';
-                        ctx.font = 'bold 9px monospace';
+                        ctx.strokeStyle = '#000';
+                        ctx.font = 'bold 11px monospace';
                         ctx.textAlign = 'right';
-                        ctx.fillText('x' + slot.quantity, slotX + SHOP_SLOT_SIZE - 2, slotY + SHOP_SLOT_SIZE - 2);
+                        ctx.textBaseline = 'bottom';
+                        ctx.lineWidth = 2;
+                        ctx.strokeText(slot.quantity, slotX + SLOT_SIZE - 2, slotY + SLOT_SIZE - 2);
+                        ctx.fillText(slot.quantity, slotX + SLOT_SIZE - 2, slotY + SLOT_SIZE - 2);
+                        ctx.textBaseline = 'alphabetic';
                     }
 
-                    // Sell price
+                    // Calculate sell price
                     const buyEntry = shop.buyList?.find(b => b.itemIndex === slot.itemIndex);
+                    const itemDef = itemsData[slot.itemIndex];
                     const sellPrice = buyEntry ? buyEntry.sellPrice : Math.floor((itemDef?.basePrice || 10) * (shop.defaultSellRate || 50) / 100);
-                    ctx.fillStyle = '#4a8';
-                    ctx.font = '8px monospace';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(sellPrice + 'g', slotX + SHOP_SLOT_SIZE/2, slotY + SHOP_SLOT_SIZE + 8);
-                }
 
-                shopUIButtons.playerItems.push({ x: slotX, y: slotY, w: SHOP_SLOT_SIZE, h: SHOP_SLOT_SIZE, idx: i });
+                    shopUIButtons.playerItems.push({
+                        x: slotX, y: slotY, w: SLOT_SIZE, h: SLOT_SIZE,
+                        idx: i, sellPrice: sellPrice
+                    });
+                } else {
+                    shopUIButtons.playerItems.push({ x: slotX, y: slotY, w: SLOT_SIZE, h: SLOT_SIZE, idx: i, sellPrice: 0 });
+                }
             }
 
-            // === CENTER: Cart Summary ===
-            const cartX = panelX + 200;
-            const cartY = panelY + 50;
-            const cartW = 100;
-            const cartH = 180;
+            // === CART SUMMARY (right side) ===
+            const cartX = panelX + invWidth + 5;
+            const cartY = panelY + 35;
+            const cartW = 105;
+            const cartH = shopSectionH + sectionH;
 
-            ctx.fillStyle = '#2a2a3e';
+            ctx.fillStyle = 'rgba(40, 40, 50, 0.8)';
             ctx.fillRect(cartX, cartY, cartW, cartH);
-            ctx.strokeStyle = '#888';
+            ctx.strokeStyle = '#666';
             ctx.lineWidth = 1;
             ctx.strokeRect(cartX, cartY, cartW, cartH);
 
             ctx.fillStyle = '#fff';
-            ctx.font = 'bold 10px monospace';
+            ctx.font = 'bold 11px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('CART', cartX + cartW/2, cartY + 12);
+            ctx.fillText('CART', cartX + cartW/2, cartY + 14);
 
             // List cart items
             ctx.font = '9px monospace';
             ctx.textAlign = 'left';
-            let cartListY = cartY + 25;
-            shopCart.slice(0, 8).forEach((c, i) => {
+            let cartListY = cartY + 30;
+            const maxCartShow = Math.floor((cartH - 60) / 14);
+            shopCart.slice(0, maxCartShow).forEach((c, i) => {
                 ctx.fillStyle = c.type === 'buy' ? '#f88' : '#8f8';
                 const prefix = c.type === 'buy' ? '-' : '+';
-                ctx.fillText(prefix + c.price + 'g ' + (c.name || '').substring(0, 8), cartX + 5, cartListY + i * 12);
+                ctx.fillText(prefix + c.price + 'g', cartX + 5, cartListY + i * 14);
+                ctx.fillStyle = '#ccc';
+                ctx.fillText((c.name || '?').substring(0, 8), cartX + 40, cartListY + i * 14);
             });
-            if (shopCart.length > 8) {
+            if (shopCart.length > maxCartShow) {
                 ctx.fillStyle = '#888';
-                ctx.fillText('...+' + (shopCart.length - 8) + ' more', cartX + 5, cartListY + 8 * 12);
+                ctx.fillText('+' + (shopCart.length - maxCartShow) + ' more', cartX + 5, cartListY + maxCartShow * 14);
             }
             if (shopCart.length === 0) {
                 ctx.fillStyle = '#666';
                 ctx.textAlign = 'center';
-                ctx.fillText('Empty', cartX + cartW/2, cartY + cartH/2);
+                ctx.font = '10px monospace';
+                ctx.fillText('Click items', cartX + cartW/2, cartY + cartH/2 - 8);
+                ctx.fillText('to add', cartX + cartW/2, cartY + cartH/2 + 6);
             }
 
             // Cart total
@@ -29333,45 +29362,49 @@ Item Receive Display:
             ctx.font = 'bold 12px monospace';
             ctx.textAlign = 'center';
             const totalText = (cartTotal >= 0 ? '+' : '') + cartTotal + 'g';
-            ctx.fillText('Total: ' + totalText, cartX + cartW/2, cartY + cartH - 8);
+            ctx.fillText(totalText, cartX + cartW/2, cartY + cartH - 10);
 
-            // === BOTTOM: Buttons ===
-            const btnY = panelY + panelH - 50;
+            // === BOTTOM BUTTONS ===
+            const btnY = panelY + panelH - 45;
+            const btnH = 32;
 
-            // Clear cart button
-            const clearW = 80;
+            // Clear button
+            const clearW = 70;
+            const clearX = panelX + 20;
             ctx.fillStyle = '#444';
-            ctx.fillRect(panelX + 20, btnY, clearW, 35);
+            ctx.fillRect(clearX, btnY, clearW, btnH);
             ctx.strokeStyle = '#666';
-            ctx.strokeRect(panelX + 20, btnY, clearW, 35);
+            ctx.strokeRect(clearX, btnY, clearW, btnH);
             ctx.fillStyle = '#ccc';
-            ctx.font = 'bold 12px monospace';
+            ctx.font = 'bold 11px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('CLEAR', panelX + 20 + clearW/2, btnY + 23);
-            shopUIButtons.clear = { x: panelX + 20, y: btnY, w: clearW, h: 35 };
+            ctx.fillText('CLEAR', clearX + clearW/2, btnY + 21);
+            shopUIButtons.clear = { x: clearX, y: btnY, w: clearW, h: btnH };
 
             // Confirm button
-            const confirmW = 140;
+            const confirmW = 120;
+            const confirmX = panelX + panelW/2 - confirmW/2 - 30;
             const canConfirm = shopCart.length > 0 && (playerGold + cartTotal) >= 0;
             ctx.fillStyle = canConfirm ? '#4a7c59' : '#333';
-            ctx.fillRect(panelX + panelW/2 - confirmW/2, btnY, confirmW, 35);
+            ctx.fillRect(confirmX, btnY, confirmW, btnH);
             ctx.strokeStyle = canConfirm ? '#8f8' : '#555';
             ctx.lineWidth = 2;
-            ctx.strokeRect(panelX + panelW/2 - confirmW/2, btnY, confirmW, 35);
+            ctx.strokeRect(confirmX, btnY, confirmW, btnH);
             ctx.fillStyle = canConfirm ? '#fff' : '#666';
-            ctx.font = 'bold 14px monospace';
-            ctx.fillText('CONFIRM', panelX + panelW/2, btnY + 24);
-            shopUIButtons.confirm = { x: panelX + panelW/2 - confirmW/2, y: btnY, w: confirmW, h: 35 };
+            ctx.font = 'bold 12px monospace';
+            ctx.fillText('CONFIRM', confirmX + confirmW/2, btnY + 21);
+            shopUIButtons.confirm = { x: confirmX, y: btnY, w: confirmW, h: btnH };
 
             // Close button
-            const closeW = 80;
+            const closeBtnW = 70;
+            const closeBtnX2 = panelX + panelW - 20 - closeBtnW;
             ctx.fillStyle = '#633';
-            ctx.fillRect(panelX + panelW - 20 - closeW, btnY, closeW, 35);
+            ctx.fillRect(closeBtnX2, btnY, closeBtnW, btnH);
             ctx.strokeStyle = '#a66';
-            ctx.strokeRect(panelX + panelW - 20 - closeW, btnY, closeW, 35);
+            ctx.strokeRect(closeBtnX2, btnY, closeBtnW, btnH);
             ctx.fillStyle = '#fff';
-            ctx.fillText('CLOSE', panelX + panelW - 20 - closeW/2, btnY + 23);
-            shopUIButtons.closeBtn = { x: panelX + panelW - 20 - closeW, y: btnY, w: closeW, h: 35 };
+            ctx.fillText('CLOSE', closeBtnX2 + closeBtnW/2, btnY + 21);
+            shopUIButtons.closeBtn = { x: closeBtnX2, y: btnY, w: closeBtnW, h: btnH };
 
             // Affordability warning
             if (shopCart.length > 0 && (playerGold + cartTotal) < 0) {
@@ -29380,6 +29413,11 @@ Item Receive Display:
                 ctx.textAlign = 'center';
                 ctx.fillText('Not enough gold!', panelX + panelW/2, btnY - 8);
             }
+
+            // Instructions
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.font = '10px monospace';
+            ctx.fillText('Click items to add/remove from cart', panelX + panelW/2, panelY + panelH - 8);
         }
 
         function handleShopClick(clickX, clickY) {
