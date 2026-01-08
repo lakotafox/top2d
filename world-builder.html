@@ -27992,12 +27992,17 @@ Item Receive Display:
             }
         }
 
-        // Handle dialog choice selection
-        function selectDialogChoice() {
+        // Handle dialog choice selection (index param for mouse clicks)
+        function selectDialogChoice(clickedIndex) {
             if (!activeDialog || !dialogTypingState.complete) return;
 
             const page = activeDialog.dialog.pages[activeDialog.pageIndex];
             if (!page?.choices || page.choices.length === 0) return;
+
+            // If clicked, update selected choice first
+            if (clickedIndex !== undefined && clickedIndex >= 0 && clickedIndex < page.choices.length) {
+                dialogSelectedChoice = clickedIndex;
+            }
 
             const choice = page.choices[dialogSelectedChoice];
             if (!choice) return;
@@ -28183,18 +28188,20 @@ Item Receive Display:
             // Show dialog choices if present and typing is complete
             const choices = page.choices || [];
             if (choices.length > 0 && dialogTypingState.complete) {
-                html += '<div style="margin-top:12px; border-top:1px solid ' + (dialog.colors?.border || preset.border) + '; padding-top:8px;">';
+                html += '<div style="margin-top:8px; padding:6px; background:rgba(0,0,0,0.3); border-radius:4px;">';
+                html += '<div style="font-size:10px; color:#aaa; margin-bottom:6px; text-align:center;">Choose a response:</div>';
                 choices.forEach((choice, i) => {
                     const isSelected = i === dialogSelectedChoice;
                     const cursor = isSelected ? '► ' : '  ';
-                    const bgColor = isSelected ? 'rgba(255,255,255,0.15)' : 'transparent';
-                    html += '<div style="padding:4px 8px; margin:2px 0; background:' + bgColor + '; cursor:pointer;">' +
+                    const bgColor = isSelected ? 'rgba(255,255,200,0.25)' : 'rgba(255,255,255,0.08)';
+                    const borderColor = isSelected ? (dialog.colors?.accent || preset.accent) : 'transparent';
+                    html += '<div onclick="selectDialogChoice(' + i + ')" style="padding:6px 10px; margin:4px 0; background:' + bgColor + '; border-left:3px solid ' + borderColor + '; cursor:pointer; transition:background 0.15s;">' +
                             '<span style="color:' + (dialog.colors?.accent || preset.accent) + ';">' + cursor + '</span>' +
                             choice.text +
                             '</div>';
                 });
                 html += '</div>';
-                html += '<div style="text-align:right; margin-top:5px; font-size:10px; color:#888;">↑↓ select | [Z] confirm</div>';
+                html += '<div style="text-align:center; margin-top:6px; font-size:9px; color:#888;">Click a choice or use Arrow Keys + Z</div>';
             } else {
                 // Show different prompt based on typing state
                 const prompt = dialogTypingState.complete ? '[A]' : '[A] skip';
