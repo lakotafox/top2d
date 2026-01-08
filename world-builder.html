@@ -24067,6 +24067,7 @@
         let playerAttackMovement = 'stop'; // 'stop', 'slide', 'move'
         let attackSlideAmount = 50; // 0-100%, how much speed to retain during slide
         let attackSlideDuration = 30; // How many frames the slide lasts
+        let playerScale = 1.7; // Player sprite scale (loaded from character data)
 
         let playerGameOverSoundIndex = -1; // Index of game over sound (-1 = none, 0-99 = builtin, 100+ = project)
         let playerSpriteSheets = []; // Array of loaded sprite sheet images
@@ -26357,7 +26358,7 @@
         document.addEventListener('click', () => initAudio(), { once: true });
 
         // Adjustable settings
-        let playerScale = 1.7;
+        // playerScale is declared earlier (line ~24070) and loaded from character data
         let animSpeed = 7; // Lower = faster animation
 
         // Tile scale - how big to render tiles (zoom level)
