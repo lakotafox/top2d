@@ -1,5 +1,51 @@
 # Multiplayer Sync Implementation Plan
 
+## Overview: Two Types of Sync
+
+### 1. Builder-to-Builder Sync (FULLY IMPLEMENTED)
+When multiple builders are in the same co-op room, ALL edits sync between them via `applyRemoteEdit()`.
+
+**WebSocket:** `wss://multiplayer.lakotafox.partykit.dev/parties/builder/[roomCode]`
+**Function:** `applyRemoteEdit(edit)` in builder code
+**Status:** Complete - handles 70+ edit types
+
+### 2. Builder-to-Test-Game Sync (PARTIALLY IMPLEMENTED)
+When a test game window connects to watch builder edits, it receives updates via `applyLiveEdit()`.
+
+**WebSocket:** Same as builder room, but joins as observer
+**Function:** `applyLiveEdit(edit)` in test game code
+**Status:** Partial - only handles ~32 edit types, missing many
+
+---
+
+## What Currently Syncs
+
+| Category | Builder-to-Builder | Builder-to-Test-Game |
+|----------|-------------------|---------------------|
+| Tiles (paint/erase) | YES | YES |
+| Collision/masks | YES | YES |
+| NPCs (place/remove) | YES | YES |
+| NPC updates (speed, waypoints) | YES | YES |
+| Triggers | YES | YES |
+| Point lights | YES | YES |
+| Tile sounds | YES | YES |
+| Camera bounds | YES | YES |
+| Layers (add/delete) | YES | YES |
+| Split lines | YES | YES |
+| Map clear | YES | YES |
+| **Items (definitions)** | YES | NO |
+| **Items (placed)** | YES | PARTIAL |
+| **Dialogs** | YES | NO |
+| **Quests** | YES | NO |
+| **Shops** | YES | NO |
+| **NPC definitions** | YES | NO |
+| **Animated props** | YES | NO |
+| **Player characters** | YES | NO |
+| **Map expand** | YES | NO |
+| **Tileset delete** | YES | NO |
+
+---
+
 ## Task
 Add missing sync handlers to the test game so all builder edits are synchronized to players in multiplayer rooms.
 
