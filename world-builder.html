@@ -3118,6 +3118,44 @@
                     <input type="text" id="playerNameInput" placeholder="e.g. hero, knight" style="width:100%;">
                 </div>
 
+                <!-- Step 5: Scale & Shadow -->
+                <div id="playerScaleShadowSection" style="margin-bottom:15px; display:none;">
+                    <h3>5. Scale & Shadow</h3>
+                    <!-- Scale Slider -->
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:10px; color:#888;">Sprite Scale: <span id="playerScaleVal">1.0</span>x</label>
+                        <input type="range" id="playerScaleSlider" min="0.5" max="3" step="0.1" value="1" oninput="updatePlayerScalePreview()" style="width:100%;">
+                        <div style="font-size:9px; color:#666;">Make sprite larger or smaller in game</div>
+                    </div>
+                    <!-- Shadow Controls -->
+                    <div style="padding:8px; background:#1a1a2a; border:1px solid #446; border-radius:4px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <span style="font-size:10px; color:#88f; font-weight:bold;">Shadow</span>
+                            <label style="font-size:10px; color:#888;">
+                                <input type="checkbox" id="playerNoShadow" onchange="updatePlayerShadowPreview()"> No Shadow
+                            </label>
+                        </div>
+                        <div id="playerShadowControls">
+                            <div style="margin-bottom:4px;">
+                                <label style="font-size:9px; color:#888;">X Offset: <span id="playerShadowOffsetXVal">0</span>px</label>
+                                <input type="range" id="playerShadowOffsetXSlider" min="-20" max="20" value="0" oninput="updatePlayerShadowPreview()" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:4px;">
+                                <label style="font-size:9px; color:#888;">Y Offset: <span id="playerShadowOffsetYVal">4</span>px</label>
+                                <input type="range" id="playerShadowOffsetYSlider" min="0" max="20" value="4" oninput="updatePlayerShadowPreview()" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:4px;">
+                                <label style="font-size:9px; color:#888;">Width: <span id="playerShadowWidthVal">35</span>%</label>
+                                <input type="range" id="playerShadowWidthSlider" min="10" max="60" value="35" oninput="updatePlayerShadowPreview()" style="width:100%;">
+                            </div>
+                            <div>
+                                <label style="font-size:9px; color:#888;">Height: <span id="playerShadowHeightVal">12</span>%</label>
+                                <input type="range" id="playerShadowHeightSlider" min="5" max="25" value="12" oninput="updatePlayerShadowPreview()" style="width:100%;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Actions -->
                 <div style="margin-top:auto;">
                     <button onclick="playerSave()" style="width:100%; background:#4f8; color:#000; margin-bottom:10px;">Save Character</button>
@@ -11308,6 +11346,7 @@
             document.getElementById('playerFrameSection').style.display = 'none';
             document.getElementById('playerAnimSection').style.display = 'none';
             document.getElementById('playerNameSection').style.display = 'none';
+            document.getElementById('playerScaleShadowSection').style.display = 'none';
             document.getElementById('playerNameInput').value = '';
             document.getElementById('playerSpeedSlider').value = 8;
             document.getElementById('playerSpeedLabel').textContent = '8 fps';
@@ -11316,6 +11355,19 @@
             document.getElementById('playerAttackMovement').value = 'stop';
             document.getElementById('playerCustomAnimName').value = '';
             document.getElementById('playerCustomAnimList').innerHTML = '';
+            // Reset scale and shadow
+            document.getElementById('playerScaleSlider').value = 1;
+            document.getElementById('playerScaleVal').textContent = '1.0';
+            document.getElementById('playerNoShadow').checked = false;
+            document.getElementById('playerShadowControls').style.display = 'block';
+            document.getElementById('playerShadowOffsetXSlider').value = 0;
+            document.getElementById('playerShadowOffsetXVal').textContent = '0';
+            document.getElementById('playerShadowOffsetYSlider').value = 4;
+            document.getElementById('playerShadowOffsetYVal').textContent = '4';
+            document.getElementById('playerShadowWidthSlider').value = 35;
+            document.getElementById('playerShadowWidthVal').textContent = '35';
+            document.getElementById('playerShadowHeightSlider').value = 12;
+            document.getElementById('playerShadowHeightVal').textContent = '12';
 
             // If editing existing character, load its data
             if (editIndex >= 0 && playerCharacters[editIndex]) {
@@ -11387,6 +11439,21 @@
                 // Load game over sound index
                 playerGameOverSoundIndex = char.gameOverSoundIndex !== undefined ? char.gameOverSoundIndex : -1;
 
+                // Load scale and shadow settings
+                const charScale = char.scale || 1;
+                document.getElementById('playerScaleSlider').value = charScale;
+                document.getElementById('playerScaleVal').textContent = charScale.toFixed(1);
+                document.getElementById('playerNoShadow').checked = char.noShadow || false;
+                document.getElementById('playerShadowControls').style.display = char.noShadow ? 'none' : 'block';
+                document.getElementById('playerShadowOffsetXSlider').value = char.shadowOffsetX ?? 0;
+                document.getElementById('playerShadowOffsetXVal').textContent = char.shadowOffsetX ?? 0;
+                document.getElementById('playerShadowOffsetYSlider').value = char.shadowOffsetY ?? 4;
+                document.getElementById('playerShadowOffsetYVal').textContent = char.shadowOffsetY ?? 4;
+                document.getElementById('playerShadowWidthSlider').value = char.shadowWidth ?? 35;
+                document.getElementById('playerShadowWidthVal').textContent = char.shadowWidth ?? 35;
+                document.getElementById('playerShadowHeightSlider').value = char.shadowHeight ?? 12;
+                document.getElementById('playerShadowHeightVal').textContent = char.shadowHeight ?? 12;
+
                 // Load sheets (support both new multi-sheet and old single-sheet format)
                 const sheetsToLoad = char.spriteSheets || (char.spriteData ? [char.spriteData] : []);
                 let loadedCount = 0;
@@ -11410,6 +11477,7 @@
                             document.getElementById('playerFrameSection').style.display = 'block';
                             document.getElementById('playerAnimSection').style.display = 'block';
                             document.getElementById('playerNameSection').style.display = 'block';
+                            document.getElementById('playerScaleShadowSection').style.display = 'block';
                             playerUpdateGrid();
                             playerDrawCanvas();
                             playerUpdateAnimButtons();
@@ -11449,6 +11517,7 @@
                     document.getElementById('playerFrameSection').style.display = 'block';
                     document.getElementById('playerAnimSection').style.display = 'block';
                     document.getElementById('playerNameSection').style.display = 'block';
+                    document.getElementById('playerScaleShadowSection').style.display = 'block';
                     playerUpdateGrid();
                     playerDrawCanvas();
                 };
@@ -12078,11 +12147,36 @@
                 if (!sheet) return;
 
                 ctx.clearRect(0, 0, 96, 96);
-                const scale = Math.min(94 / frame.w, 94 / frame.h);
+
+                // Get scale and shadow settings from UI
+                const spriteScale = parseFloat(document.getElementById('playerScaleSlider')?.value || 1);
+                const noShadow = document.getElementById('playerNoShadow')?.checked || false;
+
+                const baseScale = Math.min(80 / frame.w, 80 / frame.h); // Reduced to 80 to fit scaled sprites
+                const scale = baseScale * spriteScale;
                 const dw = frame.w * scale;
                 const dh = frame.h * scale;
                 const dx = (96 - dw) / 2;
                 const dy = (96 - dh) / 2;
+
+                // Draw shadow (if enabled)
+                if (!noShadow) {
+                    const shadowOffsetX = parseInt(document.getElementById('playerShadowOffsetXSlider')?.value || 0);
+                    const shadowOffsetY = parseInt(document.getElementById('playerShadowOffsetYSlider')?.value || 4);
+                    const shadowWidthRatio = (parseInt(document.getElementById('playerShadowWidthSlider')?.value || 35)) / 100;
+                    const shadowHeightRatio = (parseInt(document.getElementById('playerShadowHeightSlider')?.value || 12)) / 100;
+
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+                    ctx.beginPath();
+                    ctx.ellipse(
+                        dx + dw / 2 + shadowOffsetX * scale,
+                        dy + dh - shadowOffsetY * scale,
+                        dw * shadowWidthRatio,
+                        dw * shadowHeightRatio,
+                        0, 0, Math.PI * 2
+                    );
+                    ctx.fill();
+                }
 
                 // Apply mirror transform if enabled
                 if (isMirrored) {
@@ -12220,6 +12314,26 @@
             playerGameOverSoundIndex = parseInt(select.value);
         }
 
+        // Update scale preview display
+        function updatePlayerScalePreview() {
+            const scale = parseFloat(document.getElementById('playerScaleSlider').value) || 1;
+            document.getElementById('playerScaleVal').textContent = scale.toFixed(1);
+            // Preview will update on next frame since it reads values directly
+        }
+
+        // Update shadow preview and toggle controls visibility
+        function updatePlayerShadowPreview() {
+            const noShadow = document.getElementById('playerNoShadow').checked;
+            document.getElementById('playerShadowControls').style.display = noShadow ? 'none' : 'block';
+
+            // Update slider value displays
+            document.getElementById('playerShadowOffsetXVal').textContent = document.getElementById('playerShadowOffsetXSlider').value;
+            document.getElementById('playerShadowOffsetYVal').textContent = document.getElementById('playerShadowOffsetYSlider').value;
+            document.getElementById('playerShadowWidthVal').textContent = document.getElementById('playerShadowWidthSlider').value;
+            document.getElementById('playerShadowHeightVal').textContent = document.getElementById('playerShadowHeightSlider').value;
+            // Preview will update on next frame since it reads values directly
+        }
+
         function playerPreviewGameOverSound() {
             if (playerGameOverSoundIndex < 0) {
                 alert('No game over sound selected');
@@ -12265,6 +12379,14 @@
             // Get attack movement setting from dropdown
             playerAttackMovement = document.getElementById('playerAttackMovement').value;
 
+            // Get scale and shadow settings
+            const spriteScale = parseFloat(document.getElementById('playerScaleSlider').value) || 1;
+            const noShadow = document.getElementById('playerNoShadow').checked;
+            const shadowOffsetX = parseInt(document.getElementById('playerShadowOffsetXSlider').value) || 0;
+            const shadowOffsetY = parseInt(document.getElementById('playerShadowOffsetYSlider').value) || 4;
+            const shadowWidth = parseInt(document.getElementById('playerShadowWidthSlider').value) || 35;
+            const shadowHeight = parseInt(document.getElementById('playerShadowHeightSlider').value) || 12;
+
             const charData = {
                 name: name,
                 spriteData: sheetsData[0] || null, // Keep for backwards compatibility
@@ -12281,7 +12403,14 @@
                 fps: 8, // Keep for backwards compatibility
                 pingPong: playerPingPong,
                 attackMovement: playerAttackMovement, // 'stop', 'slide', 'move'
-                gameOverSoundIndex: playerGameOverSoundIndex // Index of game over sound
+                gameOverSoundIndex: playerGameOverSoundIndex, // Index of game over sound
+                // Scale and shadow
+                scale: spriteScale,
+                noShadow: noShadow,
+                shadowOffsetX: shadowOffsetX,
+                shadowOffsetY: shadowOffsetY,
+                shadowWidth: shadowWidth,
+                shadowHeight: shadowHeight
             };
 
             if (playerEditorEditingIndex >= 0) {
