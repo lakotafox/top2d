@@ -1526,6 +1526,78 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Player Sounds Section -->
+                <div style="margin-top:20px; padding:12px; background:#1a1a2a; border-radius:5px; border:1px solid #446;">
+                    <h4 style="margin:0 0 10px 0; color:#8af;">Player Sounds</h4>
+
+                    <!-- Sound Library -->
+                    <div style="margin-bottom:10px;">
+                        <div style="display:flex; gap:5px; align-items:center; margin-bottom:5px;">
+                            <input type="file" id="playerSoundInput" accept="audio/*" onchange="loadSound(event, 'player')" style="display:none;">
+                            <button onclick="document.getElementById('playerSoundInput').click()" style="flex:1; padding:6px;">+ Add Player Sound</button>
+                        </div>
+                        <div id="playerSoundsList" style="max-height:80px; overflow-y:auto; font-size:10px; color:#888; margin-bottom:8px;">
+                            No player sounds loaded
+                        </div>
+                    </div>
+
+                    <!-- Action Selection -->
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">Action:</label>
+                        <select id="playerActionSelect" onchange="updatePlayerSoundUI()" style="width:100%;">
+                            <option value="walk">Walk</option>
+                            <option value="attack">Attack</option>
+                            <option value="inventoryOpen">Inventory Open</option>
+                            <option value="inventoryClose">Inventory Close</option>
+                        </select>
+                    </div>
+
+                    <!-- Sound Selection -->
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">Sound:</label>
+                        <select id="playerSoundSelect" style="width:100%;"></select>
+                    </div>
+
+                    <div id="walkSoundSettings">
+                        <div style="margin-bottom:6px;">
+                            <label style="display:block; font-size:10px; color:#aaa; margin-bottom:2px;">
+                                Step Interval: <span id="walkIntervalVal">200</span>ms
+                            </label>
+                            <input type="range" id="walkInterval" min="100" max="400" value="200" oninput="document.getElementById('walkIntervalVal').textContent=this.value" style="width:100%;">
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <label style="display:block; font-size:10px; color:#aaa; margin-bottom:2px;">
+                                Pitch Variation: <span id="walkPitchVal">10</span>%
+                            </label>
+                            <input type="range" id="walkPitch" min="0" max="30" value="10" oninput="document.getElementById('walkPitchVal').textContent=this.value" style="width:100%;">
+                        </div>
+                    </div>
+                    <div id="attackSoundSettings" style="display:none;">
+                        <div style="margin-bottom:6px;">
+                            <label style="display:block; font-size:10px; color:#aaa; margin-bottom:2px;">
+                                Pitch Variation: <span id="attackPitchVal">15</span>%
+                            </label>
+                            <input type="range" id="attackPitch" min="0" max="50" value="15" oninput="document.getElementById('attackPitchVal').textContent=this.value" style="width:100%;">
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <label style="display:block; font-size:10px; color:#aaa; margin-bottom:2px;">
+                                Length Variation: <span id="attackLengthVal">0</span>%
+                            </label>
+                            <input type="range" id="attackLength" min="0" max="50" value="0" oninput="document.getElementById('attackLengthVal').textContent=this.value" style="width:100%;">
+                        </div>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="display:block; font-size:10px; color:#aaa; margin-bottom:2px;">
+                            Volume: <span id="playerSoundVolumeVal">50</span>%
+                        </label>
+                        <input type="range" id="playerSoundVolume" min="0" max="100" value="50" oninput="document.getElementById('playerSoundVolumeVal').textContent=this.value" style="width:100%;">
+                    </div>
+                    <button onclick="assignPlayerSound()" style="width:100%; padding:8px; background:#4a7c59;">Assign Sound to Action</button>
+
+                    <h5 style="margin:12px 0 6px 0; color:#8af; font-size:11px;">Assigned:</h5>
+                    <div id="playerSoundAssignments" style="font-size:10px; color:#aaa;"></div>
+                </div>
             </div>
 
             <!-- NPC MODE -->
@@ -1801,14 +1873,15 @@
 
             <!-- SOUND MODE -->
             <div id="soundModeContent" style="display:none;">
-                <h3>Sounds</h3>
+                <h3>Ambient Sounds</h3>
+                <p style="font-size:9px; color:#666; margin-bottom:10px;">Sounds that play at map locations (ambient, environmental)</p>
 
                 <!-- Sound Library -->
                 <div style="margin-bottom:15px;">
                     <div style="display:flex; gap:5px; align-items:center; margin-bottom:8px;">
                         <select id="soundSelect" onchange="switchSound()" style="flex:1;"></select>
-                        <input type="file" id="soundInput" accept="audio/*" onchange="loadSound(event)" style="display:none;">
-                        <button onclick="document.getElementById('soundInput').click()" style="padding:5px 10px;" title="Add Sound">+</button>
+                        <input type="file" id="soundInput" accept="audio/*" onchange="loadSound(event, 'ambient')" style="display:none;">
+                        <button onclick="document.getElementById('soundInput').click()" style="padding:5px 10px;" title="Add Ambient Sound">+</button>
                     </div>
                     <div id="soundControls" style="display:none;">
                         <div style="display:flex; gap:5px; margin-bottom:8px;">
@@ -1818,18 +1891,12 @@
                         <div id="currentSoundInfo" style="font-size:10px; color:#888;"></div>
                     </div>
                     <div id="noSoundMessage" style="color:#888; font-size:11px; padding:10px; text-align:center;">
-                        Click + to add sounds
+                        Click + to add ambient sounds
                     </div>
                 </div>
 
-                <!-- Attach Mode -->
-                <h4 style="margin:15px 0 8px 0; color:#4af;">Attach To:</h4>
-                <div style="display:flex; gap:5px; margin-bottom:10px;">
-                    <button id="soundAttachTile" class="active" onclick="setSoundAttachMode('tile')" style="flex:1;">Tile Position</button>
-                    <button id="soundAttachPlayer" onclick="setSoundAttachMode('player')" style="flex:1;">Player Action</button>
-                </div>
-
-                <!-- Tile Mode Options -->
+                <!-- Tile Sound Options -->
+                <h4 style="margin:15px 0 8px 0; color:#4af;">Place on Map:</h4>
                 <div id="tileSoundOptions">
                     <!-- Selection indicator -->
                     <div id="soundEditMode" style="background:#2a4a3a; padding:8px; border-radius:4px; margin-bottom:10px; display:none;">
@@ -1873,59 +1940,6 @@
                     <div id="placedSoundsList" style="max-height:150px; overflow-y:auto; font-size:11px;"></div>
                 </div>
 
-                <!-- Player Mode Options -->
-                <div id="playerSoundOptions" style="display:none;">
-                    <div style="margin-bottom:10px;">
-                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">Action:</label>
-                        <select id="playerActionSelect" onchange="updatePlayerSoundUI()" style="width:100%;">
-                            <option value="walk">Walk</option>
-                            <option value="attack">Attack</option>
-                        </select>
-                    </div>
-                    <div id="walkSoundSettings">
-                        <div style="margin-bottom:8px;">
-                            <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
-                                Step Interval: <span id="walkIntervalVal">200</span>ms
-                            </label>
-                            <input type="range" id="walkInterval" min="100" max="400" value="200" oninput="document.getElementById('walkIntervalVal').textContent=this.value" style="width:100%;">
-                        </div>
-                        <div style="margin-bottom:8px;">
-                            <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
-                                Pitch Variation: <span id="walkPitchVal">10</span>%
-                            </label>
-                            <input type="range" id="walkPitch" min="0" max="30" value="10" oninput="document.getElementById('walkPitchVal').textContent=this.value" style="width:100%;">
-                        </div>
-                    </div>
-                    <div id="attackSoundSettings" style="display:none;">
-                        <div style="margin-bottom:8px;">
-                            <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
-                                Pitch Variation: <span id="attackPitchVal">15</span>%
-                            </label>
-                            <input type="range" id="attackPitch" min="0" max="50" value="15" oninput="document.getElementById('attackPitchVal').textContent=this.value" style="width:100%;">
-                            <p style="font-size:9px; color:#555; margin-top:2px;">Randomizes pitch each swing</p>
-                        </div>
-                        <div style="margin-bottom:8px;">
-                            <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
-                                Length Variation: <span id="attackLengthVal">0</span>%
-                            </label>
-                            <input type="range" id="attackLength" min="0" max="50" value="0" oninput="document.getElementById('attackLengthVal').textContent=this.value" style="width:100%;">
-                            <p style="font-size:9px; color:#555; margin-top:2px;">Randomizes how much of sound plays (0=full)</p>
-                        </div>
-                    </div>
-                    <div style="margin-bottom:8px;">
-                        <label style="display:block; font-size:11px; color:#aaa; margin-bottom:3px;">
-                            Volume: <span id="playerSoundVolumeVal">50</span>%
-                        </label>
-                        <input type="range" id="playerSoundVolume" min="0" max="100" value="50" oninput="document.getElementById('playerSoundVolumeVal').textContent=this.value" style="width:100%;">
-                    </div>
-                    <button onclick="assignPlayerSound()" style="width:100%; margin-top:5px;">Assign Selected Sound</button>
-
-                    <h4 style="margin:15px 0 8px 0; color:#4af;">Current Assignments:</h4>
-                    <div id="playerSoundAssignments" style="font-size:11px; color:#aaa;">
-                        <div>Walk: <span id="walkSoundName">None</span></div>
-                        <div>Attack: <span id="attackSoundName">None</span></div>
-                    </div>
-                </div>
             </div>
 
             <!-- LIGHTING MODE -->
@@ -3651,6 +3665,20 @@
                     <div style="font-size:9px; color:#666;">% of buy price shop pays for items not in buy list (0 = don't accept)</div>
                 </div>
 
+                <!-- Shop Music -->
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Shop Music (optional):</label>
+                    <div style="display:flex; gap:5px; margin-top:4px;">
+                        <select id="shopEditorMusic" style="flex:1; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                            <option value="-1">(None)</option>
+                        </select>
+                        <input type="file" id="musicSoundInput" accept="audio/*" onchange="loadSound(event, 'music')" style="display:none;">
+                        <button onclick="document.getElementById('musicSoundInput').click()" style="padding:8px 12px;" title="Add Music">+</button>
+                    </div>
+                    <div id="musicSoundsList" style="max-height:60px; overflow-y:auto; margin-top:5px; font-size:10px;"></div>
+                    <div style="font-size:9px; color:#666; margin-top:2px;">Fades in when shop opens, fades out when closed</div>
+                </div>
+
                 <!-- Items For Sale -->
                 <div style="margin-bottom:15px; background:#1a2a1a; padding:10px; border-radius:4px; border:1px solid #4a8;">
                     <label style="font-size:12px; color:#4f8; font-weight:bold; display:block; margin-bottom:8px;">Items For Sale</label>
@@ -3698,6 +3726,7 @@
             <div style="padding:12px 15px; border-top:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#1a1a1a;">
                 <button onclick="deleteShopFromEditor()" style="padding:8px 15px; background:#633; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">Delete</button>
                 <div style="display:flex; gap:8px;">
+                    <button onclick="previewShopUI()" style="padding:8px 15px; background:#448; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">Preview</button>
                     <button onclick="closeShopEditor()" style="padding:8px 20px; background:#444; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">Cancel</button>
                     <button onclick="saveShopEditor()" style="padding:8px 20px; background:linear-gradient(135deg, #fa0, #c80); color:#000; border:none; border-radius:3px; cursor:pointer; font-weight:bold; font-size:12px;">Save</button>
                 </div>
@@ -4041,7 +4070,9 @@
         let tileSounds = {}; // "x,y" -> { soundIndex, radius, loop, volume, fadePercent }
         let playerSounds = {
             walk: { soundIndex: -1, interval: 200, volume: 0.5, pitchVariation: 0.1 },
-            attack: { soundIndex: -1, volume: 0.7, pitchVariation: 0.15, lengthVariation: 0 }
+            attack: { soundIndex: -1, volume: 0.7, pitchVariation: 0.15, lengthVariation: 0 },
+            inventoryOpen: { soundIndex: -1, volume: 0.5 },
+            inventoryClose: { soundIndex: -1, volume: 0.5 }
         };
         let previewAudio = null; // For sound preview playback
         let selectedTileSoundKey = null; // Currently selected tile sound for editing
@@ -5757,7 +5788,7 @@
         })();
 
         // ===== SOUND MANAGEMENT =====
-        function loadSound(event) {
+        function loadSound(event, soundType = 'ambient') {
             const file = event.target.files[0];
             if (!file) return;
 
@@ -5769,34 +5800,111 @@
                         name: file.name,
                         data: e.target.result,
                         duration: audio.duration || 0,
-                        type: 'ambient'
+                        type: soundType
                     });
                     updateSoundDropdown();
                     currentSoundIndex = sounds.length - 1;
-                    const selectEl = document.getElementById('soundSelect');
-                    const controlsEl = document.getElementById('soundControls');
-                    if (selectEl) selectEl.value = currentSoundIndex;
-                    if (controlsEl) controlsEl.style.display = 'block';
+                    // Update the appropriate dropdown based on type
+                    if (soundType === 'ambient') {
+                        const selectEl = document.getElementById('soundSelect');
+                        const controlsEl = document.getElementById('soundControls');
+                        if (selectEl) selectEl.value = currentSoundIndex;
+                        if (controlsEl) controlsEl.style.display = 'block';
+                    } else if (soundType === 'player') {
+                        const selectEl = document.getElementById('playerSoundSelect');
+                        if (selectEl) selectEl.value = currentSoundIndex;
+                        updatePlayerSoundsList();
+                    } else if (soundType === 'music') {
+                        updateMusicSoundsList();
+                    }
                 });
                 audio.addEventListener('error', function() {
                     console.error('Failed to load audio metadata');
-                    // Still add the sound even if metadata fails
                     sounds.push({
                         name: file.name,
                         data: e.target.result,
                         duration: 0,
-                        type: 'ambient'
+                        type: soundType
                     });
                     updateSoundDropdown();
                     currentSoundIndex = sounds.length - 1;
-                    const selectEl = document.getElementById('soundSelect');
-                    const controlsEl = document.getElementById('soundControls');
-                    if (selectEl) selectEl.value = currentSoundIndex;
-                    if (controlsEl) controlsEl.style.display = 'block';
+                    if (soundType === 'ambient') {
+                        const selectEl = document.getElementById('soundSelect');
+                        const controlsEl = document.getElementById('soundControls');
+                        if (selectEl) selectEl.value = currentSoundIndex;
+                        if (controlsEl) controlsEl.style.display = 'block';
+                    } else if (soundType === 'player') {
+                        const selectEl = document.getElementById('playerSoundSelect');
+                        if (selectEl) selectEl.value = currentSoundIndex;
+                        updatePlayerSoundsList();
+                    } else if (soundType === 'music') {
+                        updateMusicSoundsList();
+                    }
                 });
             };
             reader.readAsDataURL(file);
             event.target.value = '';
+        }
+
+        function updatePlayerSoundsList() {
+            const container = document.getElementById('playerSoundsList');
+            if (!container) return;
+            const playerSoundsList = sounds.filter(s => s.type === 'player');
+            if (playerSoundsList.length === 0) {
+                container.innerHTML = '<div style="color:#666; font-size:10px;">No player sounds loaded</div>';
+            } else {
+                container.innerHTML = playerSoundsList.map((s, i) => {
+                    const realIdx = sounds.findIndex(snd => snd === s);
+                    return `<div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid #333;">
+                        <span style="color:#8f8; font-size:10px;">${s.name}</span>
+                        <button onclick="deleteSound(${realIdx})" style="padding:1px 5px; font-size:9px; background:#633;">×</button>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        function updateMusicSoundsList() {
+            const container = document.getElementById('musicSoundsList');
+            if (!container) return;
+            const musicList = sounds.filter(s => s.type === 'music');
+            if (musicList.length === 0) {
+                container.innerHTML = '<div style="color:#666; font-size:10px;">No music loaded</div>';
+            } else {
+                container.innerHTML = musicList.map((s, i) => {
+                    const realIdx = sounds.findIndex(snd => snd === s);
+                    return `<div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid #333;">
+                        <span style="color:#fa0; font-size:10px;">${s.name}</span>
+                        <button onclick="deleteSound(${realIdx})" style="padding:1px 5px; font-size:9px; background:#633;">×</button>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        function deleteSound(idx) {
+            if (idx < 0 || idx >= sounds.length) return;
+            if (!confirm('Delete "' + sounds[idx].name + '"?')) return;
+            sounds.splice(idx, 1);
+            // Update indices in playerSounds
+            ['walk', 'attack', 'inventoryOpen', 'inventoryClose'].forEach(action => {
+                if (playerSounds[action] && playerSounds[action].soundIndex === idx) {
+                    playerSounds[action].soundIndex = -1;
+                } else if (playerSounds[action] && playerSounds[action].soundIndex > idx) {
+                    playerSounds[action].soundIndex--;
+                }
+            });
+            // Update tileSounds indices
+            Object.keys(tileSounds).forEach(key => {
+                if (tileSounds[key].soundIndex === idx) {
+                    delete tileSounds[key];
+                } else if (tileSounds[key].soundIndex > idx) {
+                    tileSounds[key].soundIndex--;
+                }
+            });
+            updateSoundDropdown();
+            updatePlayerSoundsList();
+            updateMusicSoundsList();
+            updatePlayerSoundAssignments();
+            updatePlacedSoundsList();
         }
 
         function switchSound() {
@@ -5808,15 +5916,31 @@
         }
 
         function updateSoundDropdown() {
-            const select = document.getElementById('soundSelect');
+            // Update main sound dropdown (ambient only for tile sounds)
+            updateFilteredSoundDropdown('soundSelect', 'ambient');
+            // Update player sound dropdown
+            updateFilteredSoundDropdown('playerSoundSelect', 'player');
+            // Update shop music dropdown
+            updateFilteredSoundDropdown('shopEditorMusic', 'music');
+        }
+
+        function updateFilteredSoundDropdown(selectId, typeFilter) {
+            const select = document.getElementById(selectId);
             if (!select) return;
+            const currentVal = select.value;
             select.innerHTML = '<option value="-1">-- Select Sound --</option>';
             sounds.forEach((sound, idx) => {
-                const opt = document.createElement('option');
-                opt.value = idx;
-                opt.textContent = sound.name;
-                select.appendChild(opt);
+                if (!typeFilter || sound.type === typeFilter) {
+                    const opt = document.createElement('option');
+                    opt.value = idx;
+                    opt.textContent = sound.name;
+                    select.appendChild(opt);
+                }
             });
+            // Restore selection if still valid
+            if (currentVal && select.querySelector(`option[value="${currentVal}"]`)) {
+                select.value = currentVal;
+            }
         }
 
         function previewSound() {
@@ -5838,19 +5962,16 @@
 
         function setSoundAttachMode(attachMode) {
             soundAttachMode = attachMode;
-            const tileBtn = document.getElementById('soundAttachTile');
-            const playerBtn = document.getElementById('soundAttachPlayer');
-            const tileOpts = document.getElementById('tileSoundOptions');
-            const playerOpts = document.getElementById('playerSoundOptions');
-            if (tileBtn) tileBtn.classList.toggle('active', attachMode === 'tile');
-            if (playerBtn) playerBtn.classList.toggle('active', attachMode === 'player');
-            if (tileOpts) tileOpts.style.display = attachMode === 'tile' ? 'block' : 'none';
-            if (playerOpts) playerOpts.style.display = attachMode === 'player' ? 'block' : 'none';
+            // Tile mode is now the only mode in Sound tab
+            // Player sounds moved to Player tab
             renderMap();
         }
 
         function assignPlayerSound() {
-            if (currentSoundIndex < 0) {
+            const playerSoundSelectEl = document.getElementById('playerSoundSelect');
+            const selectedSoundIndex = playerSoundSelectEl ? parseInt(playerSoundSelectEl.value) : -1;
+
+            if (selectedSoundIndex < 0) {
                 alert('Select a sound first');
                 return;
             }
@@ -5862,7 +5983,7 @@
             const attackLengthEl = document.getElementById('attackLength');
 
             const action = actionEl ? actionEl.value : 'walk';
-            playerSounds[action].soundIndex = currentSoundIndex;
+            playerSounds[action].soundIndex = selectedSoundIndex;
             playerSounds[action].volume = volumeEl ? volumeEl.value / 100 : 0.5;
             if (action === 'walk') {
                 playerSounds.walk.interval = intervalEl ? parseInt(intervalEl.value) : 200;
@@ -5890,14 +6011,24 @@
                     <button onclick="clearPlayerSound('attack')" style="background:#a33; border:none; color:#fff; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:10px;">X</button>
                 </div>`;
             }
+            if (playerSounds.inventoryOpen && playerSounds.inventoryOpen.soundIndex >= 0) {
+                html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span>Inv Open: ${sounds[playerSounds.inventoryOpen.soundIndex]?.name || 'Unknown'}</span>
+                    <button onclick="clearPlayerSound('inventoryOpen')" style="background:#a33; border:none; color:#fff; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:10px;">X</button>
+                </div>`;
+            }
+            if (playerSounds.inventoryClose && playerSounds.inventoryClose.soundIndex >= 0) {
+                html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span>Inv Close: ${sounds[playerSounds.inventoryClose.soundIndex]?.name || 'Unknown'}</span>
+                    <button onclick="clearPlayerSound('inventoryClose')" style="background:#a33; border:none; color:#fff; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:10px;">X</button>
+                </div>`;
+            }
             container.innerHTML = html || '<div style="color:#888;">None assigned</div>';
         }
 
         function clearPlayerSound(action) {
-            if (action === 'walk') {
-                playerSounds.walk.soundIndex = -1;
-            } else if (action === 'attack') {
-                playerSounds.attack.soundIndex = -1;
+            if (playerSounds[action]) {
+                playerSounds[action].soundIndex = -1;
             }
             updatePlayerSoundAssignments();
         }
@@ -5914,14 +6045,14 @@
             // Update volume slider to current value for selected action
             const volumeSlider = document.getElementById('playerSoundVolume');
             const volumeVal = document.getElementById('playerSoundVolumeVal');
-            if (action === 'walk' && playerSounds.walk.soundIndex >= 0) {
-                const vol = Math.round((playerSounds.walk.volume || 0.5) * 100);
+
+            if (playerSounds[action] && playerSounds[action].soundIndex >= 0) {
+                const vol = Math.round((playerSounds[action].volume || 0.5) * 100);
                 if (volumeSlider) volumeSlider.value = vol;
                 if (volumeVal) volumeVal.textContent = vol;
-            } else if (action === 'attack' && playerSounds.attack.soundIndex >= 0) {
-                const vol = Math.round((playerSounds.attack.volume || 0.7) * 100);
-                if (volumeSlider) volumeSlider.value = vol;
-                if (volumeVal) volumeVal.textContent = vol;
+            }
+
+            if (action === 'attack' && playerSounds.attack.soundIndex >= 0) {
                 // Update attack-specific sliders
                 const pitchSlider = document.getElementById('attackPitch');
                 const pitchVal = document.getElementById('attackPitchVal');
@@ -15930,7 +16061,17 @@
                 const item = document.createElement('div');
                 const isSelected = (currentAnimPropIndex === i);
                 item.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px; background:' + (isSelected ? '#4a4a6e' : '#333') + '; border:2px solid ' + (isSelected ? '#4af' : 'transparent') + '; border-radius:5px; margin-bottom:5px; cursor:pointer;';
-                item.onclick = () => { currentAnimPropIndex = i; updateAnimPropListDisplay(); };
+                item.onclick = () => {
+                    // Toggle - clicking same one deselects
+                    if (currentAnimPropIndex === i) {
+                        currentAnimPropIndex = -1;
+                    } else {
+                        currentAnimPropIndex = i;
+                        currentStaticObjIndex = -1; // Deselect static objects
+                    }
+                    updateAnimPropListDisplay();
+                    updateStaticObjectsList();
+                };
 
                 // Preview thumbnail
                 if (prop.frames && prop.frames.length > 0) {
@@ -16029,6 +16170,20 @@
                     const drawH = srcH * scale;
                     ctx.drawImage(obj._spriteImg, 0, 0, srcW, srcH,
                                  (32 - drawW) / 2, (32 - drawH) / 2, drawW, drawH);
+                } else if (obj.spriteData) {
+                    // Fallback: load image if _spriteImg not ready
+                    const img = new Image();
+                    img.onload = () => {
+                        obj._spriteImg = img;
+                        const srcW = obj.width * gridSize;
+                        const srcH = obj.height * gridSize;
+                        const scale = Math.min(32 / srcW, 32 / srcH);
+                        const drawW = srcW * scale;
+                        const drawH = srcH * scale;
+                        ctx.drawImage(img, 0, 0, srcW, srcH,
+                                     (32 - drawW) / 2, (32 - drawH) / 2, drawW, drawH);
+                    };
+                    img.src = obj.spriteData;
                 }
                 item.appendChild(canvas);
 
@@ -17191,7 +17346,17 @@
                 inventory: [],      // Items for sale: { itemIndex, buyPrice, stock }
                 buyList: [],        // Items shop buys: { itemIndex, sellPrice }
                 defaultSellRate: 50,
-                greetingDialogId: ''
+                greetingDialogId: '',
+                musicIndex: -1,
+                uiStyle: {
+                    borderColor: '#ffaa00',
+                    panelBg: '#1e1e28',
+                    forSaleBg: '#284028',
+                    inventoryBg: '#1e1e32',
+                    cartBg: '#32281e',
+                    textColor: '#ffffff',
+                    accentColor: '#ffaa00'
+                }
             };
             shops.push(newShop);
             selectedShopIndex = shops.length - 1;
@@ -17238,7 +17403,17 @@
                     inventory: [],
                     buyList: [],
                     defaultSellRate: 50,
-                    greeting: ''
+                    greetingDialogId: '',
+                    musicIndex: -1,
+                    uiStyle: {
+                        borderColor: '#ffaa00',
+                        panelBg: '#1e1e28',
+                        forSaleBg: '#284028',
+                        inventoryBg: '#1e1e32',
+                        cartBg: '#32281e',
+                        textColor: '#ffffff',
+                        accentColor: '#ffaa00'
+                    }
                 };
                 shops.push(newShop);
                 index = shops.length - 1;
@@ -17255,6 +17430,17 @@
             document.getElementById('shopEditorSellRate').value = sellRate;
             document.getElementById('sellRateDisplay').textContent = sellRate;
             document.getElementById('shopEditorGreeting').value = shop.greeting || shop.greetingDialogId || '';
+
+            // Populate music dropdown
+            const musicSelect = document.getElementById('shopEditorMusic');
+            musicSelect.innerHTML = '<option value="-1">(None)</option>';
+            sounds.forEach((s, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = s.name || ('Sound ' + i);
+                musicSelect.appendChild(opt);
+            });
+            musicSelect.value = shop.musicIndex !== undefined ? shop.musicIndex : -1;
 
             updateShopItemDropdowns();
             renderShopInventoryEditor();
@@ -17276,6 +17462,7 @@
             shop.name = document.getElementById('shopEditorName').value || 'Unnamed Shop';
             shop.defaultSellRate = parseInt(document.getElementById('shopEditorSellRate').value) || 50;
             shop.greetingDialogId = document.getElementById('shopEditorGreeting').value || '';
+            shop.musicIndex = parseInt(document.getElementById('shopEditorMusic').value);
 
             broadcastEdit({ editType: 'updateShop', index: editingShopIndex, shop: shop });
             closeShopEditor();
@@ -17289,6 +17476,569 @@
             const indexToDelete = editingShopIndex;
             closeShopEditor();
             deleteShop(indexToDelete);
+        }
+
+        function previewShopUI() {
+            if (editingShopIndex < 0) return;
+            const shop = shops[editingShopIndex];
+            if (!shop) return;
+
+            // Create overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'shopPreviewOverlay';
+            overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.9); z-index:3000; display:flex; justify-content:center; align-items:center; flex-direction:column;';
+
+            // Create canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = 600;
+            canvas.height = 450;
+            canvas.style.cssText = 'border:2px solid #fa0; border-radius:4px;';
+
+            // Button container
+            const btnContainer = document.createElement('div');
+            btnContainer.style.cssText = 'margin-top:15px; display:flex; gap:10px;';
+
+            // Edit button
+            const editBtn = document.createElement('button');
+            editBtn.textContent = 'Edit UI Style';
+            editBtn.style.cssText = 'padding:10px 25px; background:#448; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:14px;';
+            editBtn.onclick = () => {
+                overlay.remove();
+                openShopUIEditor();
+            };
+
+            // Close button
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = 'Close Preview';
+            closeBtn.style.cssText = 'padding:10px 25px; background:#444; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:14px;';
+            closeBtn.onclick = () => overlay.remove();
+
+            btnContainer.appendChild(editBtn);
+            btnContainer.appendChild(closeBtn);
+            overlay.appendChild(canvas);
+            overlay.appendChild(btnContainer);
+            document.body.appendChild(overlay);
+
+            const ctx = canvas.getContext('2d');
+            const SLOT_SIZE = 40;
+            const cols = 10;
+            const padding = 12;
+            const slotGap = 2;
+            const shopInv = shop.inventory || [];
+
+            // Preload item images then draw
+            const itemImages = {};
+            let imagesToLoad = 0;
+            let imagesLoaded = 0;
+
+            shopInv.forEach(inv => {
+                const item = items[inv.itemIndex];
+                if (item && item.spriteData && !itemImages[inv.itemIndex]) {
+                    imagesToLoad++;
+                    const img = new Image();
+                    img.onload = () => {
+                        imagesLoaded++;
+                        itemImages[inv.itemIndex] = img;
+                        if (imagesLoaded >= imagesToLoad) drawPreview();
+                    };
+                    img.onerror = () => {
+                        imagesLoaded++;
+                        if (imagesLoaded >= imagesToLoad) drawPreview();
+                    };
+                    img.src = item.spriteData;
+                }
+            });
+
+            // Draw immediately if no images to load
+            if (imagesToLoad === 0) drawPreview();
+
+            function drawPreview() {
+                // Get custom styles or defaults
+                const style = shop.uiStyle || {
+                    borderColor: '#ffaa00',
+                    panelBg: '#1e1e28',
+                    forSaleBg: '#284028',
+                    inventoryBg: '#1e1e32',
+                    cartBg: '#32281e',
+                    textColor: '#ffffff',
+                    accentColor: '#ffaa00'
+                };
+
+                // Background
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const shopRows = Math.max(2, Math.ceil(shopInv.length / cols));
+                const playerRows = 4;
+                const sectionH = playerRows * SLOT_SIZE + (playerRows - 1) * slotGap + 30;
+                const shopSectionH = shopRows * SLOT_SIZE + (shopRows - 1) * slotGap + 30;
+
+                const panelW = cols * SLOT_SIZE + (cols - 1) * slotGap + padding * 2 + 100;
+                const panelH = shopSectionH + sectionH + 80;
+                const panelX = (canvas.width - panelW) / 2;
+                const panelY = (canvas.height - panelH) / 2;
+
+                // Main panel
+                ctx.fillStyle = style.panelBg;
+                ctx.fillRect(panelX, panelY, panelW, panelH);
+                ctx.strokeStyle = style.borderColor;
+                ctx.lineWidth = 3;
+                ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+                // Header
+                ctx.fillStyle = style.accentColor;
+                ctx.font = 'bold 16px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(shop.name || 'Shop', panelX + panelW / 2, panelY + 22);
+
+                // Gold display
+                ctx.fillStyle = '#fc0';
+                ctx.font = 'bold 14px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText('Gold: 100', panelX + 15, panelY + 22);
+
+                // Shop inventory section
+                const shopAreaX = panelX + padding;
+                const shopAreaY = panelY + 35;
+                const shopAreaW = panelW - padding * 2 - 90;
+
+                ctx.fillStyle = style.forSaleBg;
+                ctx.fillRect(shopAreaX, shopAreaY, shopAreaW, shopSectionH);
+                ctx.strokeStyle = '#4a7c59';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(shopAreaX, shopAreaY, shopAreaW, shopSectionH);
+
+                ctx.fillStyle = '#8f8';
+                ctx.font = 'bold 12px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText('FOR SALE', shopAreaX + 8, shopAreaY + 16);
+
+                // Draw shop item slots
+                for (let i = 0; i < Math.max(shopInv.length, cols * 2); i++) {
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
+                    if (row >= shopRows) break;
+
+                    const slotX = shopAreaX + padding + col * (SLOT_SIZE + slotGap);
+                    const slotY = shopAreaY + 22 + row * (SLOT_SIZE + slotGap);
+
+                    const inv = shopInv[i];
+                    ctx.fillStyle = inv ? '#2a3a2a' : '#1a1a1a';
+                    ctx.fillRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+                    ctx.strokeStyle = inv ? '#4a5a4a' : '#333';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+
+                    if (inv) {
+                        const item = items[inv.itemIndex];
+                        const img = itemImages[inv.itemIndex];
+
+                        // Draw item sprite if available
+                        if (img && item && item.frames && item.frames.length > 0) {
+                            const frame = item.frames[item.idleFrame || 0];
+                            if (frame) {
+                                const scale = Math.min((SLOT_SIZE - 4) / frame.w, (SLOT_SIZE - 4) / frame.h);
+                                const drawW = frame.w * scale;
+                                const drawH = frame.h * scale;
+                                const drawX = slotX + (SLOT_SIZE - drawW) / 2;
+                                const drawY = slotY + (SLOT_SIZE - drawH) / 2;
+                                ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
+                            }
+                        } else {
+                            // Fallback to name abbreviation
+                            ctx.fillStyle = '#fff';
+                            ctx.font = '9px monospace';
+                            ctx.textAlign = 'center';
+                            const abbrev = item ? item.name.substring(0, 4) : '?';
+                            ctx.fillText(abbrev, slotX + SLOT_SIZE/2, slotY + SLOT_SIZE/2 + 3);
+                        }
+
+                        // Price below
+                        ctx.fillStyle = '#fc0';
+                        ctx.font = '9px monospace';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(inv.buyPrice + 'g', slotX + SLOT_SIZE/2, slotY + SLOT_SIZE + 10);
+                    }
+                }
+
+                // Player inventory section
+                const invAreaX = panelX + padding;
+                const invAreaY = shopAreaY + shopSectionH + 8;
+
+                ctx.fillStyle = style.inventoryBg;
+                ctx.fillRect(invAreaX, invAreaY, shopAreaW, sectionH);
+                ctx.strokeStyle = '#557';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(invAreaX, invAreaY, shopAreaW, sectionH);
+
+                ctx.fillStyle = '#aaf';
+                ctx.font = 'bold 12px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText('YOUR INVENTORY', invAreaX + 8, invAreaY + 16);
+
+                // Draw empty player inventory slots
+                for (let i = 0; i < cols * playerRows; i++) {
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
+                    const slotX = invAreaX + padding + col * (SLOT_SIZE + slotGap);
+                    const slotY = invAreaY + 22 + row * (SLOT_SIZE + slotGap);
+
+                    ctx.fillStyle = i < 10 ? '#3a3a4a' : '#333';
+                    ctx.fillRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+                    ctx.strokeStyle = i < 10 ? '#666' : '#444';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+                }
+
+                // Cart area
+                const cartX = shopAreaX + shopAreaW + 8;
+                const cartY = shopAreaY;
+                const cartW = 80;
+                const cartH = shopSectionH + sectionH + 8;
+
+                ctx.fillStyle = style.cartBg;
+                ctx.fillRect(cartX, cartY, cartW, cartH);
+                ctx.strokeStyle = '#a86';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(cartX, cartY, cartW, cartH);
+
+                ctx.fillStyle = '#fa8';
+                ctx.font = 'bold 11px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('CART', cartX + cartW/2, cartY + 16);
+
+                ctx.fillStyle = '#666';
+                ctx.font = '10px monospace';
+                ctx.fillText('Cart empty', cartX + cartW/2, cartY + cartH/2);
+
+                // Confirm button area
+                const btnY = panelY + panelH - 35;
+                ctx.fillStyle = '#4a4';
+                ctx.fillRect(panelX + panelW/2 - 50, btnY, 100, 25);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 11px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('CONFIRM', panelX + panelW/2, btnY + 17);
+
+                // Preview label
+                ctx.fillStyle = '#888';
+                ctx.font = '10px monospace';
+                ctx.fillText('[ PREVIEW ]', panelX + panelW/2, panelY + panelH - 8);
+            }
+        }
+
+        function openShopUIEditor() {
+            if (editingShopIndex < 0) return;
+            const shop = shops[editingShopIndex];
+            if (!shop) return;
+
+            // Initialize uiStyle if not present
+            if (!shop.uiStyle) {
+                shop.uiStyle = {
+                    borderColor: '#ffaa00',
+                    panelBg: '#1e1e28',
+                    forSaleBg: '#284028',
+                    inventoryBg: '#1e1e32',
+                    cartBg: '#32281e',
+                    textColor: '#ffffff',
+                    accentColor: '#ffaa00'
+                };
+            }
+
+            // Store original values for cancel
+            const originalStyle = JSON.parse(JSON.stringify(shop.uiStyle));
+
+            const overlay = document.createElement('div');
+            overlay.id = 'shopUIEditorOverlay';
+            overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.95); z-index:3000; display:flex; justify-content:center; align-items:center; gap:30px;';
+
+            // Left panel - controls
+            const controlPanel = document.createElement('div');
+            controlPanel.style.cssText = 'background:#2a2a2a; padding:20px; border-radius:8px; border:2px solid #448; width:280px;';
+            controlPanel.innerHTML = `
+                <h3 style="margin:0 0 15px 0; color:#4af;">Shop UI Style</h3>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <label style="color:#aaa; font-size:11px;">Border:
+                        <input type="color" id="shopUIBorder" value="${shop.uiStyle.borderColor}" style="width:100%; height:28px; margin-top:4px; cursor:pointer;">
+                    </label>
+                    <label style="color:#aaa; font-size:11px;">Panel BG:
+                        <input type="color" id="shopUIPanel" value="${shop.uiStyle.panelBg}" style="width:100%; height:28px; margin-top:4px; cursor:pointer;">
+                    </label>
+                    <label style="color:#aaa; font-size:11px;">For Sale:
+                        <input type="color" id="shopUIForSale" value="${shop.uiStyle.forSaleBg}" style="width:100%; height:28px; margin-top:4px; cursor:pointer;">
+                    </label>
+                    <label style="color:#aaa; font-size:11px;">Inventory:
+                        <input type="color" id="shopUIInventory" value="${shop.uiStyle.inventoryBg}" style="width:100%; height:28px; margin-top:4px; cursor:pointer;">
+                    </label>
+                    <label style="color:#aaa; font-size:11px;">Cart:
+                        <input type="color" id="shopUICart" value="${shop.uiStyle.cartBg}" style="width:100%; height:28px; margin-top:4px; cursor:pointer;">
+                    </label>
+                    <label style="color:#aaa; font-size:11px;">Accent:
+                        <input type="color" id="shopUIAccent" value="${shop.uiStyle.accentColor}" style="width:100%; height:28px; margin-top:4px; cursor:pointer;">
+                    </label>
+                </div>
+                <div style="margin-top:20px; display:flex; flex-direction:column; gap:8px;">
+                    <button id="shopUIReset" style="padding:10px; background:#633; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">Reset to Defaults</button>
+                    <div style="display:flex; gap:8px;">
+                        <button id="shopUICancel" style="flex:1; padding:10px; background:#444; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">Cancel</button>
+                        <button id="shopUISave" style="flex:1; padding:10px; background:#484; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">Save</button>
+                    </div>
+                </div>
+            `;
+
+            // Right panel - live preview canvas
+            const previewPanel = document.createElement('div');
+            previewPanel.style.cssText = 'display:flex; flex-direction:column; align-items:center;';
+
+            const previewLabel = document.createElement('div');
+            previewLabel.style.cssText = 'color:#888; font-size:12px; margin-bottom:8px;';
+            previewLabel.textContent = 'Live Preview';
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 600;
+            canvas.height = 450;
+            canvas.style.cssText = 'border:2px solid #fa0; border-radius:4px;';
+
+            previewPanel.appendChild(previewLabel);
+            previewPanel.appendChild(canvas);
+
+            overlay.appendChild(controlPanel);
+            overlay.appendChild(previewPanel);
+            document.body.appendChild(overlay);
+
+            const ctx = canvas.getContext('2d');
+            const SLOT_SIZE = 40;
+            const cols = 10;
+            const padding = 12;
+            const slotGap = 2;
+            const shopInv = shop.inventory || [];
+
+            // Preload item images
+            const itemImages = {};
+            let imagesToLoad = 0;
+            let imagesLoaded = 0;
+
+            shopInv.forEach(inv => {
+                const item = items[inv.itemIndex];
+                if (item && item.spriteData && !itemImages[inv.itemIndex]) {
+                    imagesToLoad++;
+                    const img = new Image();
+                    img.onload = () => {
+                        imagesLoaded++;
+                        itemImages[inv.itemIndex] = img;
+                        if (imagesLoaded >= imagesToLoad) drawPreview();
+                    };
+                    img.onerror = () => {
+                        imagesLoaded++;
+                        if (imagesLoaded >= imagesToLoad) drawPreview();
+                    };
+                    img.src = item.spriteData;
+                }
+            });
+
+            if (imagesToLoad === 0) drawPreview();
+
+            function drawPreview() {
+                const style = {
+                    borderColor: document.getElementById('shopUIBorder').value,
+                    panelBg: document.getElementById('shopUIPanel').value,
+                    forSaleBg: document.getElementById('shopUIForSale').value,
+                    inventoryBg: document.getElementById('shopUIInventory').value,
+                    cartBg: document.getElementById('shopUICart').value,
+                    textColor: '#ffffff',
+                    accentColor: document.getElementById('shopUIAccent').value
+                };
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const shopRows = Math.max(2, Math.ceil(shopInv.length / cols));
+                const playerRows = 4;
+                const sectionH = playerRows * SLOT_SIZE + (playerRows - 1) * slotGap + 30;
+                const shopSectionH = shopRows * SLOT_SIZE + (shopRows - 1) * slotGap + 30;
+
+                const panelW = cols * SLOT_SIZE + (cols - 1) * slotGap + padding * 2 + 100;
+                const panelH = shopSectionH + sectionH + 80;
+                const panelX = (canvas.width - panelW) / 2;
+                const panelY = (canvas.height - panelH) / 2;
+
+                // Main panel
+                ctx.fillStyle = style.panelBg;
+                ctx.fillRect(panelX, panelY, panelW, panelH);
+                ctx.strokeStyle = style.borderColor;
+                ctx.lineWidth = 3;
+                ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+                // Header
+                ctx.fillStyle = style.accentColor;
+                ctx.font = 'bold 16px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(shop.name || 'Shop', panelX + panelW / 2, panelY + 22);
+
+                ctx.fillStyle = '#fc0';
+                ctx.font = 'bold 14px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText('Gold: 100', panelX + 15, panelY + 22);
+
+                // Shop inventory section
+                const shopAreaX = panelX + padding;
+                const shopAreaY = panelY + 35;
+                const shopAreaW = panelW - padding * 2 - 90;
+
+                ctx.fillStyle = style.forSaleBg;
+                ctx.fillRect(shopAreaX, shopAreaY, shopAreaW, shopSectionH);
+                ctx.strokeStyle = '#4a7c59';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(shopAreaX, shopAreaY, shopAreaW, shopSectionH);
+
+                ctx.fillStyle = '#8f8';
+                ctx.font = 'bold 12px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText('FOR SALE', shopAreaX + 8, shopAreaY + 16);
+
+                for (let i = 0; i < Math.max(shopInv.length, cols * 2); i++) {
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
+                    if (row >= shopRows) break;
+
+                    const slotX = shopAreaX + padding + col * (SLOT_SIZE + slotGap);
+                    const slotY = shopAreaY + 22 + row * (SLOT_SIZE + slotGap);
+
+                    const inv = shopInv[i];
+                    ctx.fillStyle = inv ? '#2a3a2a' : '#1a1a1a';
+                    ctx.fillRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+                    ctx.strokeStyle = inv ? '#4a5a4a' : '#333';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+
+                    if (inv) {
+                        const item = items[inv.itemIndex];
+                        const img = itemImages[inv.itemIndex];
+
+                        if (img && item && item.frames && item.frames.length > 0) {
+                            const frame = item.frames[item.idleFrame || 0];
+                            if (frame) {
+                                const scale = Math.min((SLOT_SIZE - 4) / frame.w, (SLOT_SIZE - 4) / frame.h);
+                                const drawW = frame.w * scale;
+                                const drawH = frame.h * scale;
+                                const drawX = slotX + (SLOT_SIZE - drawW) / 2;
+                                const drawY = slotY + (SLOT_SIZE - drawH) / 2;
+                                ctx.drawImage(img, frame.x, frame.y, frame.w, frame.h, drawX, drawY, drawW, drawH);
+                            }
+                        } else {
+                            ctx.fillStyle = '#fff';
+                            ctx.font = '9px monospace';
+                            ctx.textAlign = 'center';
+                            const abbrev = item ? item.name.substring(0, 4) : '?';
+                            ctx.fillText(abbrev, slotX + SLOT_SIZE/2, slotY + SLOT_SIZE/2 + 3);
+                        }
+
+                        ctx.fillStyle = '#fc0';
+                        ctx.font = '9px monospace';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(inv.buyPrice + 'g', slotX + SLOT_SIZE/2, slotY + SLOT_SIZE + 10);
+                    }
+                }
+
+                // Player inventory section
+                const invAreaX = panelX + padding;
+                const invAreaY = shopAreaY + shopSectionH + 8;
+
+                ctx.fillStyle = style.inventoryBg;
+                ctx.fillRect(invAreaX, invAreaY, shopAreaW, sectionH);
+                ctx.strokeStyle = '#557';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(invAreaX, invAreaY, shopAreaW, sectionH);
+
+                ctx.fillStyle = '#aaf';
+                ctx.font = 'bold 12px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText('YOUR INVENTORY', invAreaX + 8, invAreaY + 16);
+
+                for (let i = 0; i < cols * playerRows; i++) {
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
+                    const slotX = invAreaX + padding + col * (SLOT_SIZE + slotGap);
+                    const slotY = invAreaY + 22 + row * (SLOT_SIZE + slotGap);
+
+                    ctx.fillStyle = i < 10 ? '#3a3a4a' : '#333';
+                    ctx.fillRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+                    ctx.strokeStyle = i < 10 ? '#666' : '#444';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(slotX, slotY, SLOT_SIZE, SLOT_SIZE);
+                }
+
+                // Cart area
+                const cartX = shopAreaX + shopAreaW + 8;
+                const cartY = shopAreaY;
+                const cartW = 80;
+                const cartH = shopSectionH + sectionH + 8;
+
+                ctx.fillStyle = style.cartBg;
+                ctx.fillRect(cartX, cartY, cartW, cartH);
+                ctx.strokeStyle = '#a86';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(cartX, cartY, cartW, cartH);
+
+                ctx.fillStyle = '#fa8';
+                ctx.font = 'bold 11px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('CART', cartX + cartW/2, cartY + 16);
+
+                ctx.fillStyle = '#666';
+                ctx.font = '10px monospace';
+                ctx.fillText('Cart empty', cartX + cartW/2, cartY + cartH/2);
+
+                const btnY = panelY + panelH - 35;
+                ctx.fillStyle = '#4a4';
+                ctx.fillRect(panelX + panelW/2 - 50, btnY, 100, 25);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 11px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('CONFIRM', panelX + panelW/2, btnY + 17);
+            }
+
+            // Add live update listeners to all color pickers
+            ['shopUIBorder', 'shopUIPanel', 'shopUIForSale', 'shopUIInventory', 'shopUICart', 'shopUIAccent'].forEach(id => {
+                document.getElementById(id).oninput = drawPreview;
+            });
+
+            document.getElementById('shopUICancel').onclick = () => {
+                shop.uiStyle = originalStyle;
+                overlay.remove();
+            };
+
+            document.getElementById('shopUIReset').onclick = () => {
+                const defaults = {
+                    borderColor: '#ffaa00',
+                    panelBg: '#1e1e28',
+                    forSaleBg: '#284028',
+                    inventoryBg: '#1e1e32',
+                    cartBg: '#32281e',
+                    textColor: '#ffffff',
+                    accentColor: '#ffaa00'
+                };
+                document.getElementById('shopUIBorder').value = defaults.borderColor;
+                document.getElementById('shopUIPanel').value = defaults.panelBg;
+                document.getElementById('shopUIForSale').value = defaults.forSaleBg;
+                document.getElementById('shopUIInventory').value = defaults.inventoryBg;
+                document.getElementById('shopUICart').value = defaults.cartBg;
+                document.getElementById('shopUIAccent').value = defaults.accentColor;
+                drawPreview();
+            };
+
+            document.getElementById('shopUISave').onclick = () => {
+                shop.uiStyle = {
+                    borderColor: document.getElementById('shopUIBorder').value,
+                    panelBg: document.getElementById('shopUIPanel').value,
+                    forSaleBg: document.getElementById('shopUIForSale').value,
+                    inventoryBg: document.getElementById('shopUIInventory').value,
+                    cartBg: document.getElementById('shopUICart').value,
+                    textColor: '#ffffff',
+                    accentColor: document.getElementById('shopUIAccent').value
+                };
+                overlay.remove();
+            };
         }
 
         function renderShopInventoryEditor() {
@@ -19998,8 +20748,13 @@
             tileSounds = p.tileSounds || {};
             playerSounds = p.playerSounds || {
                 walk: { soundIndex: -1, interval: 200, volume: 0.5, pitchVariation: 0.1 },
-                attack: { soundIndex: -1, volume: 0.7, pitchVariation: 0.15, lengthVariation: 0 }
+                attack: { soundIndex: -1, volume: 0.7, pitchVariation: 0.15, lengthVariation: 0 },
+                inventoryOpen: { soundIndex: -1, volume: 0.5 },
+                inventoryClose: { soundIndex: -1, volume: 0.5 }
             };
+            // Ensure inventory fields exist for older saves
+            if (!playerSounds.inventoryOpen) playerSounds.inventoryOpen = { soundIndex: -1, volume: 0.5 };
+            if (!playerSounds.inventoryClose) playerSounds.inventoryClose = { soundIndex: -1, volume: 0.5 };
 
             if (p.sounds && p.sounds.length > 0) {
                 console.log('Loading', p.sounds.length, 'sounds');
@@ -21213,7 +21968,7 @@
             }
 
             dialogEditorPageIndex = 0;
-            loadDialogPage(0);
+            loadDialogPage(0, true);
             updateDialogPagesListEditor();
             updateDialogPreview();
 
@@ -21235,9 +21990,9 @@
             }
         }
 
-        function loadDialogPage(index) {
+        function loadDialogPage(index, skipSave = false) {
             // Save current page first (including choices)
-            if (dialogEditorPages[dialogEditorPageIndex]) {
+            if (!skipSave && dialogEditorPages[dialogEditorPageIndex]) {
                 dialogEditorPages[dialogEditorPageIndex] = {
                     speaker: document.getElementById('dialogSpeaker').value,
                     text: document.getElementById('dialogTextInput').value,
@@ -23380,7 +24135,7 @@
             }
 
             tracker.style.display = 'block';
-            titleEl.textContent = activeQuest.name || 'Active Quest';
+            titleEl.textContent = 'QUESTS';
 
             // Hide objectives - just show quest name
             if (objectivesEl) objectivesEl.innerHTML = '';
@@ -24744,8 +25499,13 @@
         tileSounds = projectData.tileSounds || {};
         const playerSoundsData = projectData.playerSounds || {
             walk: { soundIndex: -1, interval: 200, volume: 0.5, pitchVariation: 0.1 },
-            attack: { soundIndex: -1, volume: 0.7, pitchVariation: 0.15, lengthVariation: 0 }
+            attack: { soundIndex: -1, volume: 0.7, pitchVariation: 0.15, lengthVariation: 0 },
+            inventoryOpen: { soundIndex: -1, volume: 0.5 },
+            inventoryClose: { soundIndex: -1, volume: 0.5 }
         };
+        // Ensure inventory fields exist for older saves
+        if (!playerSoundsData.inventoryOpen) playerSoundsData.inventoryOpen = { soundIndex: -1, volume: 0.5 };
+        if (!playerSoundsData.inventoryClose) playerSoundsData.inventoryClose = { soundIndex: -1, volume: 0.5 };
         const soundsWillStream = projectData.soundsWillStream || false;
         let soundsStreamedCount = 0;
 
@@ -26529,6 +27289,16 @@ Item Receive Display:
             if (e.key === 'i' || e.key === 'I') {
                 inventoryOpen = !inventoryOpen;
                 if (!inventoryOpen) cursorItem = null; // Drop cursor item when closing
+                // Play inventory sound
+                const soundAction = inventoryOpen ? 'inventoryOpen' : 'inventoryClose';
+                if (playerSoundsData[soundAction] && playerSoundsData[soundAction].soundIndex >= 0) {
+                    const snd = soundsData[playerSoundsData[soundAction].soundIndex];
+                    if (snd && snd.data) {
+                        const audio = new Audio(snd.data);
+                        audio.volume = playerSoundsData[soundAction].volume || 0.5;
+                        audio.play().catch(() => {});
+                    }
+                }
             }
             // Hotbar selection (1-9, 0)
             if (e.key >= '1' && e.key <= '9') {
@@ -26551,7 +27321,7 @@ Item Receive Display:
                         renderDialogBox();
                         return;
                     }
-                    if (e.key === 'z' || e.key === 'Z' || e.key === 'Enter') {
+                    if (e.key === 'z' || e.key === 'Z' || e.key === 'Enter' || e.key === 'a' || e.key === 'A') {
                         selectDialogChoice();
                         return;
                     }
@@ -26583,7 +27353,8 @@ Item Receive Display:
                             dialog: greetingDialog,
                             pageIndex: 0,
                             npc: shopResult.npc,
-                            isShopGreeting: true
+                            isShopGreeting: true,
+                            shopIndex: shopResult.shopIndex
                         };
                     } else {
                         // Use custom greeting text or default
@@ -26600,7 +27371,8 @@ Item Receive Display:
                                 }]
                             },
                             pageIndex: 0,
-                            npc: shopResult.npc
+                            npc: shopResult.npc,
+                            shopIndex: shopResult.shopIndex
                         };
                     }
                     dialogSelectedChoice = 0;
@@ -28198,10 +28970,17 @@ Item Receive Display:
                     break;
 
                 case 'shop':
-                    // Open shop
+                    // Open shop - save index before closing dialog
+                    let shopIdx = activeDialog?.shopIndex;
+                    console.log('[SHOP DEBUG] shopIdx:', shopIdx, 'activeDialog:', JSON.parse(JSON.stringify(activeDialog || {})));
+                    // Fallback: get shopIndex from the NPC if not on dialog
+                    if (shopIdx === undefined && activeDialog?.npc) {
+                        shopIdx = activeDialog.npc.shopIndex;
+                        console.log('[SHOP DEBUG] Fallback shopIdx from npc:', shopIdx);
+                    }
                     closeDialog();
-                    if (activeDialog?.npc?.shopIndex >= 0) {
-                        openShop(activeDialog.npc.shopIndex);
+                    if (shopIdx >= 0) {
+                        openShop(shopIdx);
                     }
                     break;
 
@@ -29226,6 +30005,8 @@ Item Receive Display:
         let shopUIButtons = {};
         let shopCart = []; // { type: 'buy'|'sell', shopInvIdx, playerSlotIdx, itemIndex, price, name }
         const SHOP_SLOT_SIZE = 36;
+        let shopMusicAudio = null;
+        let shopMusicFadeInterval = null;
 
         function openShop(shopIndex) {
             if (shopIndex < 0 || shopIndex >= shops.length) return;
@@ -29233,12 +30014,67 @@ Item Receive Display:
             activeShopIndex = shopIndex;
             shopCart = [];
             console.log('[SHOP] Opened shop:', shops[shopIndex].name);
+
+            // Start shop music if configured
+            const shop = shops[shopIndex];
+            if (shop.musicIndex >= 0 && soundsData[shop.musicIndex]) {
+                startShopMusic(shop.musicIndex);
+            }
         }
 
         function closeShop() {
             shopOpen = false;
             activeShopIndex = -1;
             shopCart = [];
+            stopShopMusic();
+        }
+
+        function startShopMusic(soundIndex) {
+            // Stop any existing shop music
+            stopShopMusic();
+
+            const sound = soundsData[soundIndex];
+            if (!sound || !sound.data) return;
+
+            shopMusicAudio = new Audio(sound.data);
+            shopMusicAudio.loop = true;
+            shopMusicAudio.volume = 0;
+            shopMusicAudio.play().catch(e => console.log('[SHOP] Music play failed:', e));
+
+            // Fade in
+            let vol = 0;
+            shopMusicFadeInterval = setInterval(() => {
+                vol += 0.05;
+                if (vol >= 0.5) {
+                    vol = 0.5;
+                    clearInterval(shopMusicFadeInterval);
+                    shopMusicFadeInterval = null;
+                }
+                if (shopMusicAudio) shopMusicAudio.volume = vol;
+            }, 50);
+        }
+
+        function stopShopMusic() {
+            if (shopMusicFadeInterval) {
+                clearInterval(shopMusicFadeInterval);
+                shopMusicFadeInterval = null;
+            }
+
+            if (shopMusicAudio) {
+                // Fade out
+                let vol = shopMusicAudio.volume;
+                const fadeOut = setInterval(() => {
+                    vol -= 0.05;
+                    if (vol <= 0) {
+                        vol = 0;
+                        clearInterval(fadeOut);
+                        shopMusicAudio.pause();
+                        shopMusicAudio = null;
+                    } else if (shopMusicAudio) {
+                        shopMusicAudio.volume = vol;
+                    }
+                }, 50);
+            }
         }
 
         function getCartTotal() {
@@ -29255,6 +30091,17 @@ Item Receive Display:
 
             const shop = shops[activeShopIndex];
             if (!shop) return;
+
+            // Get custom styles or defaults
+            const style = shop.uiStyle || {
+                borderColor: '#ffaa00',
+                panelBg: '#1e1e28',
+                forSaleBg: '#284028',
+                inventoryBg: '#1e1e32',
+                cartBg: '#32281e',
+                textColor: '#ffffff',
+                accentColor: '#ffaa00'
+            };
 
             // Use same slot size as regular inventory
             const cols = 10;
@@ -29279,14 +30126,14 @@ Item Receive Display:
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Main panel
-            ctx.fillStyle = 'rgba(30, 30, 40, 0.95)';
+            ctx.fillStyle = style.panelBg;
             ctx.fillRect(panelX, panelY, panelW, panelH);
-            ctx.strokeStyle = '#fa0';
+            ctx.strokeStyle = style.borderColor;
             ctx.lineWidth = 3;
             ctx.strokeRect(panelX, panelY, panelW, panelH);
 
             // Header with shop name and gold
-            ctx.fillStyle = '#fa0';
+            ctx.fillStyle = style.accentColor;
             ctx.font = 'bold 16px monospace';
             ctx.textAlign = 'center';
             ctx.fillText(shop.name || 'Shop', panelX + panelW / 2, panelY + 20);
@@ -29516,8 +30363,7 @@ Item Receive Display:
                 ctx.fillStyle = '#666';
                 ctx.textAlign = 'center';
                 ctx.font = '10px monospace';
-                ctx.fillText('Click items', cartX + cartW/2, cartY + cartH/2 - 8);
-                ctx.fillText('to add', cartX + cartW/2, cartY + cartH/2 + 6);
+                ctx.fillText('Cart empty', cartX + cartW/2, cartY + cartH/2);
             }
 
             // Cart total (using cartTotal from earlier in function)
@@ -29576,11 +30422,6 @@ Item Receive Display:
                 ctx.textAlign = 'center';
                 ctx.fillText('Not enough gold!', panelX + panelW/2, btnY - 8);
             }
-
-            // Instructions
-            ctx.fillStyle = 'rgba(255,255,255,0.5)';
-            ctx.font = '10px monospace';
-            ctx.fillText('Click items to add/remove from cart', panelX + panelW/2, panelY + panelH - 8);
         }
 
         function handleShopClick(clickX, clickY) {
@@ -29678,27 +30519,7 @@ Item Receive Display:
             // Process all cart items
             shopCart.forEach(c => {
                 if (c.type === 'buy') {
-                    // Add item to player inventory
-                    const itemDef = itemsData[c.itemIndex];
-                    let added = false;
-                    if (itemDef?.stackable) {
-                        for (let i = 0; i < inventorySlots.length; i++) {
-                            if (inventorySlots[i]?.itemIndex === c.itemIndex) {
-                                inventorySlots[i].quantity++;
-                                added = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!added) {
-                        for (let i = 0; i < inventorySlots.length; i++) {
-                            if (!inventorySlots[i]) {
-                                inventorySlots[i] = { itemIndex: c.itemIndex, quantity: 1 };
-                                added = true;
-                                break;
-                            }
-                        }
-                    }
+                    const added = addToInventory(c.itemIndex, 1);
                     if (added) playerGold -= c.price;
                 } else {
                     // Remove item from player inventory
