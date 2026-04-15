@@ -2467,6 +2467,7 @@
                         <button onclick="document.getElementById('projectFileInput').click()">Load</button>
                         <button onclick="showStorageInfo()">Storage</button>
                         <button onclick="showRoomInfo()">Room Info</button>
+                        <button onclick="sendFullProject()" title="Push your current project to everyone in the room">Resync Room</button>
                         <div class="tools-menu-separator"></div>
                         <div class="tools-menu-zoom">
                             <span>Zoom:</span>
@@ -19190,6 +19191,31 @@
                         if (!e.mapName || e.mapName === currentMapName) needsRender = true;
                     }
                     if (needsRender) renderMap();
+                    break;
+
+                case 'fullProject':
+                    if (edit.project) {
+                        console.log('[BUILDER MP] Receiving full project resync');
+                        loadFullProject(edit.project);
+                        showBuilderStatus('Resynced from room');
+                    }
+                    break;
+
+                case 'tilesetSync':
+                    if (edit.data) {
+                        const tsImg = new Image();
+                        tsImg.onload = () => {
+                            tilesets[edit.index] = { name: edit.name, img: tsImg, data: edit.data };
+                            if (edit.index === currentTilesetIndex) {
+                                tilesetImg = tsImg;
+                            }
+                            updateTilesetDropdown();
+                            renderTilesetPanel();
+                            renderMap();
+                            console.log('[BUILDER MP] Tileset synced:', edit.index, edit.name);
+                        };
+                        tsImg.src = edit.data;
+                    }
                     break;
 
                 case 'tile':
