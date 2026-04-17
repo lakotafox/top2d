@@ -19076,137 +19076,62 @@
             }
         }
 
+        // Resync Room button + host auto-resync-on-join. We do NOT send full project state
+        // (base saves are shared out-of-band via file download/upload — see the Save button
+        // in Tools menu). We replay only the session edit log: every broadcastEdit made
+        // since this host connected. Tiny and fast.
         function sendFullProject(targetId) {
             if (!builderSocket || !builderConnected) return;
+            if (!Array.isArray(sessionEditLog) || sessionEditLog.length === 0) {
+                console.log('[BUILDER MP] No session edits to replay' + (targetId ? ' -> ' + targetId : ''));
+                return;
+            }
+            // Chunk the log so individual messages stay under the WebSocket size cap.
+            // Target ~8 KB per chunk to leave headroom; skip any single oversized edit.
+            const TARGET_CHUNK_BYTES = 8 * 1024;
+            const chunks = [];
+            let cur = [];
+            let curBytes = 0;
+            for (const e of sessionEditLog) {
+                const sz = JSON.stringify(e).length;
+                if (sz > TARGET_CHUNK_BYTES * 1.5) {
+                    // Single edit larger than chunk budget — send it alone if possible.
+                    if (cur.length) { chunks.push(cur); cur = []; curBytes = 0; }
+                    chunks.push([e]);
+                    continue;
+                }
+                if (curBytes + sz > TARGET_CHUNK_BYTES && cur.length > 0) {
+                    chunks.push(cur);
+                    cur = [];
+                    curBytes = 0;
+                }
+                cur.push(e);
+                curBytes += sz;
+            }
+            if (cur.length) chunks.push(cur);
 
-            // HOTFIX 2026-04-17: PartyKit WebSocket max-message is tiny (~12 KB).
-            // getProjectData() inlines every base64 asset which can balloon to 100+ MB.
-            // Strategy: produce the full project data, strip heavy base64 from the main
-            // payload, then stream each asset as its own small message (tileset-style).
-            saveCurrentMapState();
-            const projectData = getProjectData();
+            console.log('[BUILDER MP] Replaying session log —',
+                        sessionEditLog.length, 'edits in', chunks.length, 'chunk(s)',
+                        targetId ? ('-> ' + targetId) : '(broadcast)');
 
-            // --- Extract heavy-asset streams, then null their base64 in the main payload ---
-
-            // Tilesets: {name, data} — already handled by getProjectData.
-            const tilesetsToSend = (projectData.tilesets || []).map((ts, i) => {
-                if (ts && ts.data) return ts;
-                const live = tilesets[i];
-                if (live && live.img) {
+            chunks.forEach((chunk, i) => {
+                setTimeout(() => {
+                    if (!builderSocket || !builderConnected) return;
+                    const msg = JSON.stringify({
+                        type: 'builderEdit',
+                        editType: 'sessionLogReplay',
+                        targetId: targetId || undefined,
+                        edits: chunk
+                    });
                     try {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = live.img.width;
-                        canvas.height = live.img.height;
-                        canvas.getContext('2d').drawImage(live.img, 0, 0);
-                        const data = canvas.toDataURL('image/png');
-                        live.data = data;
-                        return { name: live.name, data: data };
-                    } catch (e) { console.error('[BUILDER MP] extract tileset data failed:', e); }
-                }
-                return ts;
+                        builderSocket.send(msg);
+                        console.log('[BUILDER MP] session chunk', (i + 1) + '/' + chunks.length,
+                                    chunk.length, 'edits,', (msg.length / 1024).toFixed(1), 'KB');
+                    } catch (err) {
+                        console.error('[BUILDER MP] session chunk send failed:', err);
+                    }
+                }, 60 * i); // stagger so we don't blast the socket
             });
-            projectData.tilesets = [];
-
-            // Helper: strip a base64 field from each item in an array, return the stripped values.
-            function _extractBase64Field(arrPath, field) {
-                const arr = projectData[arrPath];
-                if (!Array.isArray(arr)) return [];
-                const extracted = [];
-                for (let i = 0; i < arr.length; i++) {
-                    const o = arr[i];
-                    if (o && typeof o[field] === 'string' && o[field].length > 0) {
-                        extracted.push({ index: i, data: o[field] });
-                        o[field] = null; // placeholder; receiver will fill in from stream
-                    }
-                }
-                return extracted;
-            }
-            const itemSprites = _extractBase64Field('items', 'spriteData');
-            const npcSprites = _extractBase64Field('npcs', 'spriteData');
-            const animPropSprites = _extractBase64Field('animatedProps', 'spriteData');
-            const staticObjSprites = _extractBase64Field('staticObjects', 'spriteData');
-            const soundBlobs = _extractBase64Field('sounds', 'data');
-            const questSoundBlobs = _extractBase64Field('questSounds', 'data');
-            // Player characters: spriteData + spriteSheets array (multi-sheet).
-            const playerCharSheets = [];
-            if (Array.isArray(projectData.playerCharacters)) {
-                for (let i = 0; i < projectData.playerCharacters.length; i++) {
-                    const c = projectData.playerCharacters[i];
-                    if (!c) continue;
-                    if (typeof c.spriteData === 'string' && c.spriteData) {
-                        playerCharSheets.push({ index: i, sheetIndex: -1, data: c.spriteData });
-                        c.spriteData = null;
-                    }
-                    if (Array.isArray(c.spriteSheets)) {
-                        for (let s = 0; s < c.spriteSheets.length; s++) {
-                            const sh = c.spriteSheets[s];
-                            if (typeof sh === 'string' && sh) {
-                                playerCharSheets.push({ index: i, sheetIndex: s, data: sh });
-                                c.spriteSheets[s] = null;
-                            }
-                        }
-                    }
-                }
-            }
-
-            console.log('[BUILDER MP] Sending full project (streamed):');
-            console.log('  Maps:', Object.keys(projectData.maps || {}).length,
-                        '| Tilesets:', tilesetsToSend.length,
-                        '| Items:', (projectData.items || []).length,
-                        '| Sounds:', (projectData.sounds || []).length,
-                        '| Anim props:', (projectData.animatedProps || []).length);
-
-            const mainMsg = JSON.stringify({
-                type: 'builderEdit',
-                editType: 'fullProject',
-                targetId: targetId || undefined,
-                project: projectData
-            });
-            console.log('[BUILDER MP] Main payload (stripped):', (mainMsg.length / 1024).toFixed(1), 'KB', targetId ? ('-> ' + targetId) : '(broadcast)');
-            try { builderSocket.send(mainMsg); } catch (e) { console.error('[BUILDER MP] main send failed:', e); return; }
-
-            // --- Stream heavy assets one per WebSocket message, staggered to avoid flooding ---
-            let slot = 0;
-            const sendAt = (delay, msg, label) => setTimeout(() => {
-                if (!builderSocket || !builderConnected) return;
-                const serialized = JSON.stringify(msg);
-                try {
-                    builderSocket.send(serialized);
-                    console.log('[BUILDER MP] Streamed', label, (serialized.length / 1024).toFixed(1), 'KB');
-                } catch (e) { console.error('[BUILDER MP] stream send failed:', label, e); }
-            }, delay);
-
-            for (let i = 0; i < tilesetsToSend.length; i++) {
-                const ts = tilesetsToSend[i];
-                sendAt(50 * ++slot, {
-                    type: 'builderEdit', editType: 'tilesetSync',
-                    targetId: targetId || undefined,
-                    index: i, name: ts.name, data: ts.data
-                }, 'tileset ' + i + ' ' + ts.name);
-            }
-            for (const e of itemSprites) {
-                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'itemSpriteSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'item sprite ' + e.index);
-            }
-            for (const e of npcSprites) {
-                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'npcSpriteSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'npc sprite ' + e.index);
-            }
-            for (const e of animPropSprites) {
-                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'animPropSpriteSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'animProp sprite ' + e.index);
-            }
-            for (const e of staticObjSprites) {
-                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'staticObjSpriteSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'staticObj sprite ' + e.index);
-            }
-            for (const e of soundBlobs) {
-                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'soundBlobSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'sound ' + e.index);
-            }
-            for (const e of questSoundBlobs) {
-                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'questSoundBlobSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'questSound ' + e.index);
-            }
-            for (const e of playerCharSheets) {
-                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'playerCharSheetSync', targetId: targetId || undefined, index: e.index, sheetIndex: e.sheetIndex, data: e.data }, 'playerChar ' + e.index + '/' + e.sheetIndex);
-            }
-
-            console.log('[BUILDER MP] Full project queued (' + slot + ' asset messages).');
         }
 
         function loadFullProject(project) {
@@ -19490,10 +19415,26 @@
                     break;
 
                 case 'fullProject':
+                    // Legacy full-project resync. Now vestigial — kept for backward compat
+                    // with any peer still running older code.
                     if (edit.project) {
-                        console.log('[BUILDER MP] Receiving full project resync');
+                        console.log('[BUILDER MP] Receiving full project resync (legacy path)');
                         loadFullProject(edit.project);
                         showBuilderStatus('Resynced from room');
+                    }
+                    break;
+
+                case 'sessionLogReplay':
+                    // Replay a batch of edits captured on another peer's sessionEditLog.
+                    // Base saves are shared out-of-band; this catches us up on in-session changes.
+                    if (Array.isArray(edit.edits)) {
+                        console.log('[BUILDER MP] Replaying', edit.edits.length, 'session edits');
+                        let applied = 0, failed = 0;
+                        for (const e of edit.edits) {
+                            try { applyRemoteEdit(e); applied++; }
+                            catch (err) { failed++; console.warn('[MP] replay failed for', e?.editType, err); }
+                        }
+                        showBuilderStatus('Synced ' + applied + ' edits' + (failed ? ' (' + failed + ' failed)' : ''));
                     }
                     break;
 
@@ -20604,7 +20545,16 @@
         let batchTimeout = null;
         const BATCH_DELAY = 250; // ms to wait before sending batch (higher = less network traffic)
 
+        // Session edit log — every broadcast we make locally. When a late joiner arrives,
+        // the host replays this log so the joiner catches up. Users share BASE saves
+        // out-of-band (download/upload). We only sync in-session deltas.
+        let sessionEditLog = [];
+        const SESSION_LOG_MAX = 5000; // safety cap
+
         function broadcastEdit(editData) {
+            // Track this edit in the session log for late-joiner replay.
+            if (sessionEditLog.length < SESSION_LOG_MAX) sessionEditLog.push(editData);
+
             // Send to test game window directly (works in solo mode)
             if (testGameWindow && !testGameWindow.closed) {
                 try {
