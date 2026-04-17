@@ -19079,13 +19079,16 @@
         function sendFullProject(targetId) {
             if (!builderSocket || !builderConnected) return;
 
-            // Wave 2 (R2): use canonical getProjectData() as the single source of truth.
-            // Ensures late joiners receive every field that save-to-disk receives.
+            // HOTFIX 2026-04-17: PartyKit WebSocket max-message is tiny (~12 KB).
+            // getProjectData() inlines every base64 asset which can balloon to 100+ MB.
+            // Strategy: produce the full project data, strip heavy base64 from the main
+            // payload, then stream each asset as its own small message (tileset-style).
             saveCurrentMapState();
             const projectData = getProjectData();
 
-            // Extract tilesets for separate streaming (base64 images are huge — chunk them).
-            // getProjectData already produces {name, data} shape. If `data` missing but img exists, extract.
+            // --- Extract heavy-asset streams, then null their base64 in the main payload ---
+
+            // Tilesets: {name, data} — already handled by getProjectData.
             const tilesetsToSend = (projectData.tilesets || []).map((ts, i) => {
                 if (ts && ts.data) return ts;
                 const live = tilesets[i];
@@ -19098,56 +19101,112 @@
                         const data = canvas.toDataURL('image/png');
                         live.data = data;
                         return { name: live.name, data: data };
-                    } catch (e) {
-                        console.error('[BUILDER MP] Failed to extract tileset data:', e);
-                    }
+                    } catch (e) { console.error('[BUILDER MP] extract tileset data failed:', e); }
                 }
                 return ts;
             });
-            projectData.tilesets = []; // stripped from main payload
+            projectData.tilesets = [];
 
-            console.log('[BUILDER MP] Sending full project (via getProjectData):');
-            console.log('[BUILDER MP] - Maps:', Object.keys(projectData.maps || {}).length);
-            console.log('[BUILDER MP] - Tilesets (streamed):', tilesetsToSend.length);
-            console.log('[BUILDER MP] - NPCs:', (projectData.npcs || []).length);
-            console.log('[BUILDER MP] - Items:', (projectData.items || []).length);
-            console.log('[BUILDER MP] - Sounds:', (projectData.sounds || []).length);
-            console.log('[BUILDER MP] - Triggers:', (projectData.placedTriggers || []).length);
-            console.log('[BUILDER MP] - Dialogs:', (projectData.dialogs || []).length);
+            // Helper: strip a base64 field from each item in an array, return the stripped values.
+            function _extractBase64Field(arrPath, field) {
+                const arr = projectData[arrPath];
+                if (!Array.isArray(arr)) return [];
+                const extracted = [];
+                for (let i = 0; i < arr.length; i++) {
+                    const o = arr[i];
+                    if (o && typeof o[field] === 'string' && o[field].length > 0) {
+                        extracted.push({ index: i, data: o[field] });
+                        o[field] = null; // placeholder; receiver will fill in from stream
+                    }
+                }
+                return extracted;
+            }
+            const itemSprites = _extractBase64Field('items', 'spriteData');
+            const npcSprites = _extractBase64Field('npcs', 'spriteData');
+            const animPropSprites = _extractBase64Field('animatedProps', 'spriteData');
+            const staticObjSprites = _extractBase64Field('staticObjects', 'spriteData');
+            const soundBlobs = _extractBase64Field('sounds', 'data');
+            const questSoundBlobs = _extractBase64Field('questSounds', 'data');
+            // Player characters: spriteData + spriteSheets array (multi-sheet).
+            const playerCharSheets = [];
+            if (Array.isArray(projectData.playerCharacters)) {
+                for (let i = 0; i < projectData.playerCharacters.length; i++) {
+                    const c = projectData.playerCharacters[i];
+                    if (!c) continue;
+                    if (typeof c.spriteData === 'string' && c.spriteData) {
+                        playerCharSheets.push({ index: i, sheetIndex: -1, data: c.spriteData });
+                        c.spriteData = null;
+                    }
+                    if (Array.isArray(c.spriteSheets)) {
+                        for (let s = 0; s < c.spriteSheets.length; s++) {
+                            const sh = c.spriteSheets[s];
+                            if (typeof sh === 'string' && sh) {
+                                playerCharSheets.push({ index: i, sheetIndex: s, data: sh });
+                                c.spriteSheets[s] = null;
+                            }
+                        }
+                    }
+                }
+            }
 
-            // Send main project first (without tileset data)
-            // Wrap as builderEdit so server broadcasts it
+            console.log('[BUILDER MP] Sending full project (streamed):');
+            console.log('  Maps:', Object.keys(projectData.maps || {}).length,
+                        '| Tilesets:', tilesetsToSend.length,
+                        '| Items:', (projectData.items || []).length,
+                        '| Sounds:', (projectData.sounds || []).length,
+                        '| Anim props:', (projectData.animatedProps || []).length);
+
             const mainMsg = JSON.stringify({
                 type: 'builderEdit',
                 editType: 'fullProject',
                 targetId: targetId || undefined,
                 project: projectData
             });
-            console.log('[BUILDER MP] Main project size:', (mainMsg.length / 1024).toFixed(1), 'KB', targetId ? `-> ${targetId}` : '(broadcast)');
-            builderSocket.send(mainMsg);
+            console.log('[BUILDER MP] Main payload (stripped):', (mainMsg.length / 1024).toFixed(1), 'KB', targetId ? ('-> ' + targetId) : '(broadcast)');
+            try { builderSocket.send(mainMsg); } catch (e) { console.error('[BUILDER MP] main send failed:', e); return; }
 
-            // Send each tileset as a separate message
-            tilesetsToSend.forEach((ts, i) => {
-                setTimeout(() => {
-                    if (!builderSocket || !builderConnected) return;
-                    const tsMsg = JSON.stringify({
-                        type: 'builderEdit',
-                        editType: 'tilesetSync',
-                        targetId: targetId || undefined,
-                        index: i,
-                        name: ts.name,
-                        data: ts.data
-                    });
-                    console.log('[BUILDER MP] Sending tileset', i, ts.name, (tsMsg.length / 1024).toFixed(1), 'KB');
-                    try {
-                        builderSocket.send(tsMsg);
-                    } catch (e) {
-                        console.error('[BUILDER MP] Failed to send tileset:', e);
-                    }
-                }, 100 * (i + 1)); // Stagger sends to avoid overwhelming
-            });
+            // --- Stream heavy assets one per WebSocket message, staggered to avoid flooding ---
+            let slot = 0;
+            const sendAt = (delay, msg, label) => setTimeout(() => {
+                if (!builderSocket || !builderConnected) return;
+                const serialized = JSON.stringify(msg);
+                try {
+                    builderSocket.send(serialized);
+                    console.log('[BUILDER MP] Streamed', label, (serialized.length / 1024).toFixed(1), 'KB');
+                } catch (e) { console.error('[BUILDER MP] stream send failed:', label, e); }
+            }, delay);
 
-            console.log('[BUILDER MP] Full project queued!');
+            for (let i = 0; i < tilesetsToSend.length; i++) {
+                const ts = tilesetsToSend[i];
+                sendAt(50 * ++slot, {
+                    type: 'builderEdit', editType: 'tilesetSync',
+                    targetId: targetId || undefined,
+                    index: i, name: ts.name, data: ts.data
+                }, 'tileset ' + i + ' ' + ts.name);
+            }
+            for (const e of itemSprites) {
+                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'itemSpriteSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'item sprite ' + e.index);
+            }
+            for (const e of npcSprites) {
+                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'npcSpriteSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'npc sprite ' + e.index);
+            }
+            for (const e of animPropSprites) {
+                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'animPropSpriteSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'animProp sprite ' + e.index);
+            }
+            for (const e of staticObjSprites) {
+                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'staticObjSpriteSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'staticObj sprite ' + e.index);
+            }
+            for (const e of soundBlobs) {
+                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'soundBlobSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'sound ' + e.index);
+            }
+            for (const e of questSoundBlobs) {
+                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'questSoundBlobSync', targetId: targetId || undefined, index: e.index, data: e.data }, 'questSound ' + e.index);
+            }
+            for (const e of playerCharSheets) {
+                sendAt(50 * ++slot, { type: 'builderEdit', editType: 'playerCharSheetSync', targetId: targetId || undefined, index: e.index, sheetIndex: e.sheetIndex, data: e.data }, 'playerChar ' + e.index + '/' + e.sheetIndex);
+            }
+
+            console.log('[BUILDER MP] Full project queued (' + slot + ' asset messages).');
         }
 
         function loadFullProject(project) {
@@ -19452,6 +19511,86 @@
                             console.log('[BUILDER MP] Tileset synced:', edit.index, edit.name);
                         };
                         tsImg.src = edit.data;
+                    }
+                    break;
+
+                // HOTFIX 2026-04-17 streaming receivers — fill in base64 assets that arrive
+                // after the main (stripped) fullProject payload.
+                case 'itemSpriteSync':
+                    if (Array.isArray(items) && items[edit.index] && edit.data) {
+                        items[edit.index].spriteData = edit.data;
+                        const img = new Image();
+                        img.onload = () => {
+                            if (typeof itemImages !== 'undefined') itemImages[edit.index] = img;
+                            if (typeof updateItemsList === 'function') updateItemsList();
+                            renderMap();
+                        };
+                        img.src = edit.data;
+                    }
+                    break;
+                case 'npcSpriteSync':
+                    if (Array.isArray(npcs) && npcs[edit.index] && edit.data) {
+                        npcs[edit.index].spriteData = edit.data;
+                        const img = new Image();
+                        img.onload = () => {
+                            npcs[edit.index]._editorImg = img;
+                            if (typeof updateNpcList === 'function') updateNpcList();
+                            renderMap();
+                        };
+                        img.src = edit.data;
+                    }
+                    break;
+                case 'animPropSpriteSync':
+                    if (Array.isArray(animatedProps) && animatedProps[edit.index] && edit.data) {
+                        animatedProps[edit.index].spriteData = edit.data;
+                        const img = new Image();
+                        img.onload = () => {
+                            animatedProps[edit.index]._spriteImg = img;
+                            if (typeof updateAnimPropListDisplay === 'function') updateAnimPropListDisplay();
+                            renderMap();
+                        };
+                        img.src = edit.data;
+                    }
+                    break;
+                case 'staticObjSpriteSync':
+                    if (Array.isArray(staticObjects) && staticObjects[edit.index] && edit.data) {
+                        staticObjects[edit.index].spriteData = edit.data;
+                        const img = new Image();
+                        img.onload = () => {
+                            staticObjects[edit.index]._spriteImg = img;
+                            if (typeof updateStaticObjectsList === 'function') updateStaticObjectsList();
+                            renderMap();
+                        };
+                        img.src = edit.data;
+                    }
+                    break;
+                case 'soundBlobSync':
+                    if (Array.isArray(sounds) && sounds[edit.index] && edit.data) {
+                        sounds[edit.index].data = edit.data;
+                        if (typeof updateSoundDropdown === 'function') updateSoundDropdown();
+                        if (typeof updatePlayerSoundAssignments === 'function') updatePlayerSoundAssignments();
+                    }
+                    break;
+                case 'questSoundBlobSync':
+                    if (Array.isArray(questSounds) && questSounds[edit.index] && edit.data) {
+                        questSounds[edit.index].data = edit.data;
+                    }
+                    break;
+                case 'playerCharSheetSync':
+                    if (Array.isArray(playerCharacters) && playerCharacters[edit.index] && edit.data) {
+                        const c = playerCharacters[edit.index];
+                        if (edit.sheetIndex === -1 || edit.sheetIndex === undefined) {
+                            c.spriteData = edit.data;
+                            const img = new Image();
+                            img.onload = () => {
+                                c._spriteImg = img;
+                                if (typeof updatePlayerList === 'function') updatePlayerList();
+                            };
+                            img.src = edit.data;
+                        } else if (typeof edit.sheetIndex === 'number') {
+                            if (!Array.isArray(c.spriteSheets)) c.spriteSheets = [];
+                            c.spriteSheets[edit.sheetIndex] = edit.data;
+                        }
                     }
                     break;
 
