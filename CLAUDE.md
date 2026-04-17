@@ -1,5 +1,33 @@
 # World Builder - Project Understanding
 
+## Version
+
+- **GAME_VERSION:** `0.1.0` (declared near top of `world-builder.html`; displayed on the main menu; stamped into every save as `gameVersion`).
+- **SAVE_SCHEMA_VERSION:** `1` (stamped into every save; `migrateProjectData(p)` is the migration ladder — add new `if (v < N)` hops as the schema evolves).
+
+## Wave-1 patch pass (2026-04-17)
+
+Large fix pass landed in one session. See `/Users/khabefox/zelda-game/AUDIT/MOTHER_PLAN.md` for the full plan and `/Users/khabefox/.claude/plans/peppy-pondering-pony.md` for the condensed roadmap.
+
+Landed in this order:
+- **Wave 0:** shared helpers (`cascadeMapRename`, `cascadeMapDelete`, `rekeyPrefix`, `reindex*References` × 6, `migrateProjectData`, `findTriggerByUid`, `ensureTriggerUids`) + observability `default: console.warn` in `applyRemoteEditNoRender` and `applyLiveEdit`.
+- **Wave 1:** save-integrity — spread-with-strip serializers (no more silent field drops on new fields), orphan-purge on load, shadow-unit migration (player char shadow canonicalized on integer percent), version tagging, initEmptyProject resets completed.
+- **Wave 2 (R1+R2):** `sendFullProject` now uses `getProjectData()` as single source of truth. `loadFullProject` extended with 9 missing field loads (items/placedItems/itemImages, sounds/playerSounds, lightingSettings, placedDialogTiles, quests/questSounds, placedAnimProps, playerLayerIndex). `applyRemoteEditNoRender` delegates unknown editTypes to `applyRemoteEdit` — no more silent-drop-in-batch.
+- **Wave 3:** missing broadcasts (spawn point, player torch, dialog tiles, sound library, NPC def delete, waypoint delete, auto-expand, walkOut/animTiles triggers) + receivers. `itemImages` promoted to module scope. `itemPickup` → `itemInteract` rename. 10-door cap raised to 100. Named builder saves (Save As… + named-saves picker). GAME_VERSION on main menu.
+- **Wave 4 (R4):** `promptRenameMap` / remote `renameMap` handler / `deleteMap` all route through `cascadeMapRename` and `cascadeMapDelete` helpers. Full coverage of `.mapName`-tagged arrays and prefix-keyed dicts.
+- **Wave 5 (R3):** local `deleteItem` / `deleteDialog` / `deleteTileset` / animated-prop delete all call their matching `reindex*References` helper. Remote `deleteItem` / `deleteDialog` / `removeAnimProp` receivers also use the helpers.
+- **Wave 6:** `applyLiveEdit` in the test game gained cases for `renameMap`, `setPlayerSpawn`, `lightingSettings`, `addSound`/`removeSound`/`setPlayerSound`, `addTileset`/`deleteTileset`, `moveLayerUp`/`Down`, `expandMap`, `addStaticObj`/`removeStaticObj`, `addAnimProp`/`updateAnimProp`/`removeAnimProp`, `add/update/deletePlayerCharacter`/`setActivePlayer`. Dialog/quest/shop editTypes intentionally not live-synced (reload-on-restart policy preserved).
+- **Wave 7:** triggers now carry a stable `uid`. `updateTrigger` / `removeTrigger` broadcasts include `uid` alongside `index`. Receivers (both builder and test-game) prefer UID lookup, fall back to index for pre-UID peers. `ensureTriggerUids(list)` stamps UIDs on legacy saves during load. `findTriggerByUid(uid)` is the canonical lookup.
+- **Wave 8:** removed dead `const currentMapName = 'main'` shadow in the test-game lighting block. Canonicalized NPC sprite-image property to `_editorImg` across `loadFullProject`, `addNpc` receiver, `updateNpc` receiver. Doc annotations below flag ghost features as NOT YET BUILT.
+
+## Server
+
+`multiplayer/src/builder.ts` (PartyKit) — patched earlier in the session to:
+1. Return `yourId` in the welcome frame.
+2. Accept both `type: 'update'` and `type: 'builderEdit'`.
+3. Broadcast the full incoming payload (dropping the old whitelist that silently stripped `obj`/`placed`/`collisionBox`/`project`/`data`).
+4. If the incoming message has `targetId`, unicast to that connection instead of broadcasting — enables host-auto-resync to late joiners.
+
 ## IMPORTANT: Session Workflow
 
 **START of session:** Read `WORLD-BUILDER-REFERENCE.md` for detailed architecture, variable names, line numbers, and common bugs/fixes.
@@ -67,6 +95,10 @@ let playerHitboxRange = {}     // Attack range per direction
 ```javascript
 let npcs = []                  // NPC definitions { name, spriteData, animations, fps }
 let placedNpcs = []            // Instances { npcIndex, x, y, path, isEnemy, enemyConfig, scale, dialogIndex }
+
+// Discussed, NOT YET BUILT:
+//   placedNpcs[*].maxHp       — [NOT BUILT] discussed: runtime reads `|| 30` fallback; no editor input yet.
+//   dropItems[*].chance       — [NOT BUILT] discussed: documented but runtime always drops.
 let npcRuntimeState = []       // Runtime { x, y, frame, direction, aiState }
 ```
 
@@ -92,8 +124,18 @@ let playerSounds = { walk: {}, attack: {} }
 
 ### Lighting
 ```javascript
-let lightingSettings = { blobShadows, ambientEnabled, timeOfDay, playerLight, playerLightRadius }
-let pointLights = {}           // "mapName:x,y" -> { radius, flicker }
+// Actual shape as of v0.1.0:
+let lightingSettings = { playerLight, playerLightRadius }
+let pointLights = {}           // "mapName:x,y" -> { radius, flicker, flickerIntensity }
+let polyLights = []            // [{ mapName, points, color, intensity, ... }]
+
+// Discussed, NOT YET BUILT — spec references only:
+//   lightingSettings.blobShadows    — [NOT BUILT] discussed: toggle for drop-shadow style
+//   lightingSettings.ambientEnabled — [NOT BUILT] discussed: global ambient on/off
+//   lightingSettings.timeOfDay      — [NOT BUILT] discussed: day/night save field; currently test-game runtime only
+//   pointLights[*].color            — [NOT BUILT] discussed: per-light color picker
+//   per-map default brightness      — [NOT BUILT] discussed: maps[*].brightness override
+//   edit-in-place for point/poly lights — [NOT BUILT] discussed: right now only place/remove
 ```
 
 ### Maps & Triggers
@@ -108,6 +150,16 @@ let cameraBounds = {}          // Per-map camera restrictions
 ```javascript
 let dialogs = []               // Dialog configurations with pages
 let placedDialogTiles = []     // { x, y, mapName, dialogIndex }
+
+// Discussed, NOT YET BUILT:
+//   pages[*].portrait           — [NOT BUILT] discussed: per-page speaker portrait
+//   choice.effects[]            — [NOT BUILT] discussed: explicit giveItem/startQuest/completeQuest effects
+//                                 Current flow: side effects via implicit pendingQuestAction and NPC shopIndex.
+//   choice.targetDialogId UI    — [NOT BUILT] discussed: runtime supports goto routing (~28997) but no editor UI.
+//   duplicateDialog / cloneDialog — [NOT BUILT] discussed: trivial to add when needed.
+//   placedShops runtime         — [NOT BUILT] discussed: field is saved and synced, but game engine
+//                                 never reads placedShops; shops currently only open via NPC shopIndex.
+//   gameProgress.questStates persistence — [NOT BUILT] discussed: runtime-only; resets on every test init.
 ```
 
 ---

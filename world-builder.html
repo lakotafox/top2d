@@ -1164,6 +1164,9 @@
             <p class="blink" style="margin-top:20px; font-size:8px; color:#fff;">
                 SELECT OPTION
             </p>
+            <p id="mainMenuVersion" style="margin-top:10px; font-size:7px; color:#666; letter-spacing:1px;">
+                <!-- populated at runtime with GAME_VERSION -->
+            </p>
         </div>
         <div class="load-box" id="saveChoice" style="display:none;">
             <h1>LOAD<br>SAVE</h1>
@@ -1174,7 +1177,14 @@
                 </button>
             </div>
             <div style="margin-top:10px;">
-                <button class="retro-btn" onclick="playButtonSound(); document.getElementById('saveChoice').style.display='none'; document.getElementById('mainMenu').style.display='block';" style="font-size:10px;">
+                <button class="retro-btn" onclick="playButtonSound(); showNamedSavesPicker();" style="font-size:10px;">
+                    > NAMED SAVES
+                </button>
+            </div>
+            <!-- Wave 3 named-saves picker (populated at runtime) -->
+            <div id="namedSavesPicker" style="display:none; margin-top:10px; max-height:200px; overflow-y:auto; text-align:left;"></div>
+            <div style="margin-top:10px;">
+                <button class="retro-btn" onclick="playButtonSound(); document.getElementById('saveChoice').style.display='none'; document.getElementById('mainMenu').style.display='block'; document.getElementById('namedSavesPicker').style.display='none';" style="font-size:10px;">
                     > BACK
                 </button>
             </div>
@@ -2399,7 +2409,7 @@
                 <div style="background:#2a2a1a; padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid #fa0;">
                     <label style="font-size:11px; color:#fa0; font-weight:bold;">Starting Gold:</label>
                     <input type="number" id="startingGoldInput" value="100" min="0"
-                           onchange="startingGold = parseInt(this.value) || 0"
+                           onchange="updateStartingGold(parseInt(this.value) || 0)"
                            style="width:100%; margin-top:4px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
                     <div style="font-size:9px; color:#888; margin-top:4px;">Gold player starts with</div>
                 </div>
@@ -2464,6 +2474,7 @@
                         <div id="coopStatusInMenu" class="coop-status-menu" style="display:none;"></div>
                         <button onclick="clearMap()">Clear Map</button>
                         <button onclick="downloadProject()">Save</button>
+                        <button onclick="saveProjectAs()" title="Save to a named slot in browser storage">Save As…</button>
                         <button onclick="document.getElementById('projectFileInput').click()">Load</button>
                         <button onclick="showStorageInfo()">Storage</button>
                         <button onclick="showRoomInfo()">Room Info</button>
@@ -3828,6 +3839,23 @@
         let mapCols = 40;
         let mapRows = 30;
 
+        // Version tagging — bump GAME_VERSION on releases; SAVE_SCHEMA_VERSION on save-format changes.
+        const GAME_VERSION = '0.1.0';
+        const SAVE_SCHEMA_VERSION = 1;
+
+        // Render version on main menu once DOM is ready.
+        (function paintVersion() {
+            const tryPaint = () => {
+                const el = document.getElementById('mainMenuVersion');
+                if (el) el.textContent = 'v' + GAME_VERSION;
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', tryPaint);
+            } else {
+                tryPaint();
+            }
+        })();
+
         let tilesetImg = null;
         let tilesets = []; // Array of { name, img, data } for multiple tilesets
         let currentTilesetIndex = 0;
@@ -3998,6 +4026,7 @@
         let itemPreviewFrame = 0;
         let itemPreviewInterval = null;
         let placedItems = []; // Items placed on map: { itemIndex, x, y, layer, mapName, used: false }
+        let itemImages = {}; // Wave 3: module-scope map of item-index -> HTMLImageElement. Builder UI + MP receivers share this.
         // Drag selection for multi-tile frames
         let itemDragStart = null;
         let itemDragEnd = null;
@@ -4444,28 +4473,10 @@
                 }
             });
 
-            // Remove collision data for this tileset
-            const keysToDelete = [];
-            for (const key in tileCollisions) {
-                const [tsIdx] = key.split(':');
-                if (parseInt(tsIdx) === tilesetIndexToDelete) {
-                    keysToDelete.push(key);
-                }
-            }
-            keysToDelete.forEach(key => delete tileCollisions[key]);
-
-            // Update collision keys for tilesets after deleted one
-            const updatedCollisions = {};
-            for (const key in tileCollisions) {
-                const [tsIdx, coords] = key.split(':');
-                const idx = parseInt(tsIdx);
-                if (idx > tilesetIndexToDelete) {
-                    updatedCollisions[(idx - 1) + ':' + coords] = tileCollisions[key];
-                } else {
-                    updatedCollisions[key] = tileCollisions[key];
-                }
-            }
-            tileCollisions = updatedCollisions;
+            // Wave 5: rekey ALL four tileset-prefixed collision dicts (was only tileCollisions).
+            // Prior bug left collisionMasks / tileSplitLines / tileSplitLineFlipped pointing at
+            // wrong indices after a delete, corrupting saves silently.
+            reindexTilesetReferences(tilesetIndexToDelete);
 
             // Broadcast before modifying tilesets array (need to send original index)
             if (!fromNetwork) {
@@ -6213,6 +6224,20 @@
             lightingSettings.playerLight = document.getElementById('playerLight').checked;
             lightingSettings.playerLightRadius = parseInt(document.getElementById('playerLightRadius').value);
             renderMap();
+            // Wave 3: broadcast player-torch settings (was silently local-only).
+            broadcastEdit({ editType: 'lightingSettings', settings: {
+                playerLight: lightingSettings.playerLight,
+                playerLightRadius: lightingSettings.playerLightRadius
+            }});
+        }
+
+        // Wave 3: single removal path for point lights — UI list, right-click, and any new callers.
+        function removeLightByKey(key) {
+            if (!pointLights[key]) return;
+            delete pointLights[key];
+            updatePlacedLightsList();
+            renderMap();
+            broadcastEdit({ editType: 'removeLight', key });
         }
 
         function placeLightAt(x, y) {
@@ -6369,7 +6394,7 @@
                 const coords = key.split(':')[1];
                 return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:#333; border-radius:3px;">
                     <span style="flex:1;">💡 ${coords} (r=${light.radius}${light.flicker ? ', flicker' : ''})</span>
-                    <button onclick="delete pointLights['${key}']; updatePlacedLightsList(); renderMap();" style="padding:2px 6px;">×</button>
+                    <button onclick="removeLightByKey('${key}')" style="padding:2px 6px;">×</button>
                 </div>`;
             }).join('');
         }
@@ -7006,6 +7031,8 @@
                 playerPreviewVisible = true;
                 toggleSetSpawnMode(); // Turn off set spawn mode after placing
                 renderMap();
+                // Wave 3: broadcast spawn point (was silently local-only).
+                broadcastEdit({ editType: 'setPlayerSpawn', x, y, mapName: spawnMapName });
                 return;
             }
 
@@ -7278,6 +7305,8 @@
                                 placed.path.splice(waypointIdx, 1);
                                 updateNpcWaypointList();
                                 renderMap();
+                                // Wave 3: broadcast waypoint delete (was silently local-only).
+                                broadcastEdit({ editType: 'updatePlacedNpc', index: selectedPlacedNpcIndex, npc: placed });
                             }
                         }
                     }
@@ -7390,7 +7419,7 @@
                 // Sync the trigger update
                 const triggerIndex = placedTriggers.indexOf(draggingSpawnTrigger);
                 if (triggerIndex >= 0) {
-                    broadcastEdit({ editType: 'updateTrigger', index: triggerIndex, trigger: draggingSpawnTrigger });
+                    broadcastEdit({ editType: 'updateTrigger', index: triggerIndex, uid: draggingSpawnTrigger.uid, trigger: draggingSpawnTrigger });
                 }
                 draggingSpawnTrigger = null;
                 renderMap();
@@ -7455,6 +7484,8 @@
                 playerPreviewVisible = true;
                 toggleSetSpawnMode();
                 renderMap();
+                // Wave 3: broadcast spawn point (was silently local-only).
+                broadcastEdit({ editType: 'setPlayerSpawn', x, y, mapName: spawnMapName });
                 return;
             }
 
@@ -10174,16 +10205,18 @@
         if (propTilesetCanvas) propTilesetCanvas.style.cursor = 'crosshair';
 
         // Expand map size
-        function expandMapRows() {
+        function expandMapRows(fromNetwork = false) {
             mapRows += 10;
             layers.forEach(layer => {
                 while (layer.length < mapRows) {
                     layer.push(new Array(mapCols).fill(null));
                 }
             });
+            // Wave 3: broadcast auto-expand so peers don't drift out of bounds.
+            if (!fromNetwork) broadcastEdit({ editType: 'expandMap', direction: 'bottom', mapName: currentMapName, amount: 10 });
         }
 
-        function expandMapCols() {
+        function expandMapCols(fromNetwork = false) {
             mapCols += 10;
             layers.forEach(layer => {
                 layer.forEach((row, i) => {
@@ -10192,6 +10225,7 @@
                     }
                 });
             });
+            if (!fromNetwork) broadcastEdit({ editType: 'expandMap', direction: 'right', mapName: currentMapName, amount: 10 });
         }
 
         // ===== NPC FUNCTIONS =====
@@ -11412,10 +11446,21 @@
                 delBtn.style.cssText = 'padding:2px 6px; font-size:11px; background:#a55;';
                 delBtn.onclick = (e) => {
                     e.stopPropagation();
-                    if (confirm('Delete NPC "' + npc.name + '"?')) {
+                    // Wave 3: warn about placed NPCs that will be orphan-dropped.
+                    const placedCount = Array.isArray(placedNpcs)
+                        ? placedNpcs.filter(p => p && p.npcIndex === i).length : 0;
+                    const msg = placedCount > 0
+                        ? `Delete NPC "${npc.name}"?\n\n${placedCount} placed instance(s) will also be removed.`
+                        : `Delete NPC "${npc.name}"?`;
+                    if (confirm(msg)) {
+                        const deletedIndex = i;
                         npcs.splice(i, 1);
+                        reindexNpcReferences(deletedIndex);
                         if (currentNpcIndex >= npcs.length) currentNpcIndex = npcs.length - 1;
                         updateNpcList();
+                        if (typeof updatePlacedNpcList === 'function') updatePlacedNpcList();
+                        renderMap();
+                        broadcastEdit({ editType: 'deleteNpc', index: deletedIndex });
                     }
                 };
 
@@ -11454,9 +11499,9 @@
             playerCurrentSheetIndex = 0;
             playerEditorFrameW = 64;
             playerEditorFrameH = 64;
-            playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [] };
+            playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [], receiveItemDown: [], receiveItemUp: [], receiveItemLeft: [], receiveItemRight: [] };
             playerAnimMirrors = {}; // Reset mirror flags
-            playerHitboxRange = 40; // Reset hitbox shape
+            playerHitboxRange = { up: 35, down: 35, left: 35, right: 30 }; // Reset hitbox shape (per-direction px)
             playerHitboxWidth = 60;
             playerHitboxOffsetY = 0;
             playerAttackMovement = 'stop'; // Reset attack movement
@@ -11724,7 +11769,7 @@
             const hInput = document.getElementById('playerFrameH');
             if (wInput) wInput.value = w;
             if (hInput) hInput.value = h;
-            playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [] };
+            playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [], receiveItemDown: [], receiveItemUp: [], receiveItemLeft: [], receiveItemRight: [] };
             playerAnimMirrors = {};
             playerUpdateGrid();
             playerDrawCanvas();
@@ -15307,11 +15352,34 @@
         }
 
         function deleteItem(index) {
-            if (!confirm('Delete this item?')) return;
+            // Wave 5: warn about downstream references that will be cleaned up.
+            const placedCount = placedItems.filter(p => p && p.itemIndex === index).length;
+            const shopRefs = Array.isArray(shops) ? shops.reduce((n, s) => {
+                if (!s) return n;
+                const inv = (s.inventory || []).filter(i => i && i.itemIndex === index).length;
+                const buy = (s.buyList || []).filter(i => i && i.itemIndex === index).length;
+                return n + inv + buy;
+            }, 0) : 0;
+            const msg = (placedCount || shopRefs)
+                ? `Delete this item?\n\n${placedCount} placed instance(s) and ${shopRefs} shop entry/entries will also be cleaned up.`
+                : 'Delete this item?';
+            if (!confirm(msg)) return;
             items.splice(index, 1);
+            // Wave 5: reindex all downstream refs (placedItems, shops, animProps, NPC drops).
+            reindexItemReferences(index);
+            // itemImages object-map: delete + shift higher keys.
+            if (typeof itemImages !== 'undefined') {
+                delete itemImages[index];
+                const keys = Object.keys(itemImages).map(k => parseInt(k, 10)).filter(Number.isFinite).sort((a,b)=>a-b);
+                for (const k of keys) {
+                    if (k > index) { itemImages[k - 1] = itemImages[k]; delete itemImages[k]; }
+                }
+            }
             broadcastEdit({ editType: 'deleteItem', index: index });
             if (currentItemIndex >= items.length) currentItemIndex = items.length - 1;
             updateItemList();
+            if (typeof updatePlacedItemsList === 'function') updatePlacedItemsList();
+            if (typeof updateShopList === 'function') updateShopList();
             renderMap();
         }
 
@@ -16117,11 +16185,31 @@
                 delBtn.style.cssText = 'padding:4px 8px; font-size:10px; background:#a55;';
                 delBtn.onclick = (e) => {
                     e.stopPropagation();
-                    if (confirm('Delete "' + prop.name + '"?')) {
+                    // Wave 5: walk layers to count animTile cells that will be affected.
+                    let placedOnMaps = 0;
+                    try {
+                        for (const mName of Object.keys(maps || {})) {
+                            const m = maps[mName];
+                            if (!m || !Array.isArray(m.layers)) continue;
+                            for (const layer of m.layers) {
+                                if (!Array.isArray(layer)) continue;
+                                for (const row of layer) {
+                                    if (!Array.isArray(row)) continue;
+                                    for (const cell of row) {
+                                        if (cell && cell.type === 'animTile' && cell.propIndex === i) placedOnMaps++;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (_) {}
+                    const msg = placedOnMaps > 0
+                        ? `Delete "${prop.name}"?\n\n${placedOnMaps} placed tile(s) referencing this prop will also be removed.`
+                        : 'Delete "' + prop.name + '"?';
+                    if (confirm(msg)) {
                         const deleteIndex = i;
                         animatedProps.splice(deleteIndex, 1);
-                        placedAnimProps = placedAnimProps.filter(p => p.propIndex !== deleteIndex);
-                        placedAnimProps.forEach(p => { if (p.propIndex > deleteIndex) p.propIndex--; });
+                        // Wave 5: reindex every animTile cell in every map's every layer + legacy placedAnimProps.
+                        reindexAnimPropReferences(deleteIndex);
                         broadcastEdit({ editType: 'removeAnimProp', index: deleteIndex });
                         updateAnimPropListDisplay();
                         renderMap();
@@ -16330,6 +16418,136 @@
                 throw err;
             }
         }
+
+        // ===== Wave 3 feature: named builder saves (multiple IndexedDB slots) =====
+        function _slotKey(name) { return 'named:' + name; }
+
+        async function saveNamedProjectToDB(name, data) {
+            if (!name) throw new Error('save name required');
+            if (!projectDB) await initProjectDB();
+            return new Promise((resolve, reject) => {
+                const tx = projectDB.transaction('projects', 'readwrite');
+                tx.objectStore('projects').put(data, _slotKey(name));
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function loadNamedProjectFromDB(name) {
+            if (!projectDB) await initProjectDB();
+            return new Promise((resolve, reject) => {
+                const tx = projectDB.transaction('projects', 'readonly');
+                const request = tx.objectStore('projects').get(_slotKey(name));
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function deleteNamedProjectFromDB(name) {
+            if (!projectDB) await initProjectDB();
+            return new Promise((resolve, reject) => {
+                const tx = projectDB.transaction('projects', 'readwrite');
+                tx.objectStore('projects').delete(_slotKey(name));
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function listNamedProjects() {
+            if (!projectDB) await initProjectDB();
+            return new Promise((resolve, reject) => {
+                const tx = projectDB.transaction('projects', 'readonly');
+                const request = tx.objectStore('projects').getAllKeys();
+                request.onsuccess = () => {
+                    const all = request.result || [];
+                    resolve(all.filter(k => typeof k === 'string' && k.startsWith('named:'))
+                               .map(k => k.slice('named:'.length)));
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // Public: Save As… prompts for a name and writes to a new slot.
+        async function saveProjectAs() {
+            const defaultName = (typeof currentSaveName === 'string' && currentSaveName) ? currentSaveName : '';
+            const raw = prompt('Name this save:', defaultName);
+            if (raw === null) return;
+            const name = raw.trim();
+            if (!name) { alert('Name cannot be empty.'); return; }
+            try {
+                const existing = await loadNamedProjectFromDB(name);
+                if (existing && !confirm(`"${name}" already exists. Overwrite?`)) return;
+                const data = getProjectData();
+                data.saveName = name;
+                await saveNamedProjectToDB(name, data);
+                currentSaveName = name;
+                console.log('[SAVE] Saved as:', name);
+                alert('Saved as "' + name + '"');
+            } catch (e) {
+                console.error('[SAVE] saveProjectAs error:', e);
+                alert('Save failed — see console.');
+            }
+        }
+
+        // Public: opens a picker listing named saves with load/delete controls.
+        async function showNamedSavesPicker() {
+            try {
+                const names = (await listNamedProjects()).sort();
+                if (names.length === 0) { alert('No named saves yet. Use "Save As…" to create one.'); return; }
+                const picker = document.getElementById('namedSavesPicker');
+                if (!picker) return;
+                // Build DOM programmatically to avoid string-escaping pitfalls.
+                picker.innerHTML = '';
+                for (const n of names) {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex; gap:6px; margin:4px 0; align-items:center;';
+                    const label = document.createElement('span');
+                    label.style.cssText = 'flex:1; color:#4af; font-size:10px;';
+                    label.textContent = n;
+                    const loadBtn = document.createElement('button');
+                    loadBtn.className = 'retro-btn';
+                    loadBtn.style.cssText = 'font-size:9px; padding:3px 6px;';
+                    loadBtn.textContent = 'LOAD';
+                    loadBtn.onclick = () => loadNamedProject(n);
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'retro-btn';
+                    delBtn.style.cssText = 'font-size:9px; padding:3px 6px; background:#a55;';
+                    delBtn.textContent = '×';
+                    delBtn.onclick = () => deleteNamedProject(n);
+                    row.appendChild(label);
+                    row.appendChild(loadBtn);
+                    row.appendChild(delBtn);
+                    picker.appendChild(row);
+                }
+                picker.style.display = 'block';
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadNamedProject(name) {
+            try {
+                const data = await loadNamedProjectFromDB(name);
+                if (!data) { alert('Save "' + name + '" not found.'); return; }
+                currentSaveName = name;
+                await loadProject(data);
+                const picker = document.getElementById('namedSavesPicker');
+                if (picker) picker.style.display = 'none';
+            } catch (e) {
+                console.error('[LOAD] loadNamedProject error:', e);
+                alert('Load failed — see console.');
+            }
+        }
+
+        async function deleteNamedProject(name) {
+            if (!confirm('Delete save "' + name + '"? This cannot be undone.')) return;
+            try {
+                await deleteNamedProjectFromDB(name);
+                if (currentSaveName === name) currentSaveName = '';
+                showNamedSavesPicker();
+            } catch (e) { console.error(e); }
+        }
+
+        let currentSaveName = '';
+        // ===== end Wave 3 named-saves feature =====
 
         async function showStorageInfo() {
             const data = getProjectData();
@@ -18349,20 +18567,13 @@
                 collisionMasks: p.collisionMasks || {}
             }));
 
-            // Save all animated props
-            const animPropsData = animatedProps.map(prop => ({
-                name: prop.name,
-                spriteData: prop.spriteData,
-                frameWidth: prop.frameWidth,
-                frameHeight: prop.frameHeight,
-                frames: prop.frames,
-                type: prop.type,
-                fps: prop.fps,
-                collisionMasks: prop.collisionMasks || null,
-                splitLine: prop.splitLine || null,
-                giveItem: prop.giveItem || false,
-                giveItemIndex: prop.giveItemIndex ?? -1
-            }));
+            // Save all animated props — spread-with-strip so new fields round-trip without drift.
+            const animPropsData = animatedProps.map(prop => {
+                const copy = { ...prop };
+                delete copy._spriteImg;
+                delete copy.img;
+                return copy;
+            });
 
             // Save sounds
             const soundsData = sounds.map(s => ({
@@ -18399,23 +18610,14 @@
                 animatedProps: animPropsData,
                 currentAnimPropIndex,
                 placedAnimProps,
-                // Save NPCs
-                npcs: npcs.map(npc => ({
-                    name: npc.name,
-                    spriteData: npc.spriteData,
-                    frameWidth: npc.frameWidth,
-                    frameHeight: npc.frameHeight,
-                    animations: npc.animations,
-                    animMirrors: npc.animMirrors || {},
-                    fps: npc.fps,
-                    pingPong: npc.pingPong || false,
-                    collisionInsets: npc.collisionInsets || null,
-                    noShadow: npc.noShadow || false,
-                    shadowOffsetX: npc.shadowOffsetX ?? 0,
-                    shadowOffsetY: npc.shadowOffsetY ?? 4,
-                    shadowWidth: npc.shadowWidth ?? 0.35,
-                    shadowHeight: npc.shadowHeight ?? 0.12
-                })),
+                // Save NPCs — spread-with-strip (new fields round-trip automatically).
+                npcs: npcs.map(npc => {
+                    const copy = { ...npc };
+                    delete copy._spriteImg;
+                    delete copy._editorImg;
+                    delete copy.img;
+                    return copy;
+                }),
                 currentNpcIndex,
                 placedNpcs,
                 // Save player layer settings
@@ -18435,29 +18637,14 @@
                 polyLights,
                 // Save player sprite (legacy)
                 playerSpriteData,
-                // Player characters system
-                playerCharacters: playerCharacters.map(c => ({
-                    name: c.name,
-                    spriteData: c.spriteData, // Legacy single sheet
-                    spriteSheets: c.spriteSheets || (c.spriteData ? [c.spriteData] : []), // All sheets
-                    frameWidth: c.frameWidth,
-                    frameHeight: c.frameHeight,
-                    animations: c.animations,
-                    animMirrors: c.animMirrors || {},
-                    hitboxMasks: c.hitboxMasks || {},
-                    animFps: c.animFps || {},
-                    fps: c.fps || 8,
-                    pingPong: c.pingPong || false,
-                    attackMovement: c.attackMovement || 'stop',
-                    gameOverSoundIndex: c.gameOverSoundIndex !== undefined ? c.gameOverSoundIndex : -1,
-                    // Scale and shadow
-                    scale: c.scale || 1,
-                    noShadow: c.noShadow || false,
-                    shadowOffsetX: c.shadowOffsetX ?? 0,
-                    shadowOffsetY: c.shadowOffsetY ?? 4,
-                    shadowWidth: c.shadowWidth ?? 0.35,
-                    shadowHeight: c.shadowHeight ?? 0.12
-                })),
+                // Player characters — spread-with-strip so hitboxRange/hitboxWidth/etc. round-trip.
+                playerCharacters: playerCharacters.map(c => {
+                    const copy = { ...c };
+                    delete copy._spriteImg;
+                    delete copy._editorImg;
+                    delete copy.img;
+                    return copy;
+                }),
                 activePlayerIndex,
                 // Multi-map support
                 maps,
@@ -18466,36 +18653,32 @@
                 // Dialogs
                 dialogs,
                 placedDialogTiles,
-                // Items (interactive objects like chests)
-                items: items.map(item => ({
-                    id: item.id,
-                    name: item.name,
-                    spriteData: item.spriteData,
-                    frameWidth: item.frameWidth,
-                    frameHeight: item.frameHeight,
-                    frames: item.frames,
-                    fps: item.fps,
-                    idleFrame: item.idleFrame,
-                    maxStack: item.maxStack || 99
-                })),
+                // Items — spread-with-strip.
+                items: items.map(item => {
+                    const copy = { ...item };
+                    delete copy._spriteImg;
+                    delete copy.img;
+                    return copy;
+                }),
                 placedItems,
-                // Static objects (multi-tile props from tilesets)
-                staticObjects: staticObjects.map(obj => ({
-                    name: obj.name,
-                    spriteData: obj.spriteData,
-                    width: obj.width,
-                    height: obj.height,
-                    tilesetIndex: obj.tilesetIndex,
-                    sourceTiles: obj.sourceTiles,
-                    sourceOrigin: obj.sourceOrigin
-                })),
+                // Static objects — spread-with-strip.
+                staticObjects: staticObjects.map(obj => {
+                    const copy = { ...obj };
+                    delete copy._spriteImg;
+                    delete copy.img;
+                    return copy;
+                }),
                 placedStaticObjects,
                 // Quests
                 quests,
                 // Shops
                 shops,
                 placedShops,
-                startingGold
+                startingGold,
+                // Version tagging (Wave 1)
+                version: SAVE_SCHEMA_VERSION,
+                gameVersion: GAME_VERSION,
+                savedAt: Date.now()
             };
         }
 
@@ -18685,6 +18868,8 @@
 
         // Track builder co-op players in the room
         let builderPlayersInRoom = new Map(); // id -> {name, joinedAt}
+        let builderMyId = null;     // assigned by server in welcome
+        let isBuilderHost = false;  // true if I arrived to an empty room
 
         function connectBuilderMultiplayer(name, roomCode) {
             console.log('[BUILDER MP DEBUG] connectBuilderMultiplayer called with name:', name, 'roomCode:', roomCode);
@@ -18840,13 +19025,16 @@
 
             // Track players joining/leaving for room info
             if (data.type === 'welcome') {
+                builderMyId = data.yourId || null;
                 // Initial player list when we join
                 if (data.players) {
                     builderPlayersInRoom.clear();
                     data.players.forEach(p => {
                         builderPlayersInRoom.set(p.id, { name: p.name, joinedAt: Date.now() });
                     });
-                    console.log('[BUILDER MP] Players in room:', builderPlayersInRoom.size);
+                    // Empty room = I'm the host (source of truth for late joiners)
+                    isBuilderHost = (data.players.length === 0);
+                    console.log('[BUILDER MP] Players in room:', builderPlayersInRoom.size, '| Host:', isBuilderHost, '| MyId:', builderMyId);
                 }
                 return;
             }
@@ -18855,6 +19043,11 @@
                 if (data.player) {
                     builderPlayersInRoom.set(data.player.id, { name: data.player.name, joinedAt: Date.now() });
                     console.log('[BUILDER MP] Player joined:', data.player.name, '- Total:', builderPlayersInRoom.size);
+                    // Host auto-resyncs late joiners with full project state
+                    if (isBuilderHost) {
+                        console.log('[BUILDER MP] Host: auto-resyncing to late joiner', data.player.id);
+                        setTimeout(() => sendFullProject(data.player.id), 250);
+                    }
                 }
                 return;
             }
@@ -18874,116 +19067,63 @@
 
             // Handle edit messages from other builders
             if (data.type === 'builderEdit' && data.editType) {
+                // Directed message — skip if it's not meant for me
+                if (data.targetId && data.targetId !== builderMyId) {
+                    return;
+                }
                 console.log('[BUILDER MP DEBUG] >>> APPLYING REMOTE EDIT <<<', data.editType);
                 applyRemoteEdit(data);
             }
         }
 
-        function sendFullProject() {
+        function sendFullProject(targetId) {
             if (!builderSocket || !builderConnected) return;
 
-            // Save current map state first
+            // Wave 2 (R2): use canonical getProjectData() as the single source of truth.
+            // Ensures late joiners receive every field that save-to-disk receives.
             saveCurrentMapState();
+            const projectData = getProjectData();
 
-            // Create serializable project data (exclude non-serializable stuff like images)
-            const projectData = {
-                maps: {},
-                placedTriggers: placedTriggers,
-                placedNpcs: placedNpcs,
-                staticObjects: staticObjects.map(obj => ({
-                    name: obj.name,
-                    spriteData: obj.spriteData,
-                    width: obj.width,
-                    height: obj.height,
-                    tilesetIndex: obj.tilesetIndex,
-                    sourceTiles: obj.sourceTiles,
-                    sourceOrigin: obj.sourceOrigin
-                })),
-                placedStaticObjects: placedStaticObjects,
-                tileSounds: tileSounds,
-                pointLights: pointLights,
-                polyLights: polyLights,
-                tileCollisions: tileCollisions,
-                collisionMasks: collisionMasks,
-                tileSplitLines: tileSplitLines,
-                tileSplitLineFlipped: tileSplitLineFlipped,
-                animatedProps: animatedProps.map(p => {
-                    const copy = { ...p };
-                    delete copy._spriteImg; // Not serializable
-                    return copy;
-                }),
-                // Tilesets (with base64 data for image reload)
-                tilesets: tilesets.map(t => {
-                    let data = t.data;
-                    // If no data but we have an image, extract base64 from it
-                    if (!data && t.img) {
-                        try {
-                            const canvas = document.createElement('canvas');
-                            canvas.width = t.img.width;
-                            canvas.height = t.img.height;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(t.img, 0, 0);
-                            data = canvas.toDataURL('image/png');
-                            t.data = data; // Cache it for future
-                        } catch (e) {
-                            console.error('[BUILDER MP] Failed to extract tileset data:', e);
-                        }
+            // Extract tilesets for separate streaming (base64 images are huge — chunk them).
+            // getProjectData already produces {name, data} shape. If `data` missing but img exists, extract.
+            const tilesetsToSend = (projectData.tilesets || []).map((ts, i) => {
+                if (ts && ts.data) return ts;
+                const live = tilesets[i];
+                if (live && live.img) {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = live.img.width;
+                        canvas.height = live.img.height;
+                        canvas.getContext('2d').drawImage(live.img, 0, 0);
+                        const data = canvas.toDataURL('image/png');
+                        live.data = data;
+                        return { name: live.name, data: data };
+                    } catch (e) {
+                        console.error('[BUILDER MP] Failed to extract tileset data:', e);
                     }
-                    return { name: t.name, data: data };
-                }),
-                // NPC definitions (with spriteData for image reload)
-                npcs: npcs.map(n => {
-                    const copy = { ...n };
-                    delete copy._spriteImg; // Not serializable
-                    return copy;
-                }),
-                currentTilesetIndex: currentTilesetIndex,
-                currentMapName: currentMapName,
-                playerPreviewPos: playerPreviewPos,
-                spawnMapName: spawnMapName,
-                // Dialogs
-                dialogs: dialogs,
-                // Player characters
-                playerCharacters: playerCharacters.map(c => {
-                    const copy = { ...c };
-                    delete copy._spriteImg;
-                    return copy;
-                }),
-                activePlayerIndex: activePlayerIndex
-            };
+                }
+                return ts;
+            });
+            projectData.tilesets = []; // stripped from main payload
 
-            // Copy all maps (without image references)
-            for (const mapName in maps) {
-                // Note: collision data is global (per-tileset), saved at top level, not per-map
-                projectData.maps[mapName] = {
-                    layers: maps[mapName].layers,
-                    layerVisibility: maps[mapName].layerVisibility,
-                    layerNames: maps[mapName].layerNames,
-                    currentLayer: maps[mapName].currentLayer,
-                    mapCols: maps[mapName].mapCols,
-                    mapRows: maps[mapName].mapRows,
-                    cameraBounds: maps[mapName].cameraBounds
-                };
-            }
-
-            console.log('[BUILDER MP] Sending full project:');
-            console.log('[BUILDER MP] - Maps:', Object.keys(projectData.maps).length);
-            console.log('[BUILDER MP] - Tilesets:', projectData.tilesets.length);
-            console.log('[BUILDER MP] - NPCs:', projectData.npcs.length);
-            console.log('[BUILDER MP] - Triggers:', projectData.placedTriggers.length);
-
-            // Send tilesets separately in chunks (base64 images are huge)
-            const tilesetsToSend = projectData.tilesets;
-            projectData.tilesets = []; // Send empty, will send separately
+            console.log('[BUILDER MP] Sending full project (via getProjectData):');
+            console.log('[BUILDER MP] - Maps:', Object.keys(projectData.maps || {}).length);
+            console.log('[BUILDER MP] - Tilesets (streamed):', tilesetsToSend.length);
+            console.log('[BUILDER MP] - NPCs:', (projectData.npcs || []).length);
+            console.log('[BUILDER MP] - Items:', (projectData.items || []).length);
+            console.log('[BUILDER MP] - Sounds:', (projectData.sounds || []).length);
+            console.log('[BUILDER MP] - Triggers:', (projectData.placedTriggers || []).length);
+            console.log('[BUILDER MP] - Dialogs:', (projectData.dialogs || []).length);
 
             // Send main project first (without tileset data)
             // Wrap as builderEdit so server broadcasts it
             const mainMsg = JSON.stringify({
                 type: 'builderEdit',
                 editType: 'fullProject',
+                targetId: targetId || undefined,
                 project: projectData
             });
-            console.log('[BUILDER MP] Main project size:', (mainMsg.length / 1024).toFixed(1), 'KB');
+            console.log('[BUILDER MP] Main project size:', (mainMsg.length / 1024).toFixed(1), 'KB', targetId ? `-> ${targetId}` : '(broadcast)');
             builderSocket.send(mainMsg);
 
             // Send each tileset as a separate message
@@ -18993,6 +19133,7 @@
                     const tsMsg = JSON.stringify({
                         type: 'builderEdit',
                         editType: 'tilesetSync',
+                        targetId: targetId || undefined,
                         index: i,
                         name: ts.name,
                         data: ts.data
@@ -19010,15 +19151,20 @@
         }
 
         function loadFullProject(project) {
-            console.log('[BUILDER MP] Loading full project with maps:', Object.keys(project.maps));
+            console.log('[BUILDER MP] Loading full project with maps:', Object.keys(project.maps || {}));
+            project = migrateProjectData(project);
 
-            // Load maps
-            for (const mapName in project.maps) {
-                maps[mapName] = project.maps[mapName];
+            // Load maps — replace-not-merge so ghost maps from the previous session don't linger.
+            if (project.maps && typeof project.maps === 'object') {
+                maps = {};
+                for (const mapName in project.maps) {
+                    maps[mapName] = project.maps[mapName];
+                }
             }
 
             // Load triggers, NPCs, sounds, lights
             placedTriggers = project.placedTriggers || [];
+            ensureTriggerUids(placedTriggers); // Wave 7: stamp UIDs for MP-late-joiners with legacy data.
             placedNpcs = project.placedNpcs || [];
             // Ensure all placed NPCs have UIDs (for backwards compatibility)
             placedNpcs.forEach((npc, i) => {
@@ -19102,7 +19248,8 @@
                     if (npc.spriteData) {
                         const img = new Image();
                         img.onload = () => {
-                            npcs[i]._spriteImg = img;
+                            // Wave 8: canonical property is _editorImg (what the renderer reads).
+                            npcs[i]._editorImg = img;
                             updateNpcList();
                         };
                         img.src = npc.spriteData;
@@ -19144,6 +19291,96 @@
                 playerPreviewPos = project.playerPreviewPos;
             }
             spawnMapName = project.spawnMapName || spawnMapName;
+
+            // ===== Wave 2 (R2): complete the field list that getProjectData serializes =====
+            // Lighting settings — spread-with-defaults so future fields round-trip.
+            if (project.lightingSettings) {
+                lightingSettings = {
+                    playerLight: false,
+                    playerLightRadius: 4,
+                    ...project.lightingSettings
+                };
+                const playerLightEl = document.getElementById('playerLight');
+                const radiusEl = document.getElementById('playerLightRadius');
+                const radiusVal = document.getElementById('playerLightRadiusVal');
+                if (playerLightEl) playerLightEl.checked = !!lightingSettings.playerLight;
+                if (radiusEl) radiusEl.value = lightingSettings.playerLightRadius;
+                if (radiusVal) radiusVal.textContent = lightingSettings.playerLightRadius;
+            }
+
+            // Sounds library (with Audio decode) — was silently dropped before.
+            sounds = [];
+            if (Array.isArray(project.sounds)) {
+                project.sounds.forEach((s, i) => {
+                    sounds[i] = {
+                        name: s.name,
+                        data: s.data,
+                        duration: s.duration || 0,
+                        type: s.type || 'ambient'
+                    };
+                });
+            }
+            if (project.playerSounds) {
+                playerSounds = {
+                    walk: { soundIndex: -1, interval: 200, volume: 0.5, pitchVariation: 0.1 },
+                    attack: { soundIndex: -1, volume: 0.7, pitchVariation: 0.15, lengthVariation: 0 },
+                    inventoryOpen: { soundIndex: -1, volume: 0.5 },
+                    inventoryClose: { soundIndex: -1, volume: 0.5 },
+                    ...project.playerSounds
+                };
+            }
+            if (typeof updateSoundDropdown === 'function') updateSoundDropdown();
+            if (typeof updatePlayerSoundAssignments === 'function') updatePlayerSoundAssignments();
+
+            // Quest sounds library.
+            if (Array.isArray(project.questSounds)) {
+                questSounds = project.questSounds.map(s => ({ name: s.name, data: s.data }));
+            }
+
+            // Items + placed items.
+            items = [];
+            placedItems = Array.isArray(project.placedItems) ? project.placedItems : [];
+            if (typeof itemImages !== 'undefined') {
+                for (const k of Object.keys(itemImages)) delete itemImages[k];
+            }
+            if (Array.isArray(project.items)) {
+                project.items.forEach((itemData, i) => {
+                    items[i] = {
+                        ...itemData,
+                        id: itemData.id || ('item_' + i)
+                    };
+                    if (itemData.spriteData) {
+                        const img = new Image();
+                        img.onload = () => {
+                            if (typeof itemImages !== 'undefined') itemImages[i] = img;
+                            if (typeof updateItemsList === 'function') updateItemsList();
+                            if (typeof renderMap === 'function') renderMap();
+                        };
+                        img.src = itemData.spriteData;
+                    }
+                });
+            }
+            if (typeof updateItemsList === 'function') updateItemsList();
+
+            // Placed dialog tiles (signs).
+            placedDialogTiles = Array.isArray(project.placedDialogTiles) ? project.placedDialogTiles : [];
+
+            // Quests.
+            if (Array.isArray(project.quests)) {
+                quests = project.quests;
+                if (typeof renderQuestList === 'function') renderQuestList();
+            }
+
+            // Placed animated props.
+            if (Array.isArray(project.placedAnimProps)) {
+                placedAnimProps = project.placedAnimProps;
+            }
+
+            // Player layer index.
+            if (typeof project.playerLayerIndex === 'number') {
+                playerLayerIndex = project.playerLayerIndex;
+            }
+            // ===== end Wave 2 additions =====
 
             // Switch to the current map
             if (project.currentMapName && maps[project.currentMapName]) {
@@ -19306,24 +19543,35 @@
                     renderMap();
                     break;
 
-                case 'removeTrigger':
-                    // Remove trigger by index
-                    if (edit.index >= 0 && edit.index < placedTriggers.length) {
-                        placedTriggers.splice(edit.index, 1);
+                case 'removeTrigger': {
+                    // Wave 7: prefer UID lookup, fall back to index for pre-UID peers.
+                    let idx = (edit.uid) ? findTriggerByUid(edit.uid) : -1;
+                    if (idx < 0 && typeof edit.index === 'number' && edit.index >= 0 && edit.index < placedTriggers.length) idx = edit.index;
+                    if (idx >= 0 && idx < placedTriggers.length) {
+                        placedTriggers.splice(idx, 1);
                         updateTriggerList();
                         renderMap();
+                    } else if (edit.uid) {
+                        console.warn('[MP] removeTrigger: uid', edit.uid, 'not found locally');
                     }
                     break;
+                }
 
-                case 'updateTrigger':
-                    // Update existing trigger (spawn point, etc.)
-                    if (edit.index >= 0 && edit.index < placedTriggers.length) {
-                        placedTriggers[edit.index] = edit.trigger;
+                case 'updateTrigger': {
+                    // Wave 7: prefer UID lookup over fragile array-index.
+                    let idx = (edit.uid) ? findTriggerByUid(edit.uid) : -1;
+                    if (idx < 0 && edit.trigger && edit.trigger.uid) idx = findTriggerByUid(edit.trigger.uid);
+                    if (idx < 0 && typeof edit.index === 'number' && edit.index >= 0 && edit.index < placedTriggers.length) idx = edit.index;
+                    if (idx >= 0 && idx < placedTriggers.length && edit.trigger) {
+                        placedTriggers[idx] = edit.trigger;
                         updateTriggerList();
                         renderMap();
-                        console.log('[BUILDER MP] Remote trigger updated:', edit.index);
+                        console.log('[BUILDER MP] Remote trigger updated:', idx, edit.trigger.uid || '(no uid)');
+                    } else if (edit.uid || (edit.trigger && edit.trigger.uid)) {
+                        console.warn('[MP] updateTrigger: uid not found locally', edit.uid || edit.trigger.uid);
                     }
                     break;
+                }
 
                 case 'placeItem':
                     // Add item
@@ -19435,8 +19683,8 @@
                     // Another builder removed an animated prop
                     if (edit.index >= 0 && edit.index < animatedProps.length) {
                         animatedProps.splice(edit.index, 1);
-                        placedAnimProps = placedAnimProps.filter(p => p.propIndex !== edit.index);
-                        placedAnimProps.forEach(p => { if (p.propIndex > edit.index) p.propIndex--; });
+                        // Wave 5: also reindex animTile cells across every map's layers.
+                        reindexAnimPropReferences(edit.index);
                         updateAnimPropListDisplay();
                         renderMap();
                         console.log('[BUILDER MP] Remote anim prop removed:', edit.index);
@@ -19550,7 +19798,7 @@
                         if (edit.npc.spriteData) {
                             const img = new Image();
                             img.onload = () => {
-                                npcs[idx]._spriteImg = img;
+                                npcs[idx]._editorImg = img; // Wave 8: canonical property.
                                 updateNpcList();
                             };
                             img.src = edit.npc.spriteData;
@@ -19567,7 +19815,7 @@
                         if (edit.npc.spriteData) {
                             const img = new Image();
                             img.onload = () => {
-                                npcs[edit.index]._spriteImg = img;
+                                npcs[edit.index]._editorImg = img; // Wave 8: canonical property.
                                 updateNpcList();
                             };
                             img.src = edit.npc.spriteData;
@@ -19613,11 +19861,13 @@
                     // Another builder deleted a dialog
                     if (edit.index >= 0 && edit.index < dialogs.length) {
                         dialogs.splice(edit.index, 1);
-                        placedNpcs.forEach(n => {
-                            if (n.dialogIndex === edit.index) n.dialogIndex = -1;
-                            else if (n.dialogIndex > edit.index) n.dialogIndex--;
-                        });
+                        // Wave 5: full cascade — placedDialogTiles, placedNpcs.dialogIndex,
+                        // quest hook IDs, shops[].greetingDialogId.
+                        reindexDialogReferences(edit.index);
                         updateDialogList();
+                        if (typeof renderQuestList === 'function') renderQuestList();
+                        if (typeof updateShopList === 'function') updateShopList();
+                        renderMap();
                         console.log('[BUILDER MP] Remote dialog deleted:', edit.index);
                     }
                     break;
@@ -19682,21 +19932,17 @@
                     break;
 
                 case 'renameMap':
-                    // Another builder renamed a map
+                    // Wave 4: use shared cascade helper for complete coverage of .mapName-tagged
+                    // arrays + prefix-keyed dicts (covers items, dialogTiles, animProps, staticObjects,
+                    // shops, polyLights, tileSounds keys, pointLights keys).
                     if (maps[edit.oldName]) {
-                        maps[edit.newName] = maps[edit.oldName];
-                        delete maps[edit.oldName];
-                        placedTriggers.forEach(t => {
-                            if (t.mapName === edit.oldName) t.mapName = edit.newName;
-                            if (t.targetMap === edit.oldName) t.targetMap = edit.newName;
-                        });
-                        placedNpcs.forEach(npc => {
-                            if (npc.mapName === edit.oldName) npc.mapName = edit.newName;
-                        });
-                        if (currentMapName === edit.oldName) currentMapName = edit.newName;
-                        if (spawnMapName === edit.oldName) spawnMapName = edit.newName;
+                        cascadeMapRename(edit.oldName, edit.newName);
                         updateMapDropdowns();
                         updateTriggerList();
+                        if (typeof updatePlacedLightsList === 'function') updatePlacedLightsList();
+                        if (typeof updatePolyLightsList === 'function') updatePolyLightsList();
+                        if (typeof updatePlacedSoundsList === 'function') updatePlacedSoundsList();
+                        renderMap();
                         console.log('[BUILDER MP] Remote map renamed:', edit.oldName, '->', edit.newName);
                     }
                     break;
@@ -19845,12 +20091,17 @@
                     // Another builder deleted an item definition
                     if (edit.index >= 0 && edit.index < items.length) {
                         items.splice(edit.index, 1);
-                        itemImages.splice(edit.index, 1);
-                        // Update placedItems indices
-                        placedItems = placedItems.filter(pi => pi.itemIndex !== edit.index);
-                        placedItems.forEach(pi => { if (pi.itemIndex > edit.index) pi.itemIndex--; });
+                        // Wave 5: fan-out reindex (placedItems, shops, animProps, NPC drops).
+                        reindexItemReferences(edit.index);
+                        // itemImages object-map cleanup: delete + shift higher keys.
+                        delete itemImages[edit.index];
+                        const keys = Object.keys(itemImages).map(k => parseInt(k, 10)).filter(Number.isFinite).sort((a,b)=>a-b);
+                        for (const k of keys) {
+                            if (k > edit.index) { itemImages[k - 1] = itemImages[k]; delete itemImages[k]; }
+                        }
                         updateItemList();
-                        updatePlacedItemsList();
+                        if (typeof updatePlacedItemsList === 'function') updatePlacedItemsList();
+                        if (typeof updateShopList === 'function') updateShopList();
                         renderMap();
                         console.log('[BUILDER MP] Remote item definition deleted:', edit.index);
                     }
@@ -20059,6 +20310,92 @@
                         console.log('[BUILDER MP] Starting gold updated:', startingGold);
                     }
                     break;
+
+                // ===== Wave 3 additions =====
+                case 'setPlayerSpawn':
+                    if (typeof edit.x === 'number' && typeof edit.y === 'number') {
+                        playerPreviewPos = { x: edit.x, y: edit.y };
+                        if (edit.mapName) spawnMapName = edit.mapName;
+                        playerPreviewVisible = true;
+                        renderMap();
+                        console.log('[BUILDER MP] Spawn updated:', spawnMapName, edit.x, edit.y);
+                    }
+                    break;
+
+                case 'lightingSettings':
+                    if (edit.settings && typeof edit.settings === 'object') {
+                        Object.assign(lightingSettings, edit.settings);
+                        const playerLightEl = document.getElementById('playerLight');
+                        const radiusEl = document.getElementById('playerLightRadius');
+                        const radiusVal = document.getElementById('playerLightRadiusVal');
+                        if (playerLightEl) playerLightEl.checked = !!lightingSettings.playerLight;
+                        if (radiusEl) radiusEl.value = lightingSettings.playerLightRadius;
+                        if (radiusVal) radiusVal.textContent = lightingSettings.playerLightRadius;
+                        renderMap();
+                    }
+                    break;
+
+                case 'placeDialogTile':
+                    if (edit.tile) {
+                        placedDialogTiles.push(edit.tile);
+                        renderMap();
+                    }
+                    break;
+                case 'updateDialogTile':
+                    if (typeof edit.index === 'number' && edit.index >= 0 && edit.index < placedDialogTiles.length && edit.tile) {
+                        placedDialogTiles[edit.index] = edit.tile;
+                        renderMap();
+                    }
+                    break;
+                case 'removeDialogTile':
+                    if (typeof edit.index === 'number' && edit.index >= 0 && edit.index < placedDialogTiles.length) {
+                        placedDialogTiles.splice(edit.index, 1);
+                        renderMap();
+                    }
+                    break;
+
+                case 'addSound':
+                    if (edit.sound && edit.sound.name) {
+                        const insertIdx = (typeof edit.index === 'number') ? edit.index : sounds.length;
+                        sounds[insertIdx] = {
+                            name: edit.sound.name,
+                            data: edit.sound.data,
+                            duration: edit.sound.duration || 0,
+                            type: edit.sound.type || 'ambient'
+                        };
+                        if (typeof updateSoundDropdown === 'function') updateSoundDropdown();
+                        if (typeof updatePlayerSoundAssignments === 'function') updatePlayerSoundAssignments();
+                    }
+                    break;
+                case 'removeSound':
+                    if (typeof edit.index === 'number' && edit.index >= 0 && edit.index < sounds.length) {
+                        sounds.splice(edit.index, 1);
+                        reindexSoundReferences(edit.index);
+                        if (typeof updateSoundDropdown === 'function') updateSoundDropdown();
+                        if (typeof updatePlayerSoundAssignments === 'function') updatePlayerSoundAssignments();
+                        if (typeof updatePlacedSoundsList === 'function') updatePlacedSoundsList();
+                        renderMap();
+                    }
+                    break;
+                case 'setPlayerSound':
+                    if (edit.action && edit.config) {
+                        if (!playerSounds) playerSounds = {};
+                        playerSounds[edit.action] = { ...(playerSounds[edit.action] || {}), ...edit.config };
+                        if (typeof updatePlayerSoundAssignments === 'function') updatePlayerSoundAssignments();
+                    }
+                    break;
+
+                case 'deleteNpc':
+                    if (typeof edit.index === 'number' && edit.index >= 0 && edit.index < npcs.length) {
+                        npcs.splice(edit.index, 1);
+                        reindexNpcReferences(edit.index);
+                        if (typeof updateNpcList === 'function') updateNpcList();
+                        if (typeof updatePlacedNpcList === 'function') updatePlacedNpcList();
+                        renderMap();
+                        console.log('[BUILDER MP] NPC definition deleted:', edit.index);
+                    }
+                    break;
+                // ===== end Wave 3 additions =====
             }
         }
 
@@ -20112,6 +20449,13 @@
                     break;
                 case 'collisionMask':
                     collisionMasks[edit.key] = edit.mask;
+                    break;
+                default:
+                    // Wave 2 (R1): unknown editTypes in a batch fall through to the full dispatcher.
+                    // Previously these were silently dropped. Now they're applied correctly;
+                    // the per-edit renderMap calls are minor perf cost in a 250ms batch window.
+                    console.warn('[MP] batch delegating to full dispatcher:', edit.editType);
+                    try { applyRemoteEdit(edit); } catch (e) { console.error('[MP] delegate failed:', e, edit); }
                     break;
             }
         }
@@ -20483,7 +20827,19 @@
             sounds = [];
             tileSounds = {};
             pointLights = {};
+            polyLights = [];
             dialogs = [];
+            placedDialogTiles = [];
+            items = [];
+            placedItems = [];
+            staticObjects = [];
+            placedStaticObjects = [];
+            quests = [];
+            questSounds = [];
+            shops = [];
+            placedShops = [];
+            startingGold = 100;
+            tileSplitLineFlipped = {};
 
             // Initialize empty layer grid
             for (let y = 0; y < mapRows; y++) {
@@ -20505,7 +20861,7 @@
             // If no data passed, load from IndexedDB (or migrate from localStorage)
             let p;
             if (projectData) {
-                p = projectData;
+                p = migrateProjectData(projectData);
             } else {
                 // Try IndexedDB first
                 try {
@@ -20634,16 +20990,20 @@
                 console.log('Loading', p.animatedProps.length, 'animated props');
                 let propsLoaded = 0;
                 p.animatedProps.forEach((propData, i) => {
+                    // Spread-with-strip + legacy-compat migration for singular collisionMask
+                    const legacyMask = (!propData.collisionMasks && propData.collisionMask)
+                        ? { 0: propData.collisionMask } : null;
                     animatedProps[i] = {
-                        name: propData.name,
-                        spriteData: propData.spriteData,
+                        ...propData,
                         frameWidth: propData.frameWidth || 16,
                         frameHeight: propData.frameHeight || 16,
                         frames: propData.frames || [],
                         type: propData.type || 'loop',
                         fps: propData.fps || 8,
-                        collisionMask: propData.collisionMask || null,
-                        splitLine: propData.splitLine || null
+                        collisionMasks: propData.collisionMasks || legacyMask,
+                        splitLine: propData.splitLine || null,
+                        giveItem: propData.giveItem || false,
+                        giveItemIndex: propData.giveItemIndex ?? -1
                     };
 
                     // Load sprite sheet image if present
@@ -20810,11 +21170,12 @@
                 questSounds = [];
             }
 
-            // Load lighting settings
+            // Load lighting settings — spread with defaults so unknown keys round-trip.
             if (p.lightingSettings) {
                 lightingSettings = {
-                    playerLight: p.lightingSettings.playerLight || false,
-                    playerLightRadius: p.lightingSettings.playerLightRadius || 4
+                    playerLight: false,
+                    playerLightRadius: 4,
+                    ...p.lightingSettings
                 };
                 // Update UI to match loaded settings
                 const playerLightEl = document.getElementById('playerLight');
@@ -20843,6 +21204,7 @@
 
             // Load triggers
             placedTriggers = p.placedTriggers || [];
+            ensureTriggerUids(placedTriggers); // Wave 7: stamp UIDs on legacy saves so runtime lookups work.
             console.log('Loaded', placedTriggers.length, 'triggers');
             updateDoorNumberDropdown();
 
@@ -20906,6 +21268,18 @@
             if (p.playerCharacters && p.playerCharacters.length > 0) {
                 p.playerCharacters.forEach((char, i) => {
                     playerCharacters[i] = { ...char };
+                    // Wave 1: shadow-unit migration — player chars canonicalize on integer percent.
+                    // Legacy decimal values (< 1) get multiplied by 100 and a console warn is logged.
+                    const sw = playerCharacters[i].shadowWidth;
+                    if (typeof sw === 'number' && sw > 0 && sw < 1) {
+                        console.warn('[MIGRATE] player[' + i + '].shadowWidth', sw, '-> integer percent', Math.round(sw * 100));
+                        playerCharacters[i].shadowWidth = Math.round(sw * 100);
+                    }
+                    const sh = playerCharacters[i].shadowHeight;
+                    if (typeof sh === 'number' && sh > 0 && sh < 1) {
+                        console.warn('[MIGRATE] player[' + i + '].shadowHeight', sh, '-> integer percent', Math.round(sh * 100));
+                        playerCharacters[i].shadowHeight = Math.round(sh * 100);
+                    }
                     if (char.spriteData) {
                         const img = new Image();
                         img.onload = () => {
@@ -20919,6 +21293,52 @@
                 console.log('Loaded', playerCharacters.length, 'player characters, active:', activePlayerIndex);
             }
             updatePlayerList();
+
+            // ===== Wave 1 orphan-purge pass — runs after all state is loaded =====
+            try {
+                // Triggers: drop any whose targetMap references a non-existent map.
+                if (Array.isArray(placedTriggers) && maps) {
+                    const before = placedTriggers.length;
+                    placedTriggers = placedTriggers.filter(t => {
+                        if (!t) return false;
+                        const homeOk = !t.mapName || maps[t.mapName];
+                        const targetOk = !t.targetMap || maps[t.targetMap];
+                        if (!homeOk || !targetOk) console.warn('[LOAD] purged orphan trigger:', t);
+                        return homeOk && targetOk;
+                    });
+                    if (placedTriggers.length < before) console.warn('[LOAD] dropped', before - placedTriggers.length, 'orphan trigger(s)');
+                }
+                // spawnMapName: if it points at a deleted map, repair it.
+                if (spawnMapName && maps && !maps[spawnMapName]) {
+                    const remaining = Object.keys(maps);
+                    const repair = remaining[0] || 'main';
+                    console.warn('[LOAD] spawnMapName', spawnMapName, 'missing; repaired to', repair);
+                    spawnMapName = repair;
+                }
+                // Dangling soundIndex refs: clamp to -1.
+                const nSounds = Array.isArray(sounds) ? sounds.length : 0;
+                if (typeof tileSounds === 'object' && tileSounds) {
+                    for (const k of Object.keys(tileSounds)) {
+                        const e = tileSounds[k];
+                        if (e && typeof e.soundIndex === 'number' && (e.soundIndex < 0 || e.soundIndex >= nSounds)) {
+                            if (e.soundIndex !== -1) console.warn('[LOAD] dangling tileSound key', k, '-> soundIndex', e.soundIndex);
+                            e.soundIndex = -1;
+                        }
+                    }
+                }
+                if (typeof playerSounds === 'object' && playerSounds) {
+                    for (const action of Object.keys(playerSounds)) {
+                        const cfg = playerSounds[action];
+                        if (cfg && typeof cfg.soundIndex === 'number' && (cfg.soundIndex < 0 || cfg.soundIndex >= nSounds)) {
+                            if (cfg.soundIndex !== -1) console.warn('[LOAD] dangling playerSound', action, '-> soundIndex', cfg.soundIndex);
+                            cfg.soundIndex = -1;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('[LOAD] orphan-purge pass failed:', err);
+            }
+            // ===== end Wave 1 orphan-purge =====
 
             // Load tilesets (new format with multiple tilesets)
             if (p.tilesets && p.tilesets.length > 0) {
@@ -21037,6 +21457,301 @@
             map = layers[currentLayer];
         }
 
+        // ===== Wave 0 helper stubs (to be called by later waves) =====
+        // Rekey every key `${oldPrefix}:*` in `dict` to `${newPrefix}:*`. In place.
+        function rekeyPrefix(dict, oldPrefix, newPrefix) {
+            if (!dict || oldPrefix === newPrefix) return;
+            const oldP = oldPrefix + ':';
+            const newP = newPrefix + ':';
+            for (const k of Object.keys(dict)) {
+                if (k.startsWith(oldP)) {
+                    const rest = k.slice(oldP.length);
+                    dict[newP + rest] = dict[k];
+                    delete dict[k];
+                }
+            }
+        }
+
+        // Cascade map rename across every known data structure that references a map by name.
+        // Safe to call from local rename, applyRemoteEdit, applyRemoteEditNoRender, applyLiveEdit.
+        function cascadeMapRename(oldName, newName) {
+            if (!oldName || !newName || oldName === newName) return;
+            if (typeof maps !== 'undefined' && maps && maps[oldName]) {
+                maps[newName] = maps[oldName];
+                delete maps[oldName];
+            }
+            const mapNameArrays = [
+                (typeof placedTriggers !== 'undefined') ? placedTriggers : null,
+                (typeof placedNpcs !== 'undefined') ? placedNpcs : null,
+                (typeof placedItems !== 'undefined') ? placedItems : null,
+                (typeof placedDialogTiles !== 'undefined') ? placedDialogTiles : null,
+                (typeof placedAnimProps !== 'undefined') ? placedAnimProps : null,
+                (typeof placedStaticObjects !== 'undefined') ? placedStaticObjects : null,
+                (typeof placedShops !== 'undefined') ? placedShops : null
+            ];
+            for (const arr of mapNameArrays) {
+                if (!Array.isArray(arr)) continue;
+                for (const e of arr) {
+                    if (e && e.mapName === oldName) e.mapName = newName;
+                }
+            }
+            if (typeof placedTriggers !== 'undefined' && Array.isArray(placedTriggers)) {
+                for (const t of placedTriggers) {
+                    if (t && t.targetMap === oldName) t.targetMap = newName;
+                }
+            }
+            if (typeof polyLights !== 'undefined' && Array.isArray(polyLights)) {
+                for (const p of polyLights) {
+                    if (p && p.mapName === oldName) p.mapName = newName;
+                }
+            }
+            if (typeof tileSounds !== 'undefined') rekeyPrefix(tileSounds, oldName, newName);
+            if (typeof pointLights !== 'undefined') rekeyPrefix(pointLights, oldName, newName);
+            if (typeof currentMapName !== 'undefined' && currentMapName === oldName) currentMapName = newName;
+            if (typeof spawnMapName !== 'undefined' && spawnMapName === oldName) spawnMapName = newName;
+        }
+
+        // Cascade map delete. Drops every record tagged with this map plus any trigger targeting it.
+        // Repairs spawnMapName if it pointed at the deleted map.
+        function cascadeMapDelete(name) {
+            if (!name) return;
+            if (typeof placedTriggers !== 'undefined' && Array.isArray(placedTriggers)) {
+                placedTriggers = placedTriggers.filter(t => t && t.mapName !== name && t.targetMap !== name);
+            }
+            const mapNameArrayNames = ['placedNpcs','placedItems','placedDialogTiles','placedAnimProps','placedStaticObjects','placedShops'];
+            for (const varName of mapNameArrayNames) {
+                try {
+                    const arr = eval(varName);
+                    if (Array.isArray(arr)) {
+                        // Filter in place by reassigning via window when possible; else splice.
+                        for (let i = arr.length - 1; i >= 0; i--) {
+                            if (arr[i] && arr[i].mapName === name) arr.splice(i, 1);
+                        }
+                    }
+                } catch (_) {}
+            }
+            if (typeof polyLights !== 'undefined' && Array.isArray(polyLights)) {
+                for (let i = polyLights.length - 1; i >= 0; i--) {
+                    if (polyLights[i] && polyLights[i].mapName === name) polyLights.splice(i, 1);
+                }
+            }
+            if (typeof tileSounds !== 'undefined') {
+                const pref = name + ':';
+                for (const k of Object.keys(tileSounds)) if (k.startsWith(pref)) delete tileSounds[k];
+            }
+            if (typeof pointLights !== 'undefined') {
+                const pref = name + ':';
+                for (const k of Object.keys(pointLights)) if (k.startsWith(pref)) delete pointLights[k];
+            }
+            if (typeof maps !== 'undefined' && maps) delete maps[name];
+            if (typeof spawnMapName !== 'undefined' && spawnMapName === name) {
+                const remaining = (typeof maps !== 'undefined' && maps) ? Object.keys(maps) : [];
+                spawnMapName = remaining[0] || 'main';
+            }
+        }
+
+        // Reindex helpers — called by Wave 5 delete paths. No-ops until wired.
+        function reindexNpcReferences(deletedIndex) {
+            if (typeof placedNpcs === 'undefined' || !Array.isArray(placedNpcs)) return;
+            for (let i = placedNpcs.length - 1; i >= 0; i--) {
+                const p = placedNpcs[i];
+                if (!p) continue;
+                if (p.npcIndex === deletedIndex) placedNpcs.splice(i, 1);
+                else if (p.npcIndex > deletedIndex) p.npcIndex--;
+            }
+        }
+
+        function reindexItemReferences(deletedIndex) {
+            if (typeof placedItems !== 'undefined' && Array.isArray(placedItems)) {
+                for (let i = placedItems.length - 1; i >= 0; i--) {
+                    const p = placedItems[i];
+                    if (!p) continue;
+                    if (p.itemIndex === deletedIndex) placedItems.splice(i, 1);
+                    else if (p.itemIndex > deletedIndex) p.itemIndex--;
+                }
+            }
+            if (typeof shops !== 'undefined' && Array.isArray(shops)) {
+                for (const s of shops) {
+                    if (!s) continue;
+                    for (const listName of ['inventory','buyList']) {
+                        const list = s[listName];
+                        if (!Array.isArray(list)) continue;
+                        for (let i = list.length - 1; i >= 0; i--) {
+                            const it = list[i];
+                            if (!it) continue;
+                            if (it.itemIndex === deletedIndex) list.splice(i, 1);
+                            else if (it.itemIndex > deletedIndex) it.itemIndex--;
+                        }
+                    }
+                }
+            }
+            if (typeof animatedProps !== 'undefined' && Array.isArray(animatedProps)) {
+                for (const p of animatedProps) {
+                    if (!p) continue;
+                    if (p.giveItemIndex === deletedIndex) { p.giveItem = false; p.giveItemIndex = -1; }
+                    else if (p.giveItemIndex > deletedIndex) p.giveItemIndex--;
+                }
+            }
+            if (typeof placedAnimProps !== 'undefined' && Array.isArray(placedAnimProps)) {
+                for (const p of placedAnimProps) {
+                    if (!p) continue;
+                    if (p.instanceItemIndex === deletedIndex) p.instanceItemIndex = -1;
+                    else if (p.instanceItemIndex > deletedIndex) p.instanceItemIndex--;
+                }
+            }
+            if (typeof placedNpcs !== 'undefined' && Array.isArray(placedNpcs)) {
+                for (const n of placedNpcs) {
+                    if (!n || !Array.isArray(n.dropItems)) continue;
+                    for (let i = n.dropItems.length - 1; i >= 0; i--) {
+                        const d = n.dropItems[i];
+                        if (!d) continue;
+                        if (d.itemIndex === deletedIndex) n.dropItems.splice(i, 1);
+                        else if (d.itemIndex > deletedIndex) d.itemIndex--;
+                    }
+                }
+            }
+        }
+
+        function reindexDialogReferences(deletedIndex) {
+            const shift = (v) => {
+                const n = Number(v);
+                if (!Number.isFinite(n)) return v;
+                if (n === deletedIndex) return '';
+                if (n > deletedIndex) return String(n - 1);
+                return v;
+            };
+            if (typeof placedDialogTiles !== 'undefined' && Array.isArray(placedDialogTiles)) {
+                for (let i = placedDialogTiles.length - 1; i >= 0; i--) {
+                    const t = placedDialogTiles[i];
+                    if (!t) continue;
+                    if (t.dialogIndex === deletedIndex) placedDialogTiles.splice(i, 1);
+                    else if (t.dialogIndex > deletedIndex) t.dialogIndex--;
+                }
+            }
+            if (typeof placedNpcs !== 'undefined' && Array.isArray(placedNpcs)) {
+                for (const n of placedNpcs) {
+                    if (!n) continue;
+                    if (n.dialogIndex === deletedIndex) n.dialogIndex = -1;
+                    else if (typeof n.dialogIndex === 'number' && n.dialogIndex > deletedIndex) n.dialogIndex--;
+                }
+            }
+            if (typeof quests !== 'undefined' && Array.isArray(quests)) {
+                for (const q of quests) {
+                    if (!q) continue;
+                    for (const f of ['startDialogId','activeDialogId','completeDialogId','declineDialogId']) {
+                        if (q[f] !== undefined && q[f] !== null && q[f] !== '') q[f] = shift(q[f]);
+                    }
+                }
+            }
+            if (typeof shops !== 'undefined' && Array.isArray(shops)) {
+                for (const s of shops) {
+                    if (!s) continue;
+                    if (s.greetingDialogId !== undefined && s.greetingDialogId !== null && s.greetingDialogId !== '') {
+                        s.greetingDialogId = shift(s.greetingDialogId);
+                    }
+                }
+            }
+        }
+
+        function reindexSoundReferences(deletedIndex) {
+            if (typeof tileSounds !== 'undefined') {
+                for (const k of Object.keys(tileSounds)) {
+                    const e = tileSounds[k];
+                    if (!e) continue;
+                    if (e.soundIndex === deletedIndex) delete tileSounds[k];
+                    else if (e.soundIndex > deletedIndex) e.soundIndex--;
+                }
+            }
+            if (typeof playerSounds !== 'undefined' && playerSounds) {
+                for (const action of Object.keys(playerSounds)) {
+                    const cfg = playerSounds[action];
+                    if (!cfg) continue;
+                    if (cfg.soundIndex === deletedIndex) cfg.soundIndex = -1;
+                    else if (cfg.soundIndex > deletedIndex) cfg.soundIndex--;
+                }
+            }
+        }
+
+        function reindexTilesetReferences(deletedIndex) {
+            // Rebuild each tileset-prefixed dict excluding the deleted prefix; shift higher indices down.
+            const dicts = [];
+            if (typeof tileCollisions !== 'undefined') dicts.push(['tileCollisions', tileCollisions]);
+            if (typeof collisionMasks !== 'undefined') dicts.push(['collisionMasks', collisionMasks]);
+            if (typeof tileSplitLines !== 'undefined') dicts.push(['tileSplitLines', tileSplitLines]);
+            if (typeof tileSplitLineFlipped !== 'undefined') dicts.push(['tileSplitLineFlipped', tileSplitLineFlipped]);
+            for (const [name, dict] of dicts) {
+                const rebuilt = {};
+                for (const k of Object.keys(dict)) {
+                    const colonIdx = k.indexOf(':');
+                    if (colonIdx < 0) { rebuilt[k] = dict[k]; continue; }
+                    const idx = parseInt(k.slice(0, colonIdx), 10);
+                    const rest = k.slice(colonIdx);
+                    if (!Number.isFinite(idx)) { rebuilt[k] = dict[k]; continue; }
+                    if (idx === deletedIndex) continue;
+                    if (idx > deletedIndex) rebuilt[(idx - 1) + rest] = dict[k];
+                    else rebuilt[k] = dict[k];
+                }
+                // In-place replace keys
+                for (const k of Object.keys(dict)) delete dict[k];
+                Object.assign(dict, rebuilt);
+            }
+        }
+
+        function reindexAnimPropReferences(deletedIndex) {
+            // Walks every map's every layer's every cell; drops or decrements animTile cells.
+            if (typeof maps === 'undefined' || !maps) return;
+            for (const mapName of Object.keys(maps)) {
+                const m = maps[mapName];
+                if (!m || !Array.isArray(m.layers)) continue;
+                for (const layer of m.layers) {
+                    if (!Array.isArray(layer)) continue;
+                    for (const row of layer) {
+                        if (!Array.isArray(row)) continue;
+                        for (let x = 0; x < row.length; x++) {
+                            const cell = row[x];
+                            if (!cell || cell.type !== 'animTile') continue;
+                            if (cell.propIndex === deletedIndex) row[x] = null;
+                            else if (cell.propIndex > deletedIndex) cell.propIndex--;
+                        }
+                    }
+                }
+            }
+            if (typeof placedAnimProps !== 'undefined' && Array.isArray(placedAnimProps)) {
+                for (let i = placedAnimProps.length - 1; i >= 0; i--) {
+                    const p = placedAnimProps[i];
+                    if (!p) continue;
+                    if (p.propIndex === deletedIndex) placedAnimProps.splice(i, 1);
+                    else if (p.propIndex > deletedIndex) p.propIndex--;
+                }
+            }
+        }
+
+        // Wave 7: trigger UID helpers. Index-based ID is fragile under concurrent edits.
+        function findTriggerByUid(uid) {
+            if (!uid || typeof placedTriggers === 'undefined' || !Array.isArray(placedTriggers)) return -1;
+            return placedTriggers.findIndex(t => t && t.uid === uid);
+        }
+
+        function ensureTriggerUids(list) {
+            if (!Array.isArray(list)) return;
+            for (const t of list) {
+                if (t && !t.uid) {
+                    t.uid = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                        ? crypto.randomUUID()
+                        : ('trig_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+                }
+            }
+        }
+
+        // Save-format migration ladder. Bump SAVE_SCHEMA_VERSION and add a case per hop.
+        function migrateProjectData(p) {
+            if (!p || typeof p !== 'object') return p;
+            const v = (typeof p.version === 'number') ? p.version : 1;
+            // Future: if (v < 2) { ...migrate v1 -> v2... p.version = 2; }
+            return p;
+        }
+        // ===== end Wave 0 helpers =====
+
         // Create a new empty map
         function createMapData(name) {
             // Note: collision/split data is global (per-tileset), not per-map
@@ -21097,11 +21812,15 @@
                 const otherMap = mapNames.find(n => n !== mapName);
                 switchToMap(otherMap);
             }
-            delete maps[mapName];
 
-            // Remove triggers that are on or target this map
-            placedTriggers = placedTriggers.filter(t => t.mapName !== mapName && t.targetMap !== mapName);
+            // Wave 4: shared cascade handles placedTriggers + all other .mapName arrays,
+            // prefix-keyed dicts, and spawnMapName invariant repair.
+            cascadeMapDelete(mapName);
+
             updateDoorNumberDropdown();
+            if (typeof updatePlacedLightsList === 'function') updatePlacedLightsList();
+            if (typeof updatePolyLightsList === 'function') updatePolyLightsList();
+            if (typeof updatePlacedSoundsList === 'function') updatePlacedSoundsList();
 
             console.log('Deleted map:', mapName);
             return true;
@@ -21244,44 +21963,10 @@
                 return;
             }
 
-            // Rename in maps object
-            maps[cleanName] = maps[oldName];
-            delete maps[oldName];
-
-            // Update placedTriggers
-            placedTriggers.forEach(t => {
-                if (t.mapName === oldName) t.mapName = cleanName;
-                if (t.targetMap === oldName) t.targetMap = cleanName;
-            });
-
-            // Update placedNpcs
-            placedNpcs.forEach(npc => {
-                if (npc.mapName === oldName) npc.mapName = cleanName;
-            });
-
-            // Update tileSounds keys
-            const oldSoundKeys = Object.keys(tileSounds).filter(k => k.startsWith(oldName + ':'));
-            oldSoundKeys.forEach(oldKey => {
-                const newKey = cleanName + ':' + oldKey.substring(oldName.length + 1);
-                tileSounds[newKey] = tileSounds[oldKey];
-                delete tileSounds[oldKey];
-            });
-
-            // Update pointLights keys
-            const oldLightKeys = Object.keys(pointLights).filter(k => k.startsWith(oldName + ':'));
-            oldLightKeys.forEach(oldKey => {
-                const newKey = cleanName + ':' + oldKey.substring(oldName.length + 1);
-                pointLights[newKey] = pointLights[oldKey];
-                delete pointLights[oldKey];
-            });
-
-            // Update currentMapName
-            currentMapName = cleanName;
-
-            // Update spawnMapName if it matches
-            if (spawnMapName === oldName) {
-                spawnMapName = cleanName;
-            }
+            // Wave 4: single-source cascade covers maps object, placedTriggers (mapName+targetMap),
+            // placedNpcs, placedItems, placedDialogTiles, placedAnimProps, placedStaticObjects,
+            // placedShops, polyLights, tileSounds keys, pointLights keys, currentMapName, spawnMapName.
+            cascadeMapRename(oldName, cleanName);
 
             // Sync to other builders
             broadcastEdit({ editType: 'renameMap', oldName: oldName, newName: cleanName });
@@ -21500,6 +22185,7 @@
             if (isExternal) {
                 const externalUrl = document.getElementById('externalDestination').value;
                 const trigger = {
+                    uid: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('trig_' + Date.now() + '_' + Math.random().toString(36).slice(2)), // Wave 7
                     x: pendingDoorX,
                     y: pendingDoorY,
                     width: pendingTriggerWidth,
@@ -21558,6 +22244,7 @@
             const isInteract = doorType === 'interact';
             const useDoorAnim = isInteract && document.getElementById('useDoorAnimation').checked;
             const trigger = {
+                uid: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('trig_' + Date.now() + '_' + Math.random().toString(36).slice(2)), // Wave 7
                 x: pendingDoorX,
                 y: pendingDoorY,
                 width: pendingTriggerWidth,
@@ -21624,7 +22311,7 @@
             // Auto-select next available door number
             const usedNumbers = placedTriggers.map(t => t.doorNumber);
             let doorNumber = null;
-            for (let i = 1; i <= 10; i++) {
+            for (let i = 1; i <= 100; i++) { // Wave 3: raised cap from 10 -> 100 doors per project
                 if (!usedNumbers.includes(i)) {
                     doorNumber = i;
                     break;
@@ -21632,7 +22319,7 @@
             }
 
             if (doorNumber === null) {
-                alert('All door numbers (1-10) are in use! Delete an existing door first.');
+                alert('All door numbers (1-100) are in use! Delete an existing door first.');
                 return;
             }
 
@@ -21643,9 +22330,10 @@
         // Delete a trigger by index
         function deleteTrigger(index) {
             if (index >= 0 && index < placedTriggers.length) {
+                const uid = placedTriggers[index]?.uid; // Wave 7: stable ID for the broadcast
                 placedTriggers.splice(index, 1);
-                // Broadcast to co-op builders
-                broadcastEdit({ editType: 'removeTrigger', index: index });
+                // Broadcast to co-op builders (uid + index; receivers prefer uid)
+                broadcastEdit({ editType: 'removeTrigger', index: index, uid: uid });
                 updateTriggerList();
                 updateDoorNumberDropdown();
                 renderMap();
@@ -21684,7 +22372,7 @@
                 // Sync the trigger update
                 const triggerIndex = placedTriggers.indexOf(pendingTriggerForSpawn);
                 if (triggerIndex >= 0) {
-                    broadcastEdit({ editType: 'updateTrigger', index: triggerIndex, trigger: pendingTriggerForSpawn });
+                    broadcastEdit({ editType: 'updateTrigger', index: triggerIndex, uid: pendingTriggerForSpawn.uid, trigger: pendingTriggerForSpawn });
                 }
             }
 
@@ -21730,6 +22418,11 @@
                 pendingWalkOutTrigger.walkOutY = y;
                 console.log('=== WALK-OUT POINT SET ===');
                 console.log('[WALK-OUT] Door', pendingWalkOutTrigger.doorNumber, 'walk-out at (' + x + ', ' + y + ')');
+                // Wave 3: broadcast the walk-out update (was silently local-only).
+                const idx = placedTriggers.indexOf(pendingWalkOutTrigger);
+                if (idx >= 0) {
+                    broadcastEdit({ editType: 'updateTrigger', index: idx, uid: pendingWalkOutTrigger.uid, trigger: pendingWalkOutTrigger });
+                }
             }
 
             // Exit walk-out setting mode
@@ -21816,6 +22509,11 @@
                 pendingAnimTrigger.animTiles = animChanges;
                 console.log('=== DOOR ANIM SAVED ===');
                 console.log('[DOOR ANIM] Door', pendingAnimTrigger.doorNumber, 'has', animChanges.length, 'tile swaps');
+                // Wave 3: broadcast the animTiles update (was silently local-only).
+                const idx = placedTriggers.indexOf(pendingAnimTrigger);
+                if (idx >= 0) {
+                    broadcastEdit({ editType: 'updateTrigger', index: idx, uid: pendingAnimTrigger.uid, trigger: pendingAnimTrigger });
+                }
             }
 
             // Reset state
@@ -22095,7 +22793,7 @@
             if (page?.choices) {
                 page.choices.splice(index, 1);
                 if (page.choices.length === 0) {
-                    page.choices = null;
+                    page.choices = [];
                 }
                 renderDialogChoicesList();
             }
@@ -22281,13 +22979,16 @@
 
             dialogs.splice(index, 1);
 
-            // Update NPC dialog references
-            placedNpcs.forEach(n => {
-                if (n.dialogIndex > index) n.dialogIndex--;
-            });
+            // Wave 5: cascade reindex — placedDialogTiles, placedNpcs.dialogIndex,
+            // quest hook IDs (startDialogId/activeDialogId/completeDialogId/declineDialogId),
+            // shops[].greetingDialogId.
+            reindexDialogReferences(index);
 
             broadcastEdit({ editType: 'deleteDialog', index: index });
             updateDialogList();
+            if (typeof renderQuestList === 'function') renderQuestList();
+            if (typeof updateShopList === 'function') updateShopList();
+            renderMap();
         }
 
         function updateDialogList() {
@@ -23369,21 +24070,33 @@
                     }
                     break;
 
-                case 'removeTrigger':
-                    if (typeof placedTriggers !== 'undefined' && edit.index >= 0 && edit.index < placedTriggers.length) {
-                        placedTriggers.splice(edit.index, 1);
-                        console.log('[LIVE SYNC] Removed trigger at index', edit.index);
+                case 'removeTrigger': {
+                    // Wave 7: UID-preferred lookup in the test-game runtime.
+                    if (typeof placedTriggers === 'undefined' || !Array.isArray(placedTriggers)) break;
+                    let idx = -1;
+                    if (edit.uid) idx = placedTriggers.findIndex(t => t && t.uid === edit.uid);
+                    if (idx < 0 && typeof edit.index === 'number' && edit.index >= 0 && edit.index < placedTriggers.length) idx = edit.index;
+                    if (idx >= 0) {
+                        placedTriggers.splice(idx, 1);
+                        console.log('[LIVE SYNC] Removed trigger at', idx);
                         liveSyncNeedsRedraw = true;
                     }
                     break;
+                }
 
-                case 'updateTrigger':
-                    if (typeof placedTriggers !== 'undefined' && edit.index >= 0 && edit.index < placedTriggers.length && edit.trigger) {
-                        placedTriggers[edit.index] = edit.trigger;
-                        console.log('[LIVE SYNC] Updated trigger at index', edit.index);
+                case 'updateTrigger': {
+                    if (typeof placedTriggers === 'undefined' || !Array.isArray(placedTriggers) || !edit.trigger) break;
+                    let idx = -1;
+                    if (edit.uid) idx = placedTriggers.findIndex(t => t && t.uid === edit.uid);
+                    if (idx < 0 && edit.trigger.uid) idx = placedTriggers.findIndex(t => t && t.uid === edit.trigger.uid);
+                    if (idx < 0 && typeof edit.index === 'number' && edit.index >= 0 && edit.index < placedTriggers.length) idx = edit.index;
+                    if (idx >= 0) {
+                        placedTriggers[idx] = edit.trigger;
+                        console.log('[LIVE SYNC] Updated trigger at', idx);
                         liveSyncNeedsRedraw = true;
                     }
                     break;
+                }
 
                 case 'light':
                     if (typeof pointLights !== 'undefined' && edit.light) {
@@ -23549,8 +24262,277 @@
                     }
                     break;
 
+                // ===== Wave 6: test-game live-sync hardening =====
+                case 'renameMap': {
+                    // Critical: trigger routing breaks mid-test if maps get renamed without this.
+                    const oldName = edit.oldName, newName = edit.newName;
+                    if (!oldName || !newName) break;
+                    if (typeof mapsData !== 'undefined' && mapsData[oldName]) {
+                        mapsData[newName] = mapsData[oldName];
+                        delete mapsData[oldName];
+                    }
+                    if (typeof placedTriggersData !== 'undefined' && Array.isArray(placedTriggersData)) {
+                        for (const t of placedTriggersData) {
+                            if (t && t.mapName === oldName) t.mapName = newName;
+                            if (t && t.targetMap === oldName) t.targetMap = newName;
+                        }
+                    }
+                    const arrs = ['placedNpcsData','placedItemsData','placedDialogTilesData','placedAnimPropsData','placedStaticObjectsData','placedShopsData'];
+                    for (const name of arrs) {
+                        try { const a = eval(name);
+                            if (Array.isArray(a)) for (const e of a) { if (e && e.mapName === oldName) e.mapName = newName; }
+                        } catch(_){}
+                    }
+                    if (typeof tileSoundsData !== 'undefined' && tileSoundsData) {
+                        const oldP = oldName + ':', newP = newName + ':';
+                        for (const k of Object.keys(tileSoundsData)) {
+                            if (k.startsWith(oldP)) { tileSoundsData[newP + k.slice(oldP.length)] = tileSoundsData[k]; delete tileSoundsData[k]; }
+                        }
+                    }
+                    if (typeof pointLightsData !== 'undefined' && pointLightsData) {
+                        const oldP = oldName + ':', newP = newName + ':';
+                        for (const k of Object.keys(pointLightsData)) {
+                            if (k.startsWith(oldP)) { pointLightsData[newP + k.slice(oldP.length)] = pointLightsData[k]; delete pointLightsData[k]; }
+                        }
+                    }
+                    if (typeof currentGameMap !== 'undefined' && currentGameMap === oldName) currentGameMap = newName;
+                    if (typeof spawnMapName !== 'undefined' && spawnMapName === oldName) spawnMapName = newName;
+                    liveSyncNeedsRedraw = true;
+                    console.log('[LIVE SYNC] renameMap:', oldName, '->', newName);
+                    break;
+                }
+
+                case 'setPlayerSpawn':
+                    if (typeof edit.x === 'number' && typeof edit.y === 'number') {
+                        if (typeof playerPreviewPos !== 'undefined') playerPreviewPos = { x: edit.x, y: edit.y };
+                        if (edit.mapName && typeof spawnMapName !== 'undefined') spawnMapName = edit.mapName;
+                        console.log('[LIVE SYNC] spawn updated (takes effect on next respawn/transition):', edit.mapName, edit.x, edit.y);
+                    }
+                    break;
+
+                case 'lightingSettings':
+                    if (edit.settings && typeof lightingSettingsData !== 'undefined') {
+                        Object.assign(lightingSettingsData, edit.settings);
+                        liveSyncNeedsRedraw = true;
+                    }
+                    break;
+
+                case 'addSound':
+                case 'removeSound':
+                case 'setPlayerSound':
+                    // Library mutations — touch the test-game's data copy if present.
+                    if (edit.editType === 'addSound' && edit.sound && typeof soundsData !== 'undefined' && Array.isArray(soundsData)) {
+                        const insertIdx = (typeof edit.index === 'number') ? edit.index : soundsData.length;
+                        soundsData[insertIdx] = {
+                            name: edit.sound.name, data: edit.sound.data,
+                            duration: edit.sound.duration || 0, type: edit.sound.type || 'ambient'
+                        };
+                    } else if (edit.editType === 'removeSound' && typeof edit.index === 'number'
+                               && typeof soundsData !== 'undefined' && Array.isArray(soundsData)
+                               && edit.index >= 0 && edit.index < soundsData.length) {
+                        soundsData.splice(edit.index, 1);
+                        // Dangling-index repair on game side.
+                        if (typeof tileSoundsData !== 'undefined' && tileSoundsData) {
+                            for (const k of Object.keys(tileSoundsData)) {
+                                const e = tileSoundsData[k];
+                                if (!e) continue;
+                                if (e.soundIndex === edit.index) delete tileSoundsData[k];
+                                else if (e.soundIndex > edit.index) e.soundIndex--;
+                            }
+                        }
+                        if (typeof playerSoundsData !== 'undefined' && playerSoundsData) {
+                            for (const action of Object.keys(playerSoundsData)) {
+                                const c = playerSoundsData[action];
+                                if (c && typeof c.soundIndex === 'number') {
+                                    if (c.soundIndex === edit.index) c.soundIndex = -1;
+                                    else if (c.soundIndex > edit.index) c.soundIndex--;
+                                }
+                            }
+                        }
+                    } else if (edit.editType === 'setPlayerSound' && edit.action && edit.config
+                               && typeof playerSoundsData !== 'undefined' && playerSoundsData) {
+                        Object.assign(playerSoundsData[edit.action] || (playerSoundsData[edit.action] = {}), edit.config);
+                    }
+                    break;
+
+                case 'addTileset':
+                    if (edit.data && typeof tilesetImages !== 'undefined' && Array.isArray(tilesetImages)) {
+                        const img = new Image();
+                        img.onload = () => { tilesetImages.push(img); liveSyncNeedsRedraw = true; };
+                        img.src = edit.data;
+                    }
+                    break;
+
+                case 'deleteTileset':
+                    if (typeof edit.index === 'number' && typeof tilesetImages !== 'undefined' && Array.isArray(tilesetImages)) {
+                        tilesetImages.splice(edit.index, 1);
+                        // Walk all layers across all maps — null cells whose tilesetIndex equals the deleted, decrement others.
+                        if (typeof mapsData !== 'undefined' && mapsData) {
+                            for (const mName of Object.keys(mapsData)) {
+                                const md = mapsData[mName];
+                                if (!md || !Array.isArray(md.layers)) continue;
+                                for (const layer of md.layers) {
+                                    if (!Array.isArray(layer)) continue;
+                                    for (const row of layer) {
+                                        if (!Array.isArray(row)) continue;
+                                        for (let x = 0; x < row.length; x++) {
+                                            const cell = row[x];
+                                            if (!cell) continue;
+                                            if (cell.tilesetIndex === edit.index) row[x] = null;
+                                            else if (cell.tilesetIndex > edit.index) cell.tilesetIndex--;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        liveSyncNeedsRedraw = true;
+                    }
+                    break;
+
+                case 'moveLayerUp':
+                case 'moveLayerDown': {
+                    // Swap layers[i] with layers[i ± 1] on the current map only (test game viewport).
+                    const delta = (edit.editType === 'moveLayerUp') ? -1 : 1;
+                    const i = edit.index;
+                    if (typeof layers !== 'undefined' && Array.isArray(layers)
+                        && typeof i === 'number' && i + delta >= 0 && i + delta < layers.length) {
+                        const tmp = layers[i]; layers[i] = layers[i + delta]; layers[i + delta] = tmp;
+                        liveSyncNeedsRedraw = true;
+                    }
+                    break;
+                }
+
+                case 'expandMap': {
+                    // Broadcasted by Wave 3 auto-expand. Extend mapCols/mapRows on the target map.
+                    const mn = edit.mapName || (typeof currentGameMap !== 'undefined' ? currentGameMap : 'main');
+                    const dir = edit.direction || 'bottom';
+                    const amount = edit.amount || 10;
+                    if (typeof mapsData !== 'undefined' && mapsData && mapsData[mn]) {
+                        const md = mapsData[mn];
+                        if (dir === 'bottom' && Array.isArray(md.layers)) {
+                            md.mapRows = (md.mapRows || 0) + amount;
+                            for (const layer of md.layers) {
+                                if (!Array.isArray(layer)) continue;
+                                while (layer.length < md.mapRows) layer.push(new Array(md.mapCols || 0).fill(null));
+                            }
+                        } else if (dir === 'right' && Array.isArray(md.layers)) {
+                            md.mapCols = (md.mapCols || 0) + amount;
+                            for (const layer of md.layers) {
+                                if (!Array.isArray(layer)) continue;
+                                for (const row of layer) { while (row && row.length < md.mapCols) row.push(null); }
+                            }
+                        }
+                        if (mn === currentGameMap) {
+                            if (typeof mapCols !== 'undefined') mapCols = md.mapCols;
+                            if (typeof mapRows !== 'undefined') mapRows = md.mapRows;
+                            if (typeof layers !== 'undefined') layers = md.layers;
+                        }
+                        liveSyncNeedsRedraw = true;
+                    }
+                    break;
+                }
+
+                case 'addStaticObj':
+                    if (edit.obj && typeof staticObjectsData !== 'undefined' && Array.isArray(staticObjectsData)) {
+                        const copy = { ...edit.obj };
+                        const img = new Image();
+                        img.onload = () => { copy._spriteImg = img; liveSyncNeedsRedraw = true; };
+                        img.src = edit.obj.spriteData;
+                        staticObjectsData.push(copy);
+                    }
+                    break;
+
+                case 'removeStaticObj':
+                    if (typeof edit.index === 'number'
+                        && typeof staticObjectsData !== 'undefined' && Array.isArray(staticObjectsData)
+                        && edit.index >= 0 && edit.index < staticObjectsData.length) {
+                        staticObjectsData.splice(edit.index, 1);
+                        if (typeof placedStaticObjectsData !== 'undefined' && Array.isArray(placedStaticObjectsData)) {
+                            for (let j = placedStaticObjectsData.length - 1; j >= 0; j--) {
+                                const p = placedStaticObjectsData[j];
+                                if (!p) continue;
+                                if (p.objIndex === edit.index) placedStaticObjectsData.splice(j, 1);
+                                else if (p.objIndex > edit.index) p.objIndex--;
+                            }
+                        }
+                        liveSyncNeedsRedraw = true;
+                    }
+                    break;
+
+                case 'addAnimProp':
+                    if (edit.prop && typeof animatedPropsData !== 'undefined' && Array.isArray(animatedPropsData)) {
+                        animatedPropsData.push({ ...edit.prop });
+                        liveSyncNeedsRedraw = true;
+                    }
+                    break;
+
+                case 'updateAnimProp':
+                    if (typeof edit.index === 'number' && edit.prop
+                        && typeof animatedPropsData !== 'undefined' && Array.isArray(animatedPropsData)
+                        && edit.index >= 0 && edit.index < animatedPropsData.length) {
+                        animatedPropsData[edit.index] = { ...edit.prop };
+                        liveSyncNeedsRedraw = true;
+                    }
+                    break;
+
+                case 'removeAnimProp':
+                    if (typeof edit.index === 'number'
+                        && typeof animatedPropsData !== 'undefined' && Array.isArray(animatedPropsData)
+                        && edit.index >= 0 && edit.index < animatedPropsData.length) {
+                        animatedPropsData.splice(edit.index, 1);
+                        // Walk map layers dropping/shifting animTile cells referencing the deleted index.
+                        if (typeof mapsData !== 'undefined' && mapsData) {
+                            for (const mn of Object.keys(mapsData)) {
+                                const md = mapsData[mn];
+                                if (!md || !Array.isArray(md.layers)) continue;
+                                for (const layer of md.layers) {
+                                    if (!Array.isArray(layer)) continue;
+                                    for (const row of layer) {
+                                        if (!Array.isArray(row)) continue;
+                                        for (let x = 0; x < row.length; x++) {
+                                            const cell = row[x];
+                                            if (!cell || cell.type !== 'animTile') continue;
+                                            if (cell.propIndex === edit.index) row[x] = null;
+                                            else if (cell.propIndex > edit.index) cell.propIndex--;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        liveSyncNeedsRedraw = true;
+                    }
+                    break;
+
+                case 'addPlayerCharacter':
+                case 'updatePlayerCharacter':
+                case 'deletePlayerCharacter':
+                case 'setActivePlayer':
+                    // Player-character changes mid-test: stash on projectData so the next respawn picks them up.
+                    // Hot-swapping the active player's sprite sheets mid-run is complex; CLAUDE.md policy note:
+                    // acceptable gap, player sees change on respawn/map transition.
+                    try {
+                        if (edit.editType === 'addPlayerCharacter' && edit.character
+                            && Array.isArray(projectData.playerCharacters)) {
+                            projectData.playerCharacters.push({ ...edit.character });
+                        } else if (edit.editType === 'updatePlayerCharacter' && typeof edit.index === 'number'
+                                   && edit.character && Array.isArray(projectData.playerCharacters)
+                                   && edit.index >= 0 && edit.index < projectData.playerCharacters.length) {
+                            projectData.playerCharacters[edit.index] = { ...edit.character };
+                        } else if (edit.editType === 'deletePlayerCharacter' && typeof edit.index === 'number'
+                                   && Array.isArray(projectData.playerCharacters)
+                                   && edit.index >= 0 && edit.index < projectData.playerCharacters.length) {
+                            projectData.playerCharacters.splice(edit.index, 1);
+                        } else if (edit.editType === 'setActivePlayer' && typeof edit.index === 'number') {
+                            projectData.activePlayerIndex = edit.index;
+                        }
+                    } catch (_) {}
+                    break;
+                // ===== end Wave 6 additions =====
+
                 default:
-                    // Silently ignore unhandled edit types
+                    if (typeof edit.editType === 'string' && edit.editType.length) {
+                        console.warn('[LIVE] unhandled editType:', edit.editType);
+                    }
                     break;
             }
         }
@@ -24823,10 +25805,13 @@
                     playerShadowYOffset = 17 - (activePlayerChar.shadowOffsetY || 0);
                 }
                 if (activePlayerChar.shadowWidth !== undefined) {
-                    playerShadowWidth = Math.round(activePlayerChar.shadowWidth * 100);
+                    // Canonical unit is integer percent. Migrate legacy decimal values.
+                    const sw = activePlayerChar.shadowWidth;
+                    playerShadowWidth = Math.round(sw > 0 && sw < 1 ? sw * 100 : sw);
                 }
                 if (activePlayerChar.shadowHeight !== undefined) {
-                    playerShadowHeight = Math.round(activePlayerChar.shadowHeight * 100);
+                    const sh = activePlayerChar.shadowHeight;
+                    playerShadowHeight = Math.round(sh > 0 && sh < 1 ? sh * 100 : sh);
                 }
                 console.log('Using player character:', activePlayerChar.name, playerFrameWidth + 'x' + playerFrameHeight, 'attackMovement:', playerAttackMovement, 'scale:', playerScale);
             }
@@ -25544,6 +26529,8 @@
         // === TRIGGER/MAP SYSTEM ===
         // Use outer scope placedTriggers for live sync
         placedTriggers = projectData.placedTriggers || [];
+        // Wave 7: stamp missing UIDs so game-side updateTrigger/removeTrigger lookups work.
+        if (typeof ensureTriggerUids === 'function') ensureTriggerUids(placedTriggers);
         const mapsData = projectData.maps || {};
         const spawnMapNameData = projectData.spawnMapName || 'main';
         currentGameMap = spawnMapNameData; // Start on the map where spawn is set
@@ -25824,7 +26811,7 @@
         }
 
         // === LIGHTING SYSTEM ===
-        const currentMapName = 'main'; // Default map name for lighting keys
+        // Wave 8: removed dead shadow const for currentMapName; live map is currentGameMap.
         const lightingSettingsData = projectData.lightingSettings || {
             playerLight: false,
             playerLightRadius: 4
@@ -27705,7 +28692,7 @@ Item Receive Display:
                     // Broadcast to other players
                     if (mpSocket && mpConnected) {
                         mpSocket.send(JSON.stringify({
-                            type: 'itemPickup',
+                            type: 'itemInteract', // Wave 3: renamed from 'itemPickup' to match receiver
                             itemIndex: i,
                             x: placed.x,
                             y: placed.y,

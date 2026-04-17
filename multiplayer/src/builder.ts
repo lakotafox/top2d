@@ -26,6 +26,7 @@ export default class BuilderServer implements Party.Server {
 
     conn.send(JSON.stringify({
       type: 'welcome',
+      yourId: conn.id,
       players: Array.from(this.players.values()),
       message: `Welcome! You are builder ${this.players.size + 1}/${MAX_BUILDERS}`
     }));
@@ -53,32 +54,22 @@ export default class BuilderServer implements Party.Server {
           break;
         }
 
-        case 'update': {
-          // Builder edit - broadcast to all other clients
-          this.room.broadcast(JSON.stringify({
-            type: 'builderEdit',
-            senderId: sender.id,
-            editType: data.editType,
-            edits: data.edits,  // for batch
-            layer: data.layer,
-            x: data.x,
-            y: data.y,
-            cell: data.cell,
-            mapName: data.mapName,
-            key: data.key,
-            sound: data.sound,
-            light: data.light,
-            prop: data.prop,
-            npc: data.npc,
-            trigger: data.trigger,
-            triggerId: data.triggerId,
-            index: data.index,
-            value: data.value,
-            mask: data.mask,
-            collision: data.collision
-          }), [sender.id]);
+        case 'update':
+        case 'builderEdit': {
+          // Builder edit - passthrough all fields so future editTypes work
+          // without server changes. Overwrite type/senderId for consistency.
+          const payload = { ...data, type: 'builderEdit', senderId: sender.id };
 
-          console.log(`Builder edit: ${data.editType}${data.edits ? ` (batch of ${data.edits.length})` : ''}`);
+          if (data.targetId && typeof data.targetId === 'string') {
+            // Directed message (e.g. host auto-resync to a specific late joiner)
+            const target = [...this.room.getConnections()].find(c => c.id === data.targetId);
+            if (target) target.send(JSON.stringify(payload));
+          } else {
+            this.room.broadcast(JSON.stringify(payload), [sender.id]);
+          }
+
+          const sizeKb = (JSON.stringify(payload).length / 1024).toFixed(1);
+          console.log(`Builder edit: ${data.editType}${data.edits ? ` (batch of ${data.edits.length})` : ''}${data.targetId ? ` -> ${data.targetId}` : ''} [${sizeKb}KB]`);
           break;
         }
 
