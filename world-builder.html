@@ -26465,52 +26465,79 @@
         if (projectData.multiplayer) {
             mpPlayerName = projectData.multiplayer.playerName || 'Player';
             const roomCode = projectData.multiplayer.roomCode;
+            // Default desktop play uses the game party (/party/); the "join the live world"
+            // path points at the authoritative play party (/parties/play/) which relays
+            // positions the same way and also serves the world snapshot.
+            const partyPath = projectData.multiplayer.partyPath || 'party';
             console.log('[MP] Connecting as', mpPlayerName, 'to room', roomCode);
 
-            try {
-                // Default desktop play uses the game party (/party/); the "join the live world"
-                // path points at the authoritative play party (/parties/play/) which relays
-                // positions the same way and also serves the world snapshot.
-                const partyPath = projectData.multiplayer.partyPath || 'party';
-                mpSocket = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/' + partyPath + '/' + roomCode);
-
-                mpSocket.onopen = () => {
-                    console.log('[MP] Connected to server');
-                    mpConnected = true;
-                    // Send join message
-                    mpSocket.send(JSON.stringify({
-                        type: 'join',
-                        name: mpPlayerName,
-                        x: player.x,
-                        y: player.y,
-                        direction: player.direction,
-                        animation: 'idle',
-                        currentMap: currentGameMap,
-                        gameType: 'game2d'
-                    }));
-                };
-
-                mpSocket.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        logNetworkEvent(data.type || 'unknown', 'recv', data, event.data.length);
-                        handleMpMessage(data);
-                    } catch (e) {
-                        console.error('[MP] Error parsing message:', e);
-                    }
-                };
-
-                mpSocket.onclose = () => {
-                    console.log('[MP] Disconnected');
-                    mpConnected = false;
-                };
-
-                mpSocket.onerror = (err) => {
-                    console.error('[MP] WebSocket error:', err);
-                };
-            } catch (e) {
-                console.error('[MP] Failed to connect:', e);
+            // Resilient reconnect: phones drop sockets on background/network blips. Back off with
+            // jitter, re-join on reconnect, and clear stale avatars so we don't accumulate ghosts.
+            let mpReconnectDelay = 1000;
+            let mpReconnectTimer = null;
+            function scheduleMpReconnect() {
+                if (mpReconnectTimer) return;
+                const delay = Math.min(mpReconnectDelay, 15000) + Math.random() * 500;
+                mpReconnectTimer = setTimeout(() => {
+                    mpReconnectTimer = null;
+                    mpReconnectDelay = Math.min(mpReconnectDelay * 2, 15000);
+                    connectMpSocket();
+                }, delay);
             }
+            function connectMpSocket() {
+                try {
+                    mpSocket = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/' + partyPath + '/' + roomCode);
+
+                    mpSocket.onopen = () => {
+                        console.log('[MP] Connected to server');
+                        mpConnected = true;
+                        mpReconnectDelay = 1000; // reset backoff on a good connection
+                        mpSocket.send(JSON.stringify({
+                            type: 'join',
+                            name: mpPlayerName,
+                            x: player.x,
+                            y: player.y,
+                            direction: player.direction,
+                            animation: 'idle',
+                            currentMap: currentGameMap,
+                            gameType: 'game2d'
+                        }));
+                    };
+
+                    mpSocket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            logNetworkEvent(data.type || 'unknown', 'recv', data, event.data.length);
+                            handleMpMessage(data);
+                        } catch (e) {
+                            console.error('[MP] Error parsing message:', e);
+                        }
+                    };
+
+                    mpSocket.onclose = () => {
+                        console.log('[MP] Disconnected');
+                        mpConnected = false;
+                        otherPlayers.clear(); // drop ghosts; roster is rebuilt from welcome on reconnect
+                        scheduleMpReconnect();
+                    };
+
+                    mpSocket.onerror = (err) => {
+                        console.error('[MP] WebSocket error:', err);
+                    };
+                } catch (e) {
+                    console.error('[MP] Failed to connect:', e);
+                    scheduleMpReconnect();
+                }
+            }
+            connectMpSocket();
+
+            // Mobile browsers silently kill backgrounded sockets — reconnect on return to foreground.
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden && (!mpSocket || mpSocket.readyState > 1)) {
+                    mpReconnectDelay = 1000;
+                    scheduleMpReconnect();
+                }
+            });
         }
 
         function handleMpMessage(data) {
@@ -32455,7 +32482,7 @@ Item Receive Display:
             ctx.save();
             ctx.beginPath();
 
-            const splitYArray = Array.isArray(splitData) ? splitData : new Array(gridSize).fill(splitData);
+            const splitYArray = resolveSplitArray(splitData, gridSize);
 
             if (isFlipped) {
                 // FLIPPED: Trunk is ABOVE the split line (top portion is Y-sorted)
@@ -32559,7 +32586,7 @@ Item Receive Display:
                             ctx.save();
                             ctx.beginPath();
 
-                            const splitYArray = Array.isArray(splitData) ? splitData : new Array(gridSize).fill(splitData);
+                            const splitYArray = resolveSplitArray(splitData, gridSize);
 
                             if (isFlipped) {
                                 // FLIPPED: Canopy is BELOW the split line (bottom portion covers player)
@@ -33532,6 +33559,22 @@ Item Receive Display:
         let lastFrameTime = 0;
         let perfUpdateCounter = 0;
 
+        // Mobile render throttle: cap RENDERING to ~30fps while game LOGIC stays 60Hz (the
+        // fixed-timestep loop is untouched). Halves draw/GPU work on phones; desktop unaffected.
+        const __isMobileRender = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const __renderInterval = __isMobileRender ? 33 : 0; // ms between rendered frames
+        let __lastRenderTime = 0;
+
+        // Cache for canopy split arrays — avoids allocating new Array(gridSize) per split tile per
+        // frame (GC stutter on mobile). Scalar split values are few and stable, so the cache is tiny.
+        const __splitArrCache = new Map();
+        function resolveSplitArray(splitData, gridSize) {
+            if (Array.isArray(splitData)) return splitData;
+            let a = __splitArrCache.get(splitData);
+            if (!a || a.length !== gridSize) { a = new Array(gridSize).fill(splitData); __splitArrCache.set(splitData, a); }
+            return a;
+        }
+
         function gameLoop(timestamp) {
             if (!timestamp) timestamp = performance.now();
             const deltaTime = lastFrameTime ? timestamp - lastFrameTime : FIXED_TIMESTEP;
@@ -33636,34 +33679,39 @@ Item Receive Display:
                 }
             }
 
-            // === RENDERING (every frame for smooth visuals) ===
-            // Interpolate positions for smooth rendering between logic ticks
-            const renderAlpha = accumulatedTime / FIXED_TIMESTEP;
+            // === RENDERING (capped to ~30fps on mobile; logic above already ran at 60Hz) ===
+            let drawTime = 0;
+            if (timestamp - __lastRenderTime >= __renderInterval) {
+                __lastRenderTime = timestamp;
 
-            // Save actual positions
-            const actualCameraX = camera.x;
-            const actualCameraY = camera.y;
-            const actualPlayerX = player.x;
-            const actualPlayerY = player.y;
+                // Interpolate positions for smooth rendering between logic ticks
+                const renderAlpha = accumulatedTime / FIXED_TIMESTEP;
 
-            // Apply interpolation for rendering
-            camera.x = prevCameraX + (camera.x - prevCameraX) * renderAlpha;
-            camera.y = prevCameraY + (camera.y - prevCameraY) * renderAlpha;
-            player.x = prevPlayerX + (player.x - prevPlayerX) * renderAlpha;
-            player.y = prevPlayerY + (player.y - prevPlayerY) * renderAlpha;
+                // Save actual positions
+                const actualCameraX = camera.x;
+                const actualCameraY = camera.y;
+                const actualPlayerX = player.x;
+                const actualPlayerY = player.y;
 
-            const t2 = performance.now();
-            draw();
-            const t3 = performance.now();
-            const drawTime = t3 - t2;
-            if (drawTime > 10) framePerfStr += ' draw:' + drawTime.toFixed(0);
-            drawTransitionOverlay();
+                // Apply interpolation for rendering
+                camera.x = prevCameraX + (camera.x - prevCameraX) * renderAlpha;
+                camera.y = prevCameraY + (camera.y - prevCameraY) * renderAlpha;
+                player.x = prevPlayerX + (player.x - prevPlayerX) * renderAlpha;
+                player.y = prevPlayerY + (player.y - prevPlayerY) * renderAlpha;
 
-            // Restore actual positions for next frame's calculations
-            camera.x = actualCameraX;
-            camera.y = actualCameraY;
-            player.x = actualPlayerX;
-            player.y = actualPlayerY;
+                const t2 = performance.now();
+                draw();
+                const t3 = performance.now();
+                drawTime = t3 - t2;
+                if (drawTime > 10) framePerfStr += ' draw:' + drawTime.toFixed(0);
+                drawTransitionOverlay();
+
+                // Restore actual positions for next frame's calculations
+                camera.x = actualCameraX;
+                camera.y = actualCameraY;
+                player.x = actualPlayerX;
+                player.y = actualPlayerY;
+            }
 
             const totalTime = performance.now() - perfStart;
 
@@ -33791,31 +33839,44 @@ Item Receive Display:
             if (!room) { room = (prompt('Enter room code:') || '').trim(); }
             if (!room) return;
             const name = 'Viewer' + Math.floor(Math.random() * 1000);
-            showJoinStatus('Connecting…');
-            const ws = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/parties/play/' + encodeURIComponent(room));
             let booted = false;
-            ws.onopen = () => {
-                ws.send(JSON.stringify({ type: 'requestSnapshot' }));
-                showJoinStatus('Loading world…');
-            };
-            ws.onmessage = (ev) => {
-                let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
-                if (m.type === 'world-snapshot' && m.world && !booted) {
-                    booted = true;
-                    try { ws.close(); } catch (e) {} // engine opens its own play-party socket for positions
-                    hideJoinStatus();
-                    window.__joinMode = true;
-                    window.__joinRoom = room;
-                    window.__joinName = name;
-                    window.__joinWorld = m.world;
-                    testMap();
-                } else if (m.type === 'waiting') {
-                    showJoinStatus('Waiting for the host to go live…');
-                } else if (m.type === 'error') {
-                    showJoinStatus('Error: ' + (m.message || 'unknown'));
-                }
-            };
-            ws.onerror = () => showJoinStatus('Connection failed. Check the room code.');
+            let delay = 1000;
+            const url = 'wss://multiplayer.lakotafox.partykit.dev/parties/play/' + encodeURIComponent(room);
+            showJoinStatus('Connecting…');
+            (function connect() {
+                if (booted) return;
+                const ws = new WebSocket(url);
+                ws.onopen = () => {
+                    delay = 1000; // reset backoff once connected
+                    ws.send(JSON.stringify({ type: 'requestSnapshot' }));
+                    showJoinStatus('Loading world…');
+                };
+                ws.onmessage = (ev) => {
+                    let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                    if (m.type === 'world-snapshot' && m.world && !booted) {
+                        booted = true;
+                        try { ws.close(); } catch (e) {} // engine opens its own play-party socket for positions
+                        hideJoinStatus();
+                        window.__joinMode = true;
+                        window.__joinRoom = room;
+                        window.__joinName = name;
+                        window.__joinWorld = m.world;
+                        testMap();
+                    } else if (m.type === 'waiting') {
+                        showJoinStatus('Waiting for the host to go live…');
+                    } else if (m.type === 'error') {
+                        showJoinStatus('Error: ' + (m.message || 'unknown'));
+                    }
+                };
+                // Retry with backoff until we've booted (covers flaky connects / host-not-live-yet).
+                ws.onclose = () => {
+                    if (booted) return;
+                    showJoinStatus('Reconnecting…');
+                    setTimeout(connect, Math.min(delay, 10000) + Math.random() * 500);
+                    delay = Math.min(delay * 2, 10000);
+                };
+                ws.onerror = () => { try { ws.close(); } catch (e) {} };
+            })();
         }
 
         function showJoinStatus(text) {
