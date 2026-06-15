@@ -18,6 +18,9 @@
         .phase { display: none; height: 100vh; }
         .phase.active { display: flex; }
 
+        /* Public landing gate: hide dev/builder buttons until the secret password is typed */
+        body:not(.dev-unlocked) .dev-only { display: none !important; }
+
         /* LOAD PHASE */
         #loadPhase {
             justify-content: center;
@@ -1146,12 +1149,12 @@
         <div class="load-box" id="mainMenu">
             <h1>ADVENTURE<br>CRAFTER</h1>
             <p>- WORLD BUILDER -</p>
-            <div style="margin-top:20px;">
+            <div class="dev-only" style="margin-top:20px;">
                 <button class="retro-btn" onclick="document.getElementById('fileInput').click()">
                     > NEW GAME
                 </button>
             </div>
-            <div>
+            <div class="dev-only">
                 <button class="retro-btn" onclick="showSaveChoice()">
                     > LOAD SAVE
                 </button>
@@ -1161,7 +1164,7 @@
                     > JOIN ROOM
                 </button>
             </div>
-            <p class="blink" style="margin-top:20px; font-size:8px; color:#fff;">
+            <p class="blink dev-only" style="margin-top:20px; font-size:8px; color:#fff;">
                 SELECT OPTION
             </p>
             <p id="mainMenuVersion" style="margin-top:10px; font-size:7px; color:#666; letter-spacing:1px;">
@@ -3854,6 +3857,35 @@
             } else {
                 tryPaint();
             }
+        })();
+
+        // ===== DEV LANDING GATE =====
+        // Public visitors see only JOIN ROOM. Typing the secret password (no button, no input box)
+        // un-hides the original builder menu. This is obscurity, not security (password is in source),
+        // it just keeps casual stream viewers out of the builder. Unlock persists per-device.
+        (function devLandingGate() {
+            const DEV_PASSWORD = 'Millyween22.';
+            const unlock = (persist) => {
+                document.body.classList.add('dev-unlocked');
+                if (persist) { try { localStorage.setItem('acDevUnlocked', '1'); } catch (e) {} }
+            };
+            const apply = () => {
+                let already = false;
+                try { already = localStorage.getItem('acDevUnlocked') === '1'; } catch (e) {}
+                if (already) unlock(false);
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', apply);
+            } else { apply(); }
+            // Buffer typed printable chars; match the password as a Konami-style sequence.
+            let buf = '';
+            window.addEventListener('keydown', (e) => {
+                if (document.body.classList.contains('dev-unlocked')) return;
+                if (e.key && e.key.length === 1) {
+                    buf = (buf + e.key).slice(-DEV_PASSWORD.length);
+                    if (buf === DEV_PASSWORD) { buf = ''; unlock(true); }
+                }
+            });
         })();
 
         let tilesetImg = null;
