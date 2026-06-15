@@ -18714,6 +18714,24 @@
             };
         }
 
+        // Lightweight world for phone "join by URL": same shape as getProjectData() but with the
+        // heavy AUDIO stripped (sounds/questSounds base64 = ~90% of a real save). The engine still
+        // gets the inline tile/sprite images it needs to render a viewport, so it boots unchanged
+        // from this object. Audio is deferred (phones play silent for v1). Compact JSON of this is
+        // ~MBs instead of ~200MB, so it ships in a single WebSocket frame and parses on a phone.
+        function getLightweightWorld() {
+            const d = getProjectData();
+            if (Array.isArray(d.sounds)) {
+                d.sounds = d.sounds.map(s => ({ name: s.name, duration: s.duration, type: s.type }));
+            }
+            if (Array.isArray(d.questSounds)) {
+                d.questSounds = d.questSounds.map(s => ({ name: s.name }));
+            }
+            d.audioStripped = true;   // signals the join client that sounds carry no data
+            d.lightweight = true;
+            return d;
+        }
+
         function uploadProject(event) {
             const file = event.target.files[0];
             if (!file) return;
