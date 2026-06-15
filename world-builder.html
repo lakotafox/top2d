@@ -1160,7 +1160,7 @@
                 </button>
             </div>
             <div>
-                <button class="retro-btn" onclick="showDirectJoinPrompt()" style="background:#226;">
+                <button class="retro-btn" onclick="joinLiveRoom()" style="background:#226;">
                     > JOIN ROOM
                 </button>
             </div>
@@ -2524,6 +2524,9 @@
 
                 <!-- Test Map - Special Button -->
                 <button onclick="testMap()" class="test-map-btn">▶ PLAY</button>
+
+                <!-- Publish the world so phones can join by URL -->
+                <button onclick="goLive()" class="test-map-btn" style="background:#a01;">📡 GO LIVE</button>
 
                 <span id="toolHint" class="toolbar-hint">R:rotate | I:flip | E:erase</span>
             </div>
@@ -23403,13 +23406,14 @@
         }
 
         function testMap() {
-            // Open visible console and clear previous logs
-            openTestConsole();
+            // Open visible console and clear previous logs (skip on the public join path).
+            if (!window.__joinMode) openTestConsole();
             testLogs = [];
             logTestEvent('Starting test game...');
 
-            // Get current project data
-            const projectDataForTest = getProjectData();
+            // Get project data. When joining a live room (mobile "join the world"), use the
+            // world snapshot received over the network; otherwise build it from the local editor.
+            const projectDataForTest = (window.__joinMode && window.__joinWorld) ? window.__joinWorld : getProjectData();
             // Add base URL so external doors can resolve relative paths
             projectDataForTest.baseUrl = window.location.href.replace(/\/[^\/]*$/, '/');
             if (launchAsAdventure) {
@@ -23427,9 +23431,10 @@
 
             logTestEvent('Mobile: ' + isMobile + ', Sounds: ' + (projectDataForTest.sounds?.length || 0));
 
-            // On mobile, strip sound data - will stream via postMessage
+            // On mobile, strip sound data - will stream via postMessage.
+            // Skip in join mode: the network world already has audio stripped (silent for v1).
             let soundsToStream = [];
-            if (isMobile && projectDataForTest.sounds && projectDataForTest.sounds.length > 0) {
+            if (!window.__joinMode && isMobile && projectDataForTest.sounds && projectDataForTest.sounds.length > 0) {
                 soundsToStream = projectDataForTest.sounds.map(s => ({ ...s }));
                 projectDataForTest.sounds = projectDataForTest.sounds.map(s => ({
                     name: s.name, duration: s.duration, type: s.type
@@ -23450,9 +23455,16 @@
                     logTestEvent('[Game] ' + e.data.msg, e.data.level || 'info');
                 } else if (e.data.type === 'ready') {
                     logTestEvent('Test game ready, sending data...');
-                    // Include builder room code so test game can auto-join multiplayer
+                    // Include room code so the engine can auto-join multiplayer.
                     const payload = { type: 'project-data', data: projectDataJSON };
-                    if (builderConnected && builderRoomCode) {
+                    if (window.__joinMode && window.__joinRoom) {
+                        // Joining a live room: sync positions through the play party.
+                        payload.autoMultiplayer = {
+                            roomCode: window.__joinRoom,
+                            playerName: window.__joinName || ('Viewer' + Math.floor(Math.random() * 1000)),
+                            partyPath: 'parties/play'
+                        };
+                    } else if (builderConnected && builderRoomCode) {
                         payload.autoMultiplayer = {
                             roomCode: builderRoomCode,
                             playerName: builderPlayerName + '-tester'
@@ -24717,11 +24729,14 @@
                 }
             }
         };
-        // Signal ready to builder
-        if (window.opener) {
-            window.opener.postMessage({ type: 'ready' }, '*');
+        // Signal ready to host. Desktop test uses a popup (window.opener); the mobile
+        // "join the live world" path runs this engine inside an in-page iframe, where the
+        // host is window.parent. Fall back accordingly so the boot handshake fires either way.
+        var __hostWin = window.opener || (window.parent && window.parent !== window ? window.parent : null);
+        if (__hostWin) {
+            __hostWin.postMessage({ type: 'ready' }, '*');
         } else {
-            console.error('No opener window found!');
+            console.error('No host window found!');
         }
 
         // Debug/UI functions (must be global for onclick handlers)
@@ -26453,7 +26468,11 @@
             console.log('[MP] Connecting as', mpPlayerName, 'to room', roomCode);
 
             try {
-                mpSocket = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/party/' + roomCode);
+                // Default desktop play uses the game party (/party/); the "join the live world"
+                // path points at the authoritative play party (/parties/play/) which relays
+                // positions the same way and also serves the world snapshot.
+                const partyPath = projectData.multiplayer.partyPath || 'party';
+                mpSocket = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/' + partyPath + '/' + roomCode);
 
                 mpSocket.onopen = () => {
                     console.log('[MP] Connected to server');
@@ -33674,18 +33693,144 @@ Item Receive Display:
 </html>
             `;
 
-            // Open test game window and write HTML directly
-            // Data is streamed via postMessage after the page loads (prevents iPad memory crash)
-            const testWindow = window.open('', '_blank');
-            if (testWindow) {
-                testWindow.document.write(loaderHTML);
-                testWindow.document.close();
-                testGameWindow = testWindow; // Store reference for live sync
-                logTestEvent('Test window opened (live sync enabled)');
+            if (window.__joinMode) {
+                // Join the live world IN-PAGE via a full-screen iframe (mobile blocks popups).
+                // The engine signals 'ready' to window.parent (this page) and we reply with the world.
+                let frame = document.getElementById('joinGameFrame');
+                if (!frame) {
+                    frame = document.createElement('iframe');
+                    frame.id = 'joinGameFrame';
+                    frame.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;border:0;z-index:99999;background:#000;';
+                    frame.setAttribute('allow', 'autoplay; fullscreen');
+                    document.body.appendChild(frame);
+                }
+                const doc = frame.contentWindow.document;
+                doc.open();
+                doc.write(loaderHTML);
+                doc.close();
+                testGameWindow = frame.contentWindow;
+                logTestEvent('Joined live world (in-page)');
             } else {
-                logTestEvent('Failed to open test window - popup blocked?', 'error');
-                alert('Could not open test window. Please allow popups for this site.');
+                // Desktop test: open in a popup window.
+                // Data is streamed via postMessage after the page loads (prevents iPad memory crash)
+                const testWindow = window.open('', '_blank');
+                if (testWindow) {
+                    testWindow.document.write(loaderHTML);
+                    testWindow.document.close();
+                    testGameWindow = testWindow; // Store reference for live sync
+                    logTestEvent('Test window opened (live sync enabled)');
+                } else {
+                    logTestEvent('Failed to open test window - popup blocked?', 'error');
+                    alert('Could not open test window. Please allow popups for this site.');
+                }
             }
+        }
+
+        // ===== LIVE WORLD: GO LIVE (host) + JOIN ROOM (viewer) =====
+        let playSocket = null;
+
+        // Host: upload the lightweight world to the play server, then show a share link.
+        function goLive() {
+            const suggested = builderRoomCode || ('live' + Math.floor(Math.random() * 9000 + 1000));
+            const room = (prompt('Room code for your live world:', suggested) || '').trim();
+            if (!room) return;
+            let lwJson;
+            try { lwJson = JSON.stringify(getLightweightWorld()); }
+            catch (e) { alert('Could not build the world: ' + e.message); return; }
+            const sizeMB = (lwJson.length / 1048576).toFixed(2);
+            showGoLiveInfo(room, null, sizeMB, 'Uploading…');
+            try { if (playSocket) playSocket.close(); } catch (e) {}
+            const ws = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/parties/play/' + encodeURIComponent(room));
+            playSocket = ws;
+            ws.onopen = () => {
+                const CHUNK = 120 * 1024;
+                const total = Math.ceil(lwJson.length / CHUNK);
+                ws.send(JSON.stringify({ type: 'world-upload-begin', chunks: total }));
+                for (let i = 0; i < total; i++) {
+                    ws.send(JSON.stringify({ type: 'world-upload-chunk', i, data: lwJson.slice(i * CHUNK, (i + 1) * CHUNK) }));
+                }
+                ws.send(JSON.stringify({ type: 'world-upload-end' }));
+            };
+            ws.onmessage = (ev) => {
+                let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                if (m.type === 'world-ready') {
+                    const url = location.origin + location.pathname + '?room=' + encodeURIComponent(room);
+                    showGoLiveInfo(room, url, sizeMB, null);
+                } else if (m.type === 'error') {
+                    alert('Go Live error: ' + m.message);
+                }
+            };
+            ws.onerror = () => alert('Could not reach the live server.');
+        }
+
+        function showGoLiveInfo(room, url, sizeMB, statusText) {
+            let box = document.getElementById('goLiveInfo');
+            if (!box) {
+                box = document.createElement('div');
+                box.id = 'goLiveInfo';
+                box.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:100000;background:#001018;border:3px solid #0ff;color:#fff;font-family:monospace;padding:14px 18px;text-align:center;max-width:92vw;box-shadow:0 0 24px rgba(0,255,255,.5);';
+                document.body.appendChild(box);
+            }
+            if (url) {
+                box.innerHTML = '<div style="color:#0ff;font-weight:bold;margin-bottom:8px;">🔴 LIVE — world uploaded (' + sizeMB + 'MB)</div>'
+                    + '<div style="font-size:12px;margin-bottom:6px;">Share this link / room: <b>' + room + '</b></div>'
+                    + '<input id="goLiveUrl" readonly value="' + url + '" onclick="this.select()" style="width:min(440px,82vw);padding:8px;background:#000;color:#0f0;border:1px solid #0f0;font-family:monospace;text-align:center;">'
+                    + '<div style="margin-top:10px;">'
+                    + '<button onclick="if(navigator.clipboard){navigator.clipboard.writeText(document.getElementById(\'goLiveUrl\').value);this.textContent=\'COPIED\';}" style="padding:8px 14px;margin-right:8px;cursor:pointer;">COPY LINK</button>'
+                    + '<button onclick="document.getElementById(\'goLiveInfo\').remove()" style="padding:8px 14px;cursor:pointer;">CLOSE</button>'
+                    + '</div>';
+            } else {
+                box.innerHTML = '<div style="color:#0ff;">' + (statusText || 'Uploading…') + ' (' + sizeMB + 'MB)</div>';
+            }
+        }
+
+        // Viewer: join a live room by code/URL — boots the game in-page from the network world.
+        function joinLiveRoom(roomArg) {
+            const params = new URLSearchParams(location.search);
+            let room = (roomArg || params.get('room') || '').trim();
+            if (!room) { room = (prompt('Enter room code:') || '').trim(); }
+            if (!room) return;
+            const name = 'Viewer' + Math.floor(Math.random() * 1000);
+            showJoinStatus('Connecting…');
+            const ws = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/parties/play/' + encodeURIComponent(room));
+            let booted = false;
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ type: 'requestSnapshot' }));
+                showJoinStatus('Loading world…');
+            };
+            ws.onmessage = (ev) => {
+                let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+                if (m.type === 'world-snapshot' && m.world && !booted) {
+                    booted = true;
+                    try { ws.close(); } catch (e) {} // engine opens its own play-party socket for positions
+                    hideJoinStatus();
+                    window.__joinMode = true;
+                    window.__joinRoom = room;
+                    window.__joinName = name;
+                    window.__joinWorld = m.world;
+                    testMap();
+                } else if (m.type === 'waiting') {
+                    showJoinStatus('Waiting for the host to go live…');
+                } else if (m.type === 'error') {
+                    showJoinStatus('Error: ' + (m.message || 'unknown'));
+                }
+            };
+            ws.onerror = () => showJoinStatus('Connection failed. Check the room code.');
+        }
+
+        function showJoinStatus(text) {
+            let box = document.getElementById('joinStatus');
+            if (!box) {
+                box = document.createElement('div');
+                box.id = 'joinStatus';
+                box.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.85);color:#0ff;font-family:\'Press Start 2P\',monospace;font-size:12px;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;';
+                document.body.appendChild(box);
+            }
+            box.textContent = text;
+        }
+        function hideJoinStatus() {
+            const box = document.getElementById('joinStatus');
+            if (box) box.remove();
         }
 
         // Stream sounds via postMessage (called when test game signals ready)
