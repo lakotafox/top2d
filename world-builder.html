@@ -28827,6 +28827,7 @@ Item Receive Display:
                 player.attackFrame = 0;
                 player.attackFrameTimer = 0;
                 player.attackTimer = 30;
+                player.attackHitNpcs = {}; // Reset hit tracking so each swing can damage enemies again
                 if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
                     playSound(playerSoundsData.attack.soundIndex, playerSoundsData.attack.volume || 0.7, playerSoundsData.attack.pitchVariation || 0.15, playerSoundsData.attack.lengthVariation || 0);
                 }
@@ -28839,6 +28840,7 @@ Item Receive Display:
                 player.attackFrame = 0;
                 player.attackFrameTimer = 0;
                 player.attackTimer = 30;
+                player.attackHitNpcs = {}; // Reset hit tracking so each swing can damage enemies again
                 if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
                     playSound(playerSoundsData.attack.soundIndex, playerSoundsData.attack.volume || 0.7, playerSoundsData.attack.pitchVariation || 0.15, playerSoundsData.attack.lengthVariation || 0);
                 }
