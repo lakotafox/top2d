@@ -1159,7 +1159,12 @@
                     > LOAD SAVE
                 </button>
             </div>
-            <div>
+            <div style="margin-top:10px;">
+                <input id="viewerName" placeholder="YOUR NAME" maxlength="14" autocomplete="off"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();joinLiveRoom();}"
+                    style="font-family:'Press Start 2P',monospace; font-size:9px; padding:10px; width:180px; text-align:center; background:#111; color:#fff; border:2px solid #fff;">
+            </div>
+            <div style="margin-top:8px;">
                 <button class="retro-btn" onclick="joinLiveRoom()" style="background:#226;">
                     > JOIN ROOM
                 </button>
@@ -23957,6 +23962,9 @@
         }
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
+        // Mobile rotation: the 'resize' event can fire with stale dimensions, so resize again
+        // shortly after the orientation settles (zoom re-adapts per-frame in the camera update).
+        window.addEventListener('orientationchange', () => { setTimeout(resizeCanvas, 150); });
 
         // Show loading message with percentage - updates HTML overlay
         function showLoading(current, total) {
@@ -28199,6 +28207,19 @@
         // Camera zoom (1 = normal, 2 = 2x closer, etc)
         let cameraZoom = 1.0;
 
+        // On phones the view must adapt to the small screen and to rotation; otherwise the world
+        // looks wildly over-zoomed and the framing jumps between portrait and landscape. Fit a
+        // consistent number of tiles vertically. Called every frame in the camera update so it
+        // tracks resize/rotation/gridSize automatically. Desktop is unaffected (UA-gated).
+        const __isMobileView = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const __targetTilesHigh = 11;
+        function updateMobileZoom() {
+            if (!__isMobileView) return;
+            const ts = (typeof gridSize === 'number' ? gridSize : 16) * TILE_SCALE;
+            cameraZoom = Math.max(0.35, Math.min(2.5, canvas.height / (__targetTilesHigh * ts)));
+        }
+        updateMobileZoom();
+
         // Item receive display settings
         let itemReceiveScale = 2;         // Scale of floating item sprite
         let itemReceiveHeight = 45;       // Height above player in pixels
@@ -29626,6 +29647,9 @@ Item Receive Display:
                     player.invincible = false;
                 }
             }
+
+            // Keep mobile zoom in sync with the current screen size / orientation each frame.
+            updateMobileZoom();
 
             // Camera follow - adjust for zoom so player stays centered
             camera.x = player.x - (canvas.width / 2) / cameraZoom;
@@ -33838,7 +33862,8 @@ Item Receive Display:
             let room = (roomArg || params.get('room') || '').trim();
             if (!room) { room = (prompt('Enter room code:') || '').trim(); }
             if (!room) return;
-            const name = 'Viewer' + Math.floor(Math.random() * 1000);
+            const nameEl = document.getElementById('viewerName');
+            const name = ((nameEl && nameEl.value.trim()) || 'Viewer' + Math.floor(Math.random() * 1000)).slice(0, 14);
             let booted = false;
             let delay = 1000;
             const url = 'wss://multiplayer.lakotafox.partykit.dev/parties/play/' + encodeURIComponent(room);
