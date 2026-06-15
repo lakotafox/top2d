@@ -23957,11 +23957,29 @@
 
         // Fullscreen canvas
         function resizeCanvas() {
-            // Prefer the visualViewport (the actually-visible area) over innerWidth/innerHeight so the
-            // game fits even when iOS Safari's toolbar is showing — otherwise bottom controls get cut off.
+            // Prefer the visualViewport (the actually-visible area) so the game fits even when iOS
+            // Safari's toolbar is showing — otherwise bottom controls get cut off.
             const vv = window.visualViewport;
-            canvas.width = Math.round((vv && vv.width) || window.innerWidth);
-            canvas.height = Math.round((vv && vv.height) || window.innerHeight);
+            const cssW = Math.round((vv && vv.width) || window.innerWidth);
+            const cssH = Math.round((vv && vv.height) || window.innerHeight);
+            const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            if (mobile && cssH > 0) {
+                // Render at INTEGER scale (cameraZoom stays 1) into a backing store sized to show a
+                // fixed number of tiles, then let CSS downscale the finished frame ONCE. This avoids
+                // fractional tile positions entirely → no tile tearing. (Assumes gridSize 16 = 64px tiles.)
+                const TILES_HIGH = 11, TILE_PX = 64;
+                const backingH = TILES_HIGH * TILE_PX;
+                const backingW = Math.max(1, Math.round(backingH * cssW / cssH));
+                canvas.width = backingW;
+                canvas.height = backingH;
+                canvas.style.width = cssW + 'px';
+                canvas.style.height = cssH + 'px';
+            } else {
+                canvas.width = cssW;
+                canvas.height = cssH;
+                canvas.style.width = '';
+                canvas.style.height = '';
+            }
         }
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
@@ -28222,9 +28240,9 @@
         const __isMobileView = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         const __targetTilesHigh = 11;
         function updateMobileZoom() {
-            if (!__isMobileView) return;
-            const ts = (typeof gridSize === 'number' ? gridSize : 16) * TILE_SCALE;
-            cameraZoom = Math.max(0.35, Math.min(2.5, canvas.height / (__targetTilesHigh * ts)));
+            // Mobile zoom is now achieved via canvas backing resolution (see resizeCanvas), so the
+            // world renders at INTEGER scale with no tile tearing. Keep cameraZoom at 1 on mobile.
+            if (__isMobileView) cameraZoom = 1.0;
         }
         updateMobileZoom();
 
@@ -28629,15 +28647,17 @@ Item Receive Display:
         let mouseX = 0, mouseY = 0;
         canvas.addEventListener('mousemove', e => {
             const rect = canvas.getBoundingClientRect();
-            mouseX = e.clientX - rect.left;
-            mouseY = e.clientY - rect.top;
+            const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+            mouseX = (e.clientX - rect.left) * sx;
+            mouseY = (e.clientY - rect.top) * sy;
         });
 
         // Click handling for inventory and shop
         canvas.addEventListener('click', e => {
             const rect = canvas.getBoundingClientRect();
-            const clickX = e.clientX - rect.left;
-            const clickY = e.clientY - rect.top;
+            const csx = canvas.width / rect.width, csy = canvas.height / rect.height;
+            const clickX = (e.clientX - rect.left) * csx;
+            const clickY = (e.clientY - rect.top) * csy;
 
             // Handle shop clicks first
             if (shopOpen) {
