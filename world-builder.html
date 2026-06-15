@@ -23957,14 +23957,22 @@
 
         // Fullscreen canvas
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            // Prefer the visualViewport (the actually-visible area) over innerWidth/innerHeight so the
+            // game fits even when iOS Safari's toolbar is showing — otherwise bottom controls get cut off.
+            const vv = window.visualViewport;
+            canvas.width = Math.round((vv && vv.width) || window.innerWidth);
+            canvas.height = Math.round((vv && vv.height) || window.innerHeight);
         }
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
+        // Re-fit when Safari shows/hides its toolbar (fires visualViewport resize, not window resize).
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', resizeCanvas);
+            window.visualViewport.addEventListener('scroll', resizeCanvas);
+        }
         // Mobile rotation: the 'resize' event can fire with stale dimensions, so resize again
         // shortly after the orientation settles (zoom re-adapts per-frame in the camera update).
-        window.addEventListener('orientationchange', () => { setTimeout(resizeCanvas, 150); });
+        window.addEventListener('orientationchange', () => { setTimeout(resizeCanvas, 150); setTimeout(resizeCanvas, 400); });
 
         // Show loading message with percentage - updates HTML overlay
         function showLoading(current, total) {
@@ -33772,7 +33780,10 @@ Item Receive Display:
                 if (!frame) {
                     frame = document.createElement('iframe');
                     frame.id = 'joinGameFrame';
-                    frame.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;border:0;z-index:99999;background:#000;';
+                    // Use dvh (dynamic viewport height) so the iframe fits the VISIBLE area, not the
+                    // area behind Safari's toolbar (which would push the on-screen controls off-screen).
+                    // Note: not using inset:0 — top+bottom:0 would force 100vh and ignore the height.
+                    frame.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;border:0;z-index:99999;background:#000;';
                     frame.setAttribute('allow', 'autoplay; fullscreen');
                     document.body.appendChild(frame);
                 }
