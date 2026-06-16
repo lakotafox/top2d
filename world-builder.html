@@ -25153,7 +25153,16 @@
         }
 
         function hasInventoryItem(itemId, quantity = 1) {
-            return (playerInventory[itemId] || 0) >= quantity;
+            // Count the item across the REAL inventory (inventorySlots). The old code checked a dead
+            // playerInventory map that pickups never fill, so hasItem quest conditions always failed.
+            let idx = (typeof itemId === 'number') ? itemId : itemsData.findIndex(it => it && it.id === itemId);
+            if ((idx === undefined || idx < 0) && typeof itemId === 'string') {
+                const m = /(\d+)$/.exec(itemId); if (m) idx = parseInt(m[1]); // fallback "item_11" -> 11
+            }
+            if (idx === undefined || idx < 0) return false;
+            let total = 0;
+            for (const slot of inventorySlots) { if (slot && slot.itemIndex === idx) total += slot.quantity; }
+            return total >= quantity;
         }
 
         // Tracking hooks - call these when events happen
