@@ -6153,7 +6153,21 @@
             renderMap();
         }
 
+        // Legacy saves stored main-map tile sounds as bare "x,y" keys (no map prefix). The runtime
+        // treats those as the main map, but the builder UI filters by "mapName:". Normalize them to
+        // "main:x,y" so the placed-sounds list and click-to-edit find them.
+        function normalizeTileSoundKeys() {
+            if (!tileSounds || typeof tileSounds !== 'object') return;
+            for (const key of Object.keys(tileSounds)) {
+                if (key.indexOf(':') === -1) {
+                    if (!tileSounds['main:' + key]) tileSounds['main:' + key] = tileSounds[key];
+                    delete tileSounds[key];
+                }
+            }
+        }
+
         function updatePlacedSoundsList() {
+            normalizeTileSoundKeys();
             const container = document.getElementById('placedSoundsList');
             if (!container) return;
             const keys = Object.keys(tileSounds).filter(k => k.startsWith(currentMapName + ':'));
@@ -19233,6 +19247,7 @@
             updateStaticObjectsList();
 
             tileSounds = project.tileSounds || {};
+            normalizeTileSoundKeys(); // migrate legacy "x,y" keys -> "main:x,y"
             pointLights = project.pointLights || {};
             polyLights = project.polyLights || [];
             tileCollisions = project.tileCollisions || {};
@@ -21282,6 +21297,7 @@
             // Load sounds
             sounds = [];
             tileSounds = p.tileSounds || {};
+            normalizeTileSoundKeys(); // migrate legacy "x,y" keys -> "main:x,y" so the builder sees them
             playerSounds = p.playerSounds || {
                 walk: { soundIndex: -1, interval: 200, volume: 0.5, pitchVariation: 0.1 },
                 attack: { soundIndex: -1, volume: 0.7, pitchVariation: 0.15, lengthVariation: 0 },
