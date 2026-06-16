@@ -20,6 +20,7 @@ interface PlayerState {
 
 const MAX_PLAYERS = 8;
 const STORAGE_CHUNK = 120 * 1024; // < Durable Object 128 KiB per-value limit
+const ROOM_TTL_MS = 6 * 60 * 60 * 1000; // self-delete a room after 6h of inactivity (no connections)
 
 export default class PlayServer implements Party.Server {
   players: Map<string, PlayerState> = new Map();
@@ -43,6 +44,7 @@ export default class PlayServer implements Party.Server {
         if (s) {
           this.world = JSON.parse(s);
           console.log(`[play] rehydrated world (${(s.length / 1048576).toFixed(2)}MB)`);
+          this.bumpExpiry();
         }
       }
     } catch (e) {
@@ -50,7 +52,22 @@ export default class PlayServer implements Party.Server {
     }
   }
 
+  // Keep an inactivity timer alive: any connection/upload pushes it out; when it fires with no
+  // one connected, the room wipes its stored world so empty rooms clean themselves up.
+  private bumpExpiry() {
+    this.room.storage.setAlarm(Date.now() + ROOM_TTL_MS).catch(() => {});
+  }
+
+  async onAlarm() {
+    const active = [...this.room.getConnections()].length;
+    if (active > 0) { this.bumpExpiry(); return; } // still in use — keep it alive
+    await this.room.storage.deleteAll();
+    this.world = null;
+    console.log("[play] room expired (inactive) — stored world cleared");
+  }
+
   onConnect(conn: Party.Connection) {
+    this.bumpExpiry(); // activity — push the expiry timer out
     if (this.players.size >= MAX_PLAYERS) {
       conn.send(JSON.stringify({ type: "error", message: "Room is full (max 8 players)" }));
       conn.close();
@@ -147,6 +164,7 @@ export default class PlayServer implements Party.Server {
           return;
         }
         await this.persistWorld(assembled);
+        this.bumpExpiry(); // restart the inactivity clock on a fresh Go Live
         this.uploadChunks = [];
         sender.send(JSON.stringify({ type: "world-ready" }));
         // Push the new world to everyone already connected/waiting.
