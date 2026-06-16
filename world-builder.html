@@ -26643,11 +26643,15 @@
                 dist: 0, phase: 'out', dmg: def.abilityDamage || 10, itemIndex: itemIndex,
                 hit: {}, frame: 0, frameTimer: 0
             });
-            // Throw animation: play the item's chosen player animation if it exists, else fall back to
-            // the sword swing. Either way melee damage is suppressed (the boomerang deals the damage).
-            player.throwAnimKey = resolveAbilityAnimKey(def.abilityAnim);
-            startSwordAttack();
-            player.throwing = true;
+            // The boomerang has NO player throw pose by default — the player keeps idle/walking while it
+            // flies and spins on its own (this matches the original game). Only if the creator explicitly
+            // sets a "Player anim on use" do we play it (reusing the attack lifecycle, melee suppressed).
+            const key = resolveAbilityAnimKey(def.abilityAnim);
+            if (key) {
+                player.throwAnimKey = key;
+                startSwordAttack();
+                player.throwing = true;
+            }
         }
 
         // Shared enemy-hit used by projectiles — mirrors the center/damage math in checkAttackHitbox.
