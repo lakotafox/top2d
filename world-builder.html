@@ -26621,6 +26621,16 @@
             }
         }
 
+        // Resolve the player animation to play for an ability use. Prefers a directional anim
+        // (e.g. "throwDown") then a single one (e.g. "throw"); returns null to fall back to attack.
+        function resolveAbilityAnimKey(name) {
+            if (!name || !playerAnimations) return null;
+            const suffix = { down: 'Down', up: 'Up', left: 'Left', right: 'Right' }[player.direction] || 'Down';
+            if (playerAnimations[name + suffix] && playerAnimations[name + suffix].length) return name + suffix;
+            if (playerAnimations[name] && playerAnimations[name].length) return name;
+            return null;
+        }
+
         function throwBoomerang(def, itemIndex) {
             // Only one of the player's boomerangs in flight at a time.
             if (projectiles.some(p => p.type === 'boomerang')) return;
@@ -26633,8 +26643,9 @@
                 dist: 0, phase: 'out', dmg: def.abilityDamage || 10, itemIndex: itemIndex,
                 hit: {}, frame: 0, frameTimer: 0
             });
-            // Throw animation: reuse the attack swing as the throw motion, but suppress melee damage
-            // (the boomerang itself deals the damage). A dedicated "throw" anim can be wired later.
+            // Throw animation: play the item's chosen player animation if it exists, else fall back to
+            // the sword swing. Either way melee damage is suppressed (the boomerang deals the damage).
+            player.throwAnimKey = resolveAbilityAnimKey(def.abilityAnim);
             startSwordAttack();
             player.throwing = true;
         }
@@ -29840,7 +29851,7 @@ Item Receive Display:
                 // Advance attack animation frames
                 if (player.attackAnim && playerAnimations) {
                     const attackDirMap = { down: 'attackDown', up: 'attackUp', left: 'attackLeft', right: 'attackRight' };
-                    const attackKey = attackDirMap[player.direction];
+                    const attackKey = (player.throwing && player.throwAnimKey) ? player.throwAnimKey : attackDirMap[player.direction];
                     let attackFrames = playerAnimations[attackKey] || playerAnimations.attack || [];
 
                     if (attackFrames.length > 0) {
@@ -29876,7 +29887,7 @@ Item Receive Display:
                     player.attackAnim = false;
                 }
 
-                if (!player.attacking) player.throwing = false; // swing/throw finished
+                if (!player.attacking) { player.throwing = false; player.throwAnimKey = null; } // swing/throw finished
 
                 // Check for attack hitbox collisions with enemy NPCs
                 checkAttackHitbox();
@@ -33097,16 +33108,20 @@ Item Receive Display:
                     animKey = 'death';
                     useDeathFrame = true;
                 } else if (player.attacking && player.attackAnim) {
-                    // Check for directional attack animation
-                    const attackKey = attackDirMap[player.direction];
-                    if (playerAnimations[attackKey] && playerAnimations[attackKey].length > 0) {
-                        animKey = attackKey;
-                    } else if (playerAnimations.attack && playerAnimations.attack.length > 0) {
-                        // Fall back to generic attack
-                        animKey = 'attack';
+                    // A throw plays its own chosen animation if one is set; otherwise the directional attack.
+                    if (player.throwing && player.throwAnimKey && playerAnimations[player.throwAnimKey] && playerAnimations[player.throwAnimKey].length > 0) {
+                        animKey = player.throwAnimKey;
                     } else {
-                        // No attack animation, use walk
-                        animKey = dirMap[player.direction];
+                        const attackKey = attackDirMap[player.direction];
+                        if (playerAnimations[attackKey] && playerAnimations[attackKey].length > 0) {
+                            animKey = attackKey;
+                        } else if (playerAnimations.attack && playerAnimations.attack.length > 0) {
+                            // Fall back to generic attack
+                            animKey = 'attack';
+                        } else {
+                            // No attack animation, use walk
+                            animKey = dirMap[player.direction];
+                        }
                     }
                 } else if (isReceivingItem && receivingItemData) {
                     // Receive item animation
