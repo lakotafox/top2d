@@ -26780,32 +26780,40 @@
         const placedDialogTiles = projectData.placedDialogTiles || [];
         console.log('Dialogs:', dialogs.length, 'Dialog tiles:', placedDialogTiles.length);
 
-        // NPC Talk Sound - load from file
+        // NPC Talk Sound - lazy-loaded once audio is unlocked (the AudioContext doesn't exist at
+        // startup, so the old eager decode silently produced no buffer -> no typing sound).
         let npcTalkSoundBuffer = null;
+        let npcTalkLoading = false;
         let lastTalkSoundTime = 0;
         const TALK_SOUND_MIN_INTERVAL = 50; // Minimum ms between sounds
 
-        // Load the NPC talk sound
-        fetch('talkingnpcsound.mp3')
-            .then(response => response.arrayBuffer())
-            .then(arrayBuffer => {
-                if (audioContext) {
-                    return audioContext.decodeAudioData(arrayBuffer);
-                }
-                return null;
-            })
-            .then(buffer => {
-                if (buffer) {
-                    npcTalkSoundBuffer = buffer;
-                    console.log('[NPC TALK] Sound loaded successfully');
-                }
-            })
-            .catch(err => {
-                console.log('[NPC TALK] Could not load sound:', err.message);
-            });
+        function ensureTalkSound() {
+            if (npcTalkSoundBuffer || npcTalkLoading || !audioContext) return;
+            npcTalkLoading = true;
+            const base = (typeof projectData !== 'undefined' && projectData && projectData.baseUrl) ? projectData.baseUrl : '';
+            fetch(base + 'talkingnpcsound.mp3')
+                .then(r => r.arrayBuffer())
+                .then(ab => audioContext.decodeAudioData(ab))
+                .then(buf => { npcTalkSoundBuffer = buf; console.log('[NPC TALK] Sound loaded'); })
+                .catch(err => { npcTalkLoading = false; console.log('[NPC TALK] Could not load:', err.message); });
+        }
+
+        // Short synth blip for UI (dialog choice move/confirm). No asset, never lags.
+        function uiBlip(freq, dur, vol, type) {
+            if (!audioContext) return;
+            const o = audioContext.createOscillator(), g = audioContext.createGain();
+            o.type = type || 'square'; o.frequency.value = freq;
+            g.gain.setValueAtTime(vol || 0.12, audioContext.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + (dur || 0.06));
+            o.connect(g); g.connect(audioContext.destination);
+            o.start(); o.stop(audioContext.currentTime + (dur || 0.06));
+        }
+        function dialogMoveSound() { uiBlip(520, 0.05, 0.1); }
+        function dialogSelectSound() { uiBlip(440, 0.05, 0.13); setTimeout(() => uiBlip(680, 0.08, 0.13), 55); }
 
         // Play NPC talk sound with pitch/length variation based on character
         function playNpcTalkSound(char) {
+            ensureTalkSound();
             if (!audioContext || !npcTalkSoundBuffer) return;
 
             const now = performance.now();
@@ -28576,12 +28584,16 @@ Item Receive Display:
                 const page = activeDialog.dialog?.pages?.[activeDialog.pageIndex];
                 if (page?.choices && page.choices.length > 0) {
                     if (e.key === 'ArrowUp') {
+                        const prev = dialogSelectedChoice;
                         dialogSelectedChoice = Math.max(0, dialogSelectedChoice - 1);
+                        if (dialogSelectedChoice !== prev) dialogMoveSound();
                         renderDialogBox();
                         return;
                     }
                     if (e.key === 'ArrowDown') {
+                        const prev = dialogSelectedChoice;
                         dialogSelectedChoice = Math.min(page.choices.length - 1, dialogSelectedChoice + 1);
+                        if (dialogSelectedChoice !== prev) dialogMoveSound();
                         renderDialogBox();
                         return;
                     }
@@ -30184,6 +30196,7 @@ Item Receive Display:
             if (clickedIndex !== undefined && clickedIndex >= 0 && clickedIndex < page.choices.length) {
                 dialogSelectedChoice = clickedIndex;
             }
+            dialogSelectSound(); // confirm blip (keyboard Enter or mobile tap)
 
             const choice = page.choices[dialogSelectedChoice];
             if (!choice) return;
