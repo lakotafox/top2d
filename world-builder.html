@@ -33850,6 +33850,11 @@ Item Receive Display:
             try { if (playSocket) playSocket.close(); } catch (e) {}
             const ws = new WebSocket('wss://multiplayer.lakotafox.partykit.dev/parties/play/' + encodeURIComponent(room));
             playSocket = ws;
+            let done = false;
+            // Watchdog: if the server never confirms, don't spin forever — tell the host.
+            const watchdog = setTimeout(() => {
+                if (!done) showGoLiveInfo(room, null, sizeMB, '⚠ Upload stalled — close (✕) and try again');
+            }, 30000);
             ws.onopen = () => {
                 const CHUNK = 120 * 1024;
                 const total = Math.ceil(lwJson.length / CHUNK);
@@ -33862,13 +33867,15 @@ Item Receive Display:
             ws.onmessage = (ev) => {
                 let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
                 if (m.type === 'world-ready') {
+                    done = true; clearTimeout(watchdog);
                     const url = location.origin + location.pathname + '?room=' + encodeURIComponent(room);
                     showGoLiveInfo(room, url, sizeMB, null);
                 } else if (m.type === 'error') {
-                    alert('Go Live error: ' + m.message);
+                    done = true; clearTimeout(watchdog);
+                    showGoLiveInfo(room, null, sizeMB, '⚠ ' + (m.message || 'upload error') + ' — close (✕) and retry');
                 }
             };
-            ws.onerror = () => alert('Could not reach the live server.');
+            ws.onerror = () => { if (!done) showGoLiveInfo(room, null, sizeMB, '⚠ Could not reach the live server — close (✕) and retry'); };
         }
 
         function showGoLiveInfo(room, url, sizeMB, statusText) {
@@ -33876,11 +33883,14 @@ Item Receive Display:
             if (!box) {
                 box = document.createElement('div');
                 box.id = 'goLiveInfo';
-                box.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:100000;background:#001018;border:3px solid #0ff;color:#fff;font-family:monospace;padding:14px 18px;text-align:center;max-width:92vw;box-shadow:0 0 24px rgba(0,255,255,.5);';
+                // Bottom-center so it never covers the toolbar; always dismissable.
+                box.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:100000;background:#001018;border:3px solid #0ff;color:#fff;font-family:monospace;padding:16px 22px 14px;text-align:center;max-width:92vw;box-shadow:0 0 24px rgba(0,255,255,.5);';
                 document.body.appendChild(box);
             }
+            const closeBtn = '<button title="dismiss" onclick="document.getElementById(\'goLiveInfo\').remove()" style="position:absolute;top:1px;right:7px;background:none;border:none;color:#0ff;font-size:16px;cursor:pointer;line-height:1;">✕</button>';
             if (url) {
-                box.innerHTML = '<div style="color:#0ff;font-weight:bold;margin-bottom:8px;">🔴 LIVE — world uploaded (' + sizeMB + 'MB)</div>'
+                box.innerHTML = closeBtn
+                    + '<div style="color:#0ff;font-weight:bold;margin-bottom:8px;">🔴 LIVE — world uploaded (' + sizeMB + 'MB)</div>'
                     + '<div style="font-size:12px;margin-bottom:6px;">Share this link / room: <b>' + room + '</b></div>'
                     + '<input id="goLiveUrl" readonly value="' + url + '" onclick="this.select()" style="width:min(440px,82vw);padding:8px;background:#000;color:#0f0;border:1px solid #0f0;font-family:monospace;text-align:center;">'
                     + '<div style="margin-top:10px;">'
@@ -33888,7 +33898,7 @@ Item Receive Display:
                     + '<button onclick="document.getElementById(\'goLiveInfo\').remove()" style="padding:8px 14px;cursor:pointer;">CLOSE</button>'
                     + '</div>';
             } else {
-                box.innerHTML = '<div style="color:#0ff;">' + (statusText || 'Uploading…') + ' (' + sizeMB + 'MB)</div>';
+                box.innerHTML = closeBtn + '<div style="color:#0ff;">' + (statusText || 'Uploading…') + ' (' + sizeMB + 'MB)</div>';
             }
         }
 
