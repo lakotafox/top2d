@@ -3610,6 +3610,35 @@
                     <input type="number" id="itemMaxStack" value="99" min="1" max="999" style="width:100%;">
                 </div>
 
+                <!-- Step 6: Behavior (makes the item usable from the hotbar via the attack button) -->
+                <div id="itemBehaviorSection" style="margin-bottom:20px; display:none;">
+                    <h3>6. Behavior</h3>
+                    <p style="font-size:10px; color:#666; margin-bottom:8px;">Equip in hotbar, press attack to use.</p>
+                    <select id="itemBehavior" onchange="itemBehaviorChanged()" style="width:100%; margin-bottom:8px;">
+                        <option value="none">None (just an item)</option>
+                        <option value="sword">🗡 Sword (melee weapon)</option>
+                        <option value="boomerang">🪃 Boomerang (throw &amp; return)</option>
+                    </select>
+                    <div id="itemBehaviorConfig" style="display:none;">
+                        <div style="margin-bottom:6px;">
+                            <label style="font-size:11px; color:#888;">Damage: <span id="itemAbilityDamageVal">10</span></label>
+                            <input type="range" id="itemAbilityDamage" min="1" max="100" value="10" oninput="document.getElementById('itemAbilityDamageVal').textContent=this.value" style="width:100%;">
+                        </div>
+                        <div id="itemAbilityRangeRow" style="margin-bottom:6px;">
+                            <label style="font-size:11px; color:#888;">Range: <span id="itemAbilityRangeVal">180</span>px</label>
+                            <input type="range" id="itemAbilityRange" min="40" max="400" value="180" oninput="document.getElementById('itemAbilityRangeVal').textContent=this.value" style="width:100%;">
+                        </div>
+                        <div id="itemAbilitySpeedRow" style="margin-bottom:6px;">
+                            <label style="font-size:11px; color:#888;">Speed: <span id="itemAbilitySpeedVal">7</span></label>
+                            <input type="range" id="itemAbilitySpeed" min="2" max="16" value="7" oninput="document.getElementById('itemAbilitySpeedVal').textContent=this.value" style="width:100%;">
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <label style="font-size:11px; color:#888;">Player anim on use (blank = attack):</label>
+                            <input type="text" id="itemAbilityAnim" placeholder="e.g. throw" style="width:100%;">
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Actions -->
                 <div style="margin-top:auto;">
                     <button onclick="itemSave()" style="width:100%; background:#4f8; color:#000; margin-bottom:5px;">Save Item</button>
@@ -14960,11 +14989,13 @@
                         document.getElementById('itemIdleSection').style.display = 'block';
                         document.getElementById('itemNameSection').style.display = 'block';
                         document.getElementById('itemStackSection').style.display = 'block';
+                        document.getElementById('itemBehaviorSection').style.display = 'block';
                         itemDrawCanvas();
                         itemUpdateFramesList();
                         itemUpdateIdleDropdown();
                         document.getElementById('itemIdleFrame').value = item.idleFrame || 0;
                         document.getElementById('itemMaxStack').value = item.maxStack || 99;
+                        loadItemBehaviorFields(item);
                     };
                     itemEditorImage.src = item.spriteData;
                     document.getElementById('itemFileName').textContent = 'Sprite loaded';
@@ -14984,6 +15015,8 @@
                 document.getElementById('itemNameSection').style.display = 'none';
                 document.getElementById('itemStackSection').style.display = 'none';
                 document.getElementById('itemMaxStack').value = 99;
+                document.getElementById('itemBehaviorSection').style.display = 'none';
+                resetItemBehaviorFields();
                 const previewCtx = document.getElementById('itemLivePreview').getContext('2d');
                 previewCtx.clearRect(0, 0, 48, 48);
                 const editorCanvas = document.getElementById('itemEditorCanvas');
@@ -15016,6 +15049,7 @@
                     document.getElementById('itemIdleSection').style.display = 'block';
                     document.getElementById('itemNameSection').style.display = 'block';
                     document.getElementById('itemStackSection').style.display = 'block';
+                    document.getElementById('itemBehaviorSection').style.display = 'block';
 
                     // Auto-suggest frame size
                     const w = itemEditorImage.naturalWidth;
@@ -15268,6 +15302,7 @@
                 idleFrame: idleFrame,
                 maxStack: maxStack
             };
+            Object.assign(itemData, readItemBehaviorFields());
 
             if (itemEditorEditingIndex >= 0) {
                 items[itemEditorEditingIndex] = itemData;
@@ -15282,6 +15317,38 @@
             stopEditing(); // Clear editing lock
             updateItemList();
             renderMap();
+        }
+
+        // ===== Usable-item behavior (sword / boomerang) =====
+        function itemBehaviorChanged() {
+            const b = document.getElementById('itemBehavior').value;
+            document.getElementById('itemBehaviorConfig').style.display = (b === 'none') ? 'none' : 'block';
+            document.getElementById('itemAbilitySpeedRow').style.display = (b === 'boomerang') ? 'block' : 'none';
+        }
+        function readItemBehaviorFields() {
+            const behavior = document.getElementById('itemBehavior').value || 'none';
+            if (behavior === 'none') return { behavior: 'none' };
+            return {
+                behavior: behavior,
+                abilityDamage: parseInt(document.getElementById('itemAbilityDamage').value) || 10,
+                abilityRange: parseInt(document.getElementById('itemAbilityRange').value) || 180,
+                abilitySpeed: parseInt(document.getElementById('itemAbilitySpeed').value) || 7,
+                abilityAnim: (document.getElementById('itemAbilityAnim').value || '').trim()
+            };
+        }
+        function loadItemBehaviorFields(item) {
+            const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+            const txt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+            set('itemBehavior', item.behavior || 'none');
+            set('itemAbilityDamage', item.abilityDamage || 10); txt('itemAbilityDamageVal', item.abilityDamage || 10);
+            set('itemAbilityRange', item.abilityRange || 180); txt('itemAbilityRangeVal', item.abilityRange || 180);
+            set('itemAbilitySpeed', item.abilitySpeed || 7); txt('itemAbilitySpeedVal', item.abilitySpeed || 7);
+            set('itemAbilityAnim', item.abilityAnim || '');
+            itemBehaviorChanged();
+        }
+        function resetItemBehaviorFields() {
+            const d = { behavior: 'none' };
+            loadItemBehaviorFields(d);
         }
 
         function itemCancel() {
@@ -15313,6 +15380,7 @@
                 idleFrame: idleFrame,
                 maxStack: maxStack
             };
+            Object.assign(itemData, readItemBehaviorFields());
 
             // Always add as new item (not editing)
             items.push(itemData);
@@ -26396,8 +26464,9 @@
         // Check player attack hitbox against NPCs using cone/triangle shape
         function checkAttackHitbox() {
             if (!player.attacking || !player.attackAnim) return;
+            if (player.throwing) return; // throw reuses the swing anim but does no melee damage
 
-            const attackDamage = 10; // TODO: Make configurable
+            const attackDamage = player.attackDamage || 10;
             const tileSize = gridSize * TILE_SCALE;
 
             // Track which NPCs we've hit this attack to prevent multiple hits
@@ -26503,6 +26572,134 @@
                 if (hit) {
                     damageNPC(i, attackDamage);
                     player.attackHitNpcs[i] = true;
+                }
+            }
+        }
+
+        // ===== USABLE ITEMS / ABILITIES (sword swing + boomerang) =====
+        let projectiles = [];
+
+        // Item currently held in the active hotbar slot (the "equipped" item).
+        function getActiveItemDef() {
+            const slot = inventorySlots[selectedHotbarSlot];
+            if (!slot || slot.itemIndex == null) return null;
+            return { def: itemsData[slot.itemIndex], index: slot.itemIndex } ;
+        }
+
+        // The attack button now uses whatever is equipped.
+        function useActiveItem() {
+            const a = getActiveItemDef();
+            if (!a || !a.def || !a.def.behavior || a.def.behavior === 'none') return; // nothing usable -> can't attack
+            if (a.def.behavior === 'sword') {
+                player.attackDamage = a.def.abilityDamage || 10;
+                startSwordAttack();
+            } else if (a.def.behavior === 'boomerang') {
+                throwBoomerang(a.def, a.index);
+            }
+        }
+
+        function startSwordAttack() {
+            if (player.attacking) return;
+            player.attacking = true;
+            player.attackAnim = true;
+            player.attackFrame = 0;
+            player.attackFrameTimer = 0;
+            player.attackTimer = 30;
+            player.attackHitNpcs = {};
+            player.throwing = false;
+            if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
+                playSound(playerSoundsData.attack.soundIndex, playerSoundsData.attack.volume || 0.7, playerSoundsData.attack.pitchVariation || 0.15, playerSoundsData.attack.lengthVariation || 0);
+            }
+        }
+
+        function dirVector() {
+            switch (player.direction) {
+                case 'left': return { x: -1, y: 0 };
+                case 'right': return { x: 1, y: 0 };
+                case 'up': return { x: 0, y: -1 };
+                default: return { x: 0, y: 1 }; // down
+            }
+        }
+
+        function throwBoomerang(def, itemIndex) {
+            // Only one of the player's boomerangs in flight at a time.
+            if (projectiles.some(p => p.type === 'boomerang')) return;
+            const d = dirVector();
+            const px = player.x + player.width / 2;
+            const py = player.y + player.height / 2;
+            projectiles.push({
+                type: 'boomerang', x: px, y: py, dirX: d.x, dirY: d.y,
+                speed: def.abilitySpeed || 7, maxRange: (def.abilityRange || 180) * TILE_SCALE,
+                dist: 0, phase: 'out', dmg: def.abilityDamage || 10, itemIndex: itemIndex,
+                hit: {}, frame: 0, frameTimer: 0
+            });
+            // Throw animation: reuse the attack swing as the throw motion, but suppress melee damage
+            // (the boomerang itself deals the damage). A dedicated "throw" anim can be wired later.
+            startSwordAttack();
+            player.throwing = true;
+        }
+
+        // Shared enemy-hit used by projectiles — mirrors the center/damage math in checkAttackHitbox.
+        function hitEnemiesAt(wx, wy, radius, dmg, hitSet) {
+            const tileSize = gridSize * TILE_SCALE;
+            for (let i = 0; i < placedNpcs.length; i++) {
+                const placed = placedNpcs[i]; const state = npcRuntimeState[i];
+                if (!placed || !placed.isEnemy || !state || state.dead) continue;
+                if (hitSet && hitSet[i]) continue;
+                const npc = npcs[placed.npcIndex]; if (!npc) continue;
+                const npcScale = placed.scale || 1;
+                const scaledW = tileSize * npcScale, scaledH = tileSize * npcScale;
+                const cx = state.x * TILE_SCALE + tileSize / 2;
+                const cy = state.y * TILE_SCALE + tileSize - scaledH / 2;
+                const dx = wx - cx, dy = wy - cy;
+                const r = radius + Math.max(scaledW, scaledH) * 0.4;
+                if (dx * dx + dy * dy <= r * r) {
+                    damageNPC(i, dmg);
+                    if (hitSet) hitSet[i] = true;
+                }
+            }
+        }
+
+        function updateProjectiles() {
+            const pcx = player.x + player.width / 2;
+            const pcy = player.y + player.height / 2;
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                if (p.type === 'boomerang') {
+                    if (p.phase === 'out') {
+                        p.x += p.dirX * p.speed; p.y += p.dirY * p.speed; p.dist += p.speed;
+                        if (p.dist >= p.maxRange) { p.phase = 'return'; p.hit = {}; }
+                    } else {
+                        const dx = pcx - p.x, dy = pcy - p.y;
+                        const len = Math.hypot(dx, dy) || 1;
+                        p.x += (dx / len) * p.speed; p.y += (dy / len) * p.speed;
+                        if (len < 26) { projectiles.splice(i, 1); continue; } // caught
+                    }
+                    hitEnemiesAt(p.x, p.y, 12, p.dmg, p.hit);
+                    p.frameTimer++;
+                    if (p.frameTimer >= 3) { p.frameTimer = 0; p.frame++; }
+                }
+            }
+        }
+
+        function drawProjectiles(camX, camY) {
+            const tileSize = gridSize * TILE_SCALE;
+            for (const p of projectiles) {
+                if (p.type !== 'boomerang') continue;
+                const img = itemImages[p.itemIndex];
+                const def = itemsData[p.itemIndex];
+                const sx = Math.floor(p.x - camX), sy = Math.floor(p.y - camY);
+                if (img && img.complete && def && def.frames && def.frames.length) {
+                    const f = def.frames[p.frame % def.frames.length];
+                    const dw = tileSize * 0.7;
+                    const dh = dw * (f.h / f.w);
+                    ctx.save();
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(img, f.x, f.y, f.w, f.h, sx - dw / 2, sy - dh / 2, dw, dh);
+                    ctx.restore();
+                } else {
+                    ctx.fillStyle = '#ffcf33';
+                    ctx.beginPath(); ctx.arc(sx, sy, 8, 0, 7); ctx.fill();
                 }
             }
         }
@@ -26959,6 +27156,17 @@
             }
 
             const item = itemsData[itemIndex];
+            // Auto-equip the first weapon/ability picked up so the attack button works immediately.
+            if (item && item.behavior && item.behavior !== 'none') {
+                const activeSlot = inventorySlots[selectedHotbarSlot];
+                const activeDef = activeSlot ? itemsData[activeSlot.itemIndex] : null;
+                const activeUsable = activeDef && activeDef.behavior && activeDef.behavior !== 'none';
+                if (!activeUsable) {
+                    for (let s = 0; s < 10 && s < inventorySlots.length; s++) {
+                        if (inventorySlots[s] && inventorySlots[s].itemIndex === itemIndex) { selectedHotbarSlot = s; break; }
+                    }
+                }
+            }
             console.log('[INVENTORY] Added', quantity, 'x', item?.name || 'Item ' + itemIndex);
             return true;
         }
@@ -28659,17 +28867,8 @@ Item Receive Display:
                 handleInteract();
             }
             // Attack key (Space)
-            if (e.key === ' ' && !player.attacking) {
-                player.attacking = true;
-                player.attackAnim = true;
-                player.attackFrame = 0;
-                player.attackFrameTimer = 0;
-                player.attackTimer = 30; // Longer for animation to play
-                player.attackHitNpcs = {}; // Reset hit tracking for new attack
-                // Play attack sound
-                if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
-                    playSound(playerSoundsData.attack.soundIndex, playerSoundsData.attack.volume || 0.7, playerSoundsData.attack.pitchVariation || 0.15, playerSoundsData.attack.lengthVariation || 0);
-                }
+            if (e.key === ' ') {
+                useActiveItem(); // attack button uses the equipped hotbar item (sword swing / boomerang throw)
             }
         });
         document.addEventListener('keyup', e => keys[e.key] = false);
@@ -28869,33 +29068,13 @@ Item Receive Display:
         });
         leftTouchZone.addEventListener('touchcancel', resetJoystick);
 
-        // Attack button (mobile)
+        // Attack button (mobile) — uses the equipped hotbar item (sword swing / boomerang throw)
         document.getElementById('attackBtn').addEventListener('touchstart', (e) => {
             e.preventDefault();
-            if (!player.attacking) {
-                player.attacking = true;
-                player.attackAnim = true;
-                player.attackFrame = 0;
-                player.attackFrameTimer = 0;
-                player.attackTimer = 30;
-                player.attackHitNpcs = {}; // Reset hit tracking so each swing can damage enemies again
-                if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
-                    playSound(playerSoundsData.attack.soundIndex, playerSoundsData.attack.volume || 0.7, playerSoundsData.attack.pitchVariation || 0.15, playerSoundsData.attack.lengthVariation || 0);
-                }
-            }
+            useActiveItem();
         }, { passive: false });
         document.getElementById('attackBtn').addEventListener('click', () => {
-            if (!player.attacking) {
-                player.attacking = true;
-                player.attackAnim = true;
-                player.attackFrame = 0;
-                player.attackFrameTimer = 0;
-                player.attackTimer = 30;
-                player.attackHitNpcs = {}; // Reset hit tracking so each swing can damage enemies again
-                if (playerSoundsData.attack && playerSoundsData.attack.soundIndex >= 0) {
-                    playSound(playerSoundsData.attack.soundIndex, playerSoundsData.attack.volume || 0.7, playerSoundsData.attack.pitchVariation || 0.15, playerSoundsData.attack.lengthVariation || 0);
-                }
-            }
+            useActiveItem();
         });
 
         // Interact button (mobile) - for doors, NPCs, and dialogs
@@ -29696,6 +29875,8 @@ Item Receive Display:
                     player.attacking = false;
                     player.attackAnim = false;
                 }
+
+                if (!player.attacking) player.throwing = false; // swing/throw finished
 
                 // Check for attack hitbox collisions with enemy NPCs
                 checkAttackHitbox();
@@ -30864,6 +31045,7 @@ Item Receive Display:
             // PASS 2: Y-sort player with tiles from layers 1+
             let dp2 = performance.now();
             tilesDrawn += drawYSortedEntities(camX, camY, tileSize);
+            drawProjectiles(camX, camY); // thrown abilities (boomerang etc.) on top of entities
             let dp2e = performance.now();
             if (dp2e - dp2 > 5) drawPerfLog += ' Ysort:' + (dp2e-dp2).toFixed(0);
 
@@ -33762,6 +33944,8 @@ Item Receive Display:
                     updateReceiveItemAnimation();
                     // Update dropped items physics and pickup
                     updateDroppedItems();
+                    // Update thrown abilities (boomerang etc.)
+                    updateProjectiles();
                 }
             }
 
