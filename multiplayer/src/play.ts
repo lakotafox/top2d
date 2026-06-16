@@ -61,9 +61,39 @@ export default class PlayServer implements Party.Server {
   async onAlarm() {
     const active = [...this.room.getConnections()].length;
     if (active > 0) { this.bumpExpiry(); return; } // still in use — keep it alive
+    await this.clearRoom();
+    console.log("[play] room expired (inactive) — stored world cleared");
+  }
+
+  // Register/unregister with the central registry so "clean up all rooms" can find this room.
+  private pingRegistry(action: "register" | "unregister") {
+    try {
+      this.room.context.parties.registry.get("main").fetch({
+        method: "POST",
+        body: JSON.stringify({ action, room: this.room.id }),
+      }).catch(() => {});
+    } catch (e) {}
+  }
+
+  // Wipe this room's stored world and boot any connected viewers.
+  private async clearRoom() {
     await this.room.storage.deleteAll();
     this.world = null;
-    console.log("[play] room expired (inactive) — stored world cleared");
+    for (const c of this.room.getConnections()) {
+      try { c.send(JSON.stringify({ type: "room-closed", message: "The host ended this world." })); c.close(); } catch (e) {}
+    }
+    this.pingRegistry("unregister");
+  }
+
+  // Server-to-server: the registry calls this to clear a room during "clean up all".
+  async onRequest(req: Party.Request) {
+    let body: any = {};
+    try { body = await req.json(); } catch (e) {}
+    if (body.action === "clear") {
+      await this.clearRoom();
+      return Response.json({ ok: true });
+    }
+    return Response.json({ ok: false }, { status: 400 });
   }
 
   onConnect(conn: Party.Connection) {
@@ -165,6 +195,7 @@ export default class PlayServer implements Party.Server {
         }
         await this.persistWorld(assembled);
         this.bumpExpiry(); // restart the inactivity clock on a fresh Go Live
+        this.pingRegistry("register"); // so "clean up all rooms" can find this room
         this.uploadChunks = [];
         sender.send(JSON.stringify({ type: "world-ready" }));
         // Push the new world to everyone already connected/waiting.

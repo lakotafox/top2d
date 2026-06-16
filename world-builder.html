@@ -2533,6 +2533,9 @@
                 <!-- Publish the world so phones can join by URL -->
                 <button onclick="goLive()" class="test-map-btn" style="background:#a01;">📡 GO LIVE</button>
 
+                <!-- Wipe every live room you've published -->
+                <button onclick="cleanupAllRooms()" class="test-map-btn" style="background:#555;">🧹 CLEAN ROOMS</button>
+
                 <span id="toolHint" class="toolbar-hint">R:rotate | I:flip | E:erase</span>
             </div>
             <!-- Door Animation Panel (in toolbar area) -->
@@ -33887,6 +33890,18 @@ Item Receive Display:
             } else {
                 box.innerHTML = '<div style="color:#0ff;">' + (statusText || 'Uploading…') + ' (' + sizeMB + 'MB)</div>';
             }
+        }
+
+        // Host: wipe ALL live rooms at once (asks the registry to clear every registered room).
+        function cleanupAllRooms() {
+            if (!confirm('Wipe ALL your live rooms? Anyone currently in them gets kicked. This cannot be undone.')) return;
+            // No Content-Type header => simple request, no CORS preflight; registry still parses JSON.
+            fetch('https://multiplayer.lakotafox.partykit.dev/parties/registry/main', {
+                method: 'POST',
+                body: JSON.stringify({ action: 'clearAll' })
+            }).then(r => r.json()).then(d => {
+                alert('Cleaned up ' + (d.cleared || 0) + ' of ' + (d.total || 0) + ' room(s).');
+            }).catch(e => alert('Cleanup failed: ' + e.message));
         }
 
         // Viewer: join a live room by code/URL — boots the game in-page from the network world.
