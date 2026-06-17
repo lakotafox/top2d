@@ -2613,6 +2613,15 @@
                         </div>
                         <button id="npcAnimIdle" onclick="npcSelectAnim('idle')" style="padding:6px; font-size:11px;">Idle</button>
                         <div style="border-top:1px solid #555; margin:5px 0; padding-top:5px;">
+                            <div style="font-size:10px; color:#8af; margin-bottom:5px;">-- Diagonal Walk (optional · for 8-direction NPCs) --</div>
+                            <div style="display:flex; gap:4px;">
+                                <button id="npcAnimDownLeft" onclick="npcSelectAnim('walkDownLeft')" style="flex:1; padding:6px; font-size:11px;">↙ Walk</button>
+                                <button id="npcAnimDownRight" onclick="npcSelectAnim('walkDownRight')" style="flex:1; padding:6px; font-size:11px;">↘ Walk</button>
+                                <button id="npcAnimUpLeft" onclick="npcSelectAnim('walkUpLeft')" style="flex:1; padding:6px; font-size:11px;">↖ Walk</button>
+                                <button id="npcAnimUpRight" onclick="npcSelectAnim('walkUpRight')" style="flex:1; padding:6px; font-size:11px;">↗ Walk</button>
+                            </div>
+                        </div>
+                        <div style="border-top:1px solid #555; margin:5px 0; padding-top:5px;">
                             <div style="font-size:10px; color:#f88; margin-bottom:5px;">-- Attack Animations (Enemy NPCs) --</div>
                             <div style="display:flex; gap:4px;">
                                 <button id="npcAnimAttackDown" onclick="npcSelectAnim('attackDown')" style="flex:1; padding:6px; font-size:11px; background:#744;">↓ Atk</button>
@@ -3074,6 +3083,13 @@
                             <button id="playerAnimUp" onclick="playerSelectAnim('walkUp')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">↑ Walk</button>
                             <button id="playerAnimLeft" onclick="playerSelectAnim('walkLeft')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">← Walk</button>
                             <button id="playerAnimRight" onclick="playerSelectAnim('walkRight')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">→ Walk</button>
+                        </div>
+                        <div class="player-anim-category walk" style="font-size:10px; opacity:0.85;">Diagonal Walk (optional · 8-direction)</div>
+                        <div style="display:flex; gap:4px;">
+                            <button id="playerAnimDownLeft" onclick="playerSelectAnim('walkDownLeft')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">↙ Walk</button>
+                            <button id="playerAnimDownRight" onclick="playerSelectAnim('walkDownRight')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">↘ Walk</button>
+                            <button id="playerAnimUpLeft" onclick="playerSelectAnim('walkUpLeft')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">↖ Walk</button>
+                            <button id="playerAnimUpRight" onclick="playerSelectAnim('walkUpRight')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">↗ Walk</button>
                         </div>
                         <div class="player-anim-category idle">Idle</div>
                         <button id="playerAnimIdle" onclick="playerSelectAnim('idle')" class="player-anim-btn idle-btn" style="padding:6px; font-size:11px;" title="Single idle for all directions">Idle (All)</button>
@@ -9682,18 +9698,20 @@
 
                         let animKey;
                         if (gPlayer.animation === 'attack') {
-                            const attackKey = attackDirMap[dir];
+                            const attackKey = attackDirMap[cardinalOf(dir)];
                             if (charAnims[attackKey] && charAnims[attackKey].length > 0) {
                                 animKey = attackKey;
                             } else if (charAnims.attack && charAnims.attack.length > 0) {
                                 animKey = 'attack';
                             } else {
-                                animKey = dirMap[dir];
+                                animKey = dirMap[cardinalOf(dir)];
                             }
                         } else if (gPlayer.animation === 'walk') {
-                            animKey = dirMap[dir];
+                            const _wr = resolveWalkKey(charAnims, dir);
+                            animKey = _wr.key;
+                            if (_wr.flip) flipX = true;
                         } else {
-                            const dirIdleKey = idleDirMap[dir];
+                            const dirIdleKey = idleDirMap[cardinalOf(dir)];
                             if (charAnims[dirIdleKey] && charAnims[dirIdleKey].length > 0) {
                                 animKey = dirIdleKey;
                             } else {
@@ -9723,15 +9741,16 @@
                     } else {
                         // Legacy frame layout
                         let row = 0, col = 0;
-                        flipX = dir === 'left';
+                        const ldir = cardinalOf(dir); // legacy 4-key tables have no diagonals; collapse to avoid undefined lookup
+                        flipX = ldir === 'left';
 
                         if (gPlayer.animation === 'walk') {
-                            const walk = walkFrames[dir];
+                            const walk = walkFrames[ldir];
                             row = walk.row;
                             col = walk.cols[frame % walk.cols.length];
                         } else {
                             row = 0;
-                            col = idleFrames[dir][frame % idleFrames[dir].length];
+                            col = idleFrames[ldir][frame % idleFrames[ldir].length];
                         }
 
                         srcX = col * charFrameW;
@@ -10417,7 +10436,7 @@
             }
 
             npcCurrentAnim = 'walkDown';
-            npcAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [] };
+            npcAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], walkDownLeft: [], walkDownRight: [], walkUpLeft: [], walkUpRight: [] };
             npcAnimMirrors = {}; // Reset mirror flags
             // Reset collision tool to Select mode
             npcTool = 'none';
@@ -10638,10 +10657,11 @@
 
         function npcSelectAnim(animName) {
             npcCurrentAnim = animName;
+            if (!npcAnimations[animName]) npcAnimations[animName] = []; // ensure slot exists (new diagonal slots etc.)
             // Update all button states and show frame counts
             npcUpdateAnimButtons();
             // Update display
-            const names = { walkDown: 'Walk Down', walkUp: 'Walk Up', walkLeft: 'Walk Left', walkRight: 'Walk Right', idle: 'Idle', attackDown: 'Attack Down', attackUp: 'Attack Up', attackLeft: 'Attack Left', attackRight: 'Attack Right' };
+            const names = { walkDown: 'Walk Down', walkUp: 'Walk Up', walkLeft: 'Walk Left', walkRight: 'Walk Right', idle: 'Idle', attackDown: 'Attack Down', attackUp: 'Attack Up', attackLeft: 'Attack Left', attackRight: 'Attack Right', walkDownLeft: 'Walk ↙', walkDownRight: 'Walk ↘', walkUpLeft: 'Walk ↖', walkUpRight: 'Walk ↗' };
             document.getElementById('npcCurrentAnimName').textContent = names[animName] || animName;
             // Update mirror button state
             npcUpdateMirrorButton();
@@ -10678,6 +10698,10 @@
                 'Left': 'walkLeft',
                 'Right': 'walkRight',
                 'Idle': 'idle',
+                'DownLeft': 'walkDownLeft',
+                'DownRight': 'walkDownRight',
+                'UpLeft': 'walkUpLeft',
+                'UpRight': 'walkUpRight',
                 'AttackDown': 'attackDown',
                 'AttackUp': 'attackUp',
                 'AttackLeft': 'attackLeft',
@@ -10689,6 +10713,10 @@
                 'Left': '← Walk',
                 'Right': '→ Walk',
                 'Idle': 'Idle',
+                'DownLeft': '↙ Walk',
+                'DownRight': '↘ Walk',
+                'UpLeft': '↖ Walk',
+                'UpRight': '↗ Walk',
                 'AttackDown': '↓ Atk',
                 'AttackUp': '↑ Atk',
                 'AttackLeft': '← Atk',
@@ -10724,7 +10752,7 @@
             if (!name) return;
 
             // Don't allow duplicates or reserved names
-            const reserved = ['walkdown', 'walkup', 'walkleft', 'walkright', 'idle'];
+            const reserved = ['walkdown', 'walkup', 'walkleft', 'walkright', 'walkdownleft', 'walkdownright', 'walkupleft', 'walkupright', 'idle'];
             if (reserved.includes(name) || npcAnimations[name]) {
                 alert('Animation "' + name + '" already exists');
                 return;
@@ -10743,7 +10771,7 @@
             if (!container) return;
 
             // Get custom animations (not the default ones)
-            const defaultAnims = ['walkDown', 'walkUp', 'walkLeft', 'walkRight', 'idle', 'attackDown', 'attackUp', 'attackLeft', 'attackRight'];
+            const defaultAnims = ['walkDown', 'walkUp', 'walkLeft', 'walkRight', 'idle', 'attackDown', 'attackUp', 'attackLeft', 'attackRight', 'walkDownLeft', 'walkDownRight', 'walkUpLeft', 'walkUpRight'];
             const customAnims = Object.keys(npcAnimations).filter(k => !defaultAnims.includes(k));
 
             if (customAnims.length === 0) {
@@ -11969,6 +11997,7 @@
 
         function playerSelectAnim(animName) {
             playerCurrentAnim = animName;
+            if (!playerAnimations[animName]) playerAnimations[animName] = []; // ensure slot exists (new diagonal slots etc.)
             playerUpdateAnimButtons();
             playerUpdateMirrorButton();
             playerUpdateHitboxUI(); // Show/hide hitbox section based on anim type
@@ -12005,15 +12034,20 @@
                 walkDown: 'playerAnimDown',
                 walkUp: 'playerAnimUp',
                 walkLeft: 'playerAnimLeft',
-                walkRight: 'playerAnimRight'
+                walkRight: 'playerAnimRight',
+                walkDownLeft: 'playerAnimDownLeft',
+                walkDownRight: 'playerAnimDownRight',
+                walkUpLeft: 'playerAnimUpLeft',
+                walkUpRight: 'playerAnimUpRight'
             };
+            const walkLabels = { walkDown: '↓ Walk', walkUp: '↑ Walk', walkLeft: '← Walk', walkRight: '→ Walk', walkDownLeft: '↙ Walk', walkDownRight: '↘ Walk', walkUpLeft: '↖ Walk', walkUpRight: '↗ Walk' };
             Object.entries(walkBtnMap).forEach(([anim, btnId]) => {
                 const btn = document.getElementById(btnId);
                 if (btn) {
                     btn.classList.toggle('active', playerCurrentAnim === anim);
                     const count = playerAnimations[anim]?.length || 0;
                     btn.classList.toggle('has-frames', count > 0);
-                    let label = anim === 'walkDown' ? '↓ Walk' : anim === 'walkUp' ? '↑ Walk' : anim === 'walkLeft' ? '← Walk' : '→ Walk';
+                    let label = walkLabels[anim] || '→ Walk';
                     btn.textContent = label + (count > 0 ? ' (' + count + ')' : '');
                 }
             });
@@ -12566,7 +12600,7 @@
                 return;
             }
             // Reserved names
-            const reserved = ['walkDown', 'walkUp', 'walkLeft', 'walkRight', 'idle', 'idleDown', 'idleUp', 'idleLeft', 'idleRight', 'attackDown', 'attackUp', 'attackLeft', 'attackRight', 'interact', 'death', 'receivedItem'];
+            const reserved = ['walkDown', 'walkUp', 'walkLeft', 'walkRight', 'walkDownLeft', 'walkDownRight', 'walkUpLeft', 'walkUpRight', 'idle', 'idleDown', 'idleUp', 'idleLeft', 'idleRight', 'attackDown', 'attackUp', 'attackLeft', 'attackRight', 'interact', 'death', 'receivedItem'];
             if (reserved.includes(name) || playerAnimations[name]) {
                 alert('Animation "' + name + '" already exists or is reserved');
                 return;
@@ -12584,7 +12618,7 @@
             if (!container) return;
 
             // Get custom animations (not the default ones)
-            const reserved = ['walkDown', 'walkUp', 'walkLeft', 'walkRight', 'idle', 'idleDown', 'idleUp', 'idleLeft', 'idleRight', 'attackDown', 'attackUp', 'attackLeft', 'attackRight', 'interact', 'death', 'receivedItem'];
+            const reserved = ['walkDown', 'walkUp', 'walkLeft', 'walkRight', 'walkDownLeft', 'walkDownRight', 'walkUpLeft', 'walkUpRight', 'idle', 'idleDown', 'idleUp', 'idleLeft', 'idleRight', 'attackDown', 'attackUp', 'attackLeft', 'attackRight', 'interact', 'death', 'receivedItem'];
             const customAnims = Object.keys(playerAnimations).filter(k => !reserved.includes(k));
 
             if (customAnims.length === 0) {
@@ -13875,7 +13909,7 @@
                     const animDelay = Math.max(1, Math.round(60 / fps));
                     if (npcPreviewState.frameTimer >= animDelay) {
                         npcPreviewState.frameTimer = 0;
-                        npcPreviewState.frame = (npcPreviewState.frame + 1) % 4;
+                        npcPreviewState.frame = npcPreviewState.frame + 1; // uncapped; draw uses % anim.length
                     }
                     renderMap();
                     npcPreviewAnimId = requestAnimationFrame(npcPathPreviewLoop);
@@ -13962,7 +13996,7 @@
             const animDelay = Math.max(1, Math.round(60 / fps));
             if (npcPreviewState.frameTimer >= animDelay) {
                 npcPreviewState.frameTimer = 0;
-                npcPreviewState.frame = (npcPreviewState.frame + 1) % 4;
+                npcPreviewState.frame = npcPreviewState.frame + 1; // uncapped; draw uses % anim.length
             }
 
             // Render
@@ -19303,7 +19337,7 @@
                 gamePlayersInBuilder.forEach(p => {
                     // Advance frame every 150ms for walking players
                     if (p.animation === 'walk' && now - p.lastFrameTime > 150) {
-                        p.frame = (p.frame + 1) % 4;
+                        p.frame = p.frame + 1; // uncapped; draw uses % frames.length
                         p.lastFrameTime = now;
                         needsRender = true;
                     } else if (p.animation !== 'walk') {
@@ -26152,6 +26186,7 @@
         let playerFrameWidth = 64;
         let playerFrameHeight = 64;
         let playerAnimations = null;
+        let playerHasDiagonals = false; // true if active char has diagonal walk frames (gates 8-way facing)
         let playerAnimFpsList = {}; // Per-animation FPS
         let playerAnimMirrors = {}; // Per-animation mirror flags
         let playerAttackMovement = 'stop'; // 'stop', 'slide', 'move'
@@ -26187,6 +26222,7 @@
                 playerFrameWidth = activePlayerChar.frameWidth || 64;
                 playerFrameHeight = activePlayerChar.frameHeight || 64;
                 playerAnimations = activePlayerChar.animations;
+                playerHasDiagonals = hasDiagonalAnims(playerAnimations); // gate for 8-way facing
                 // Load per-animation FPS
                 if (activePlayerChar.animFps && typeof activePlayerChar.animFps === 'object') {
                     playerAnimFpsList = activePlayerChar.animFps;
@@ -26654,7 +26690,7 @@
             if (player.attackHitNpcs === undefined) player.attackHitNpcs = {};
 
             // Get cone parameters for current direction
-            const dir = player.direction;
+            const dir = cardinalOf(player.direction); // collapse diagonal->cardinal for hitbox geometry
             const range = (playerHitboxRange[dir] || 40) * TILE_SCALE;
             const halfAngle = ((playerHitboxWidth[dir] || 60) / 2) * (Math.PI / 180); // Convert to radians
             const offsetX = (playerHitboxOffsetX[dir] || 0) * TILE_SCALE;
@@ -26794,19 +26830,15 @@
         }
 
         function dirVector() {
-            switch (player.direction) {
-                case 'left': return { x: -1, y: 0 };
-                case 'right': return { x: 1, y: 0 };
-                case 'up': return { x: 0, y: -1 };
-                default: return { x: 0, y: 1 }; // down
-            }
+            // True unit vector incl. diagonals so projectiles fire along the actual facing.
+            return dirToVec(player.direction);
         }
 
         // Resolve the player animation to play for an ability use. Prefers a directional anim
         // (e.g. "throwDown") then a single one (e.g. "throw"); returns null to fall back to attack.
         function resolveAbilityAnimKey(name) {
             if (!name || !playerAnimations) return null;
-            const suffix = { down: 'Down', up: 'Up', left: 'Left', right: 'Right' }[player.direction] || 'Down';
+            const suffix = { down: 'Down', up: 'Up', left: 'Left', right: 'Right' }[cardinalOf(player.direction)] || 'Down';
             if (playerAnimations[name + suffix] && playerAnimations[name + suffix].length) return name + suffix;
             if (playerAnimations[name] && playerAnimations[name].length) return name;
             return null;
@@ -27801,7 +27833,7 @@
                             // Trigger attack animation — size the window so it plays the attack anim
                             // ONCE at the NPC's configured FPS (matches walk/idle), not a fixed 0.5s.
                             const _atkDef = npcs[placed.npcIndex];
-                            const _atkKey = { down: 'attackDown', up: 'attackUp', left: 'attackLeft', right: 'attackRight' }[state.direction] || 'attackDown';
+                            const _atkKey = { down: 'attackDown', up: 'attackUp', left: 'attackLeft', right: 'attackRight' }[cardinalOf(state.direction)] || 'attackDown';
                             const _atkLen = (_atkDef && _atkDef.animations && _atkDef.animations[_atkKey]) ? _atkDef.animations[_atkKey].length : 0;
                             const _atkFps = placed.animSpeed || (_atkDef && _atkDef.fps) || 8;
                             const _atkTicks = Math.max(1, Math.round(60 / _atkFps));
@@ -27889,11 +27921,7 @@
                                 }
 
                                 // Set direction
-                                if (Math.abs(ldx) > Math.abs(ldy)) {
-                                    state.direction = ldx > 0 ? 'right' : 'left';
-                                } else {
-                                    state.direction = ldy > 0 ? 'down' : 'up';
-                                }
+                                state.direction = dir8FromVector(ldx, ldy, hasDiagonalAnims(npc.animations)) || state.direction;
                             } else {
                                 // Lunge complete or timeout
                                 state.aiState = 'recover';
@@ -28000,12 +28028,8 @@
                                 }
                             }
 
-                            // Set direction based on target
-                            if (Math.abs(dx) > Math.abs(dy)) {
-                                state.direction = dx > 0 ? 'right' : 'left';
-                            } else {
-                                state.direction = dy > 0 ? 'down' : 'up';
-                            }
+                            // Set direction based on target (8-way when the NPC sprite has diagonals)
+                            state.direction = dir8FromVector(dx, dy, hasDiagonalAnims(npc.animations)) || state.direction;
                         } else {
                             state.moving = false;
                         }
@@ -28148,11 +28172,7 @@
                         // Stop and wait for player to move
                         state.moving = false;
                         // Still face the direction of movement
-                        if (Math.abs(dx) > Math.abs(dy)) {
-                            state.direction = dx > 0 ? 'right' : 'left';
-                        } else {
-                            state.direction = dy > 0 ? 'down' : 'up';
-                        }
+                        state.direction = dir8FromVector(dx, dy, hasDiagonalAnims(npc.animations)) || state.direction;
                     } else {
                         // No collision, proceed with movement
                         state.moving = true;
@@ -28160,11 +28180,7 @@
                         state.y = newY;
 
                         // Set direction based on movement
-                        if (Math.abs(dx) > Math.abs(dy)) {
-                            state.direction = dx > 0 ? 'right' : 'left';
-                        } else {
-                            state.direction = dy > 0 ? 'down' : 'up';
-                        }
+                        state.direction = dir8FromVector(dx, dy, hasDiagonalAnims(npc.animations)) || state.direction;
                     }
                 }
 
@@ -28657,6 +28673,83 @@
             lightCtx.globalCompositeOperation = 'source-over';
             ctx.drawImage(lightCanvas, 0, 0);
         }
+
+        // ===================== 8-DIRECTION MOVEMENT SUPPORT =====================
+        // Added 2026-06-17. Diagonal facing values are camelCase: 'upLeft','upRight',
+        // 'downLeft','downRight'. Anim slot = 'walk' + dirSuffix(dir) -> 'walkUpLeft' etc.
+        // DESIGN: diagonals are used for WALK animation only. All other systems (attack
+        // hitbox, attack/idle anim, interaction, ability pose) collapse to the dominant
+        // cardinal via cardinalOf(). Projectiles use the true vector via dirToVec().
+        // SAFETY: a diagonal facing is only ever assigned when hasDiagonalAnims(sprite)
+        // is true, so 4-direction sprites / legacy sprites / old saves behave identically.
+
+        function dirSuffix(dir) { return dir.charAt(0).toUpperCase() + dir.slice(1); }
+
+        // Classify a movement vector into a facing. allowDiagonal gates 8-way vs 4-way.
+        function dir8FromVector(dx, dy, allowDiagonal) {
+            if (!dx && !dy) return null;
+            const ax = Math.abs(dx), ay = Math.abs(dy);
+            if (allowDiagonal && ax > 0.0001 && ay > 0.0001 && ax > ay * 0.41 && ay > ax * 0.41) {
+                return (dy < 0 ? 'up' : 'down') + (dx < 0 ? 'Left' : 'Right');
+            }
+            if (ax > ay) return dx < 0 ? 'left' : 'right';
+            return dy < 0 ? 'up' : 'down';
+        }
+
+        // Collapse any direction (incl. diagonal) to a single cardinal for combat/logic.
+        function cardinalOf(dir) {
+            switch (dir) {
+                case 'upLeft': case 'upRight': return 'up';
+                case 'downLeft': case 'downRight': return 'down';
+                default: return dir;
+            }
+        }
+
+        // True unit vector for a direction (8-way) — used for projectiles.
+        function dirToVec(dir) {
+            const d = 0.7071;
+            switch (dir) {
+                case 'left':  return { x: -1, y: 0 };
+                case 'right': return { x: 1,  y: 0 };
+                case 'up':    return { x: 0,  y: -1 };
+                case 'down':  return { x: 0,  y: 1 };
+                case 'upLeft':    return { x: -d, y: -d };
+                case 'upRight':   return { x: d,  y: -d };
+                case 'downLeft':  return { x: -d, y: d };
+                case 'downRight': return { x: d,  y: d };
+                default: return { x: 0, y: 1 };
+            }
+        }
+
+        // Does this animations object have any diagonal WALK frames? (gates 8-way facing)
+        function hasDiagonalAnims(anims) {
+            return !!(anims && ((anims.walkUpLeft && anims.walkUpLeft.length) ||
+                (anims.walkUpRight && anims.walkUpRight.length) ||
+                (anims.walkDownLeft && anims.walkDownLeft.length) ||
+                (anims.walkDownRight && anims.walkDownRight.length)));
+        }
+
+        // Resolve the walk-anim slot for a direction with diagonal->mirror->cardinal
+        // fallback. Returns { key, flip }. flip=true means draw horizontally mirrored.
+        function resolveWalkKey(anims, dir) {
+            const has = k => !!(anims && anims[k] && anims[k].length > 0);
+            const own = 'walk' + dirSuffix(dir);
+            if (has(own)) return { key: own, flip: false };
+            // mirror a left-family direction from its right-family counterpart
+            const mirrorFrom = { left: 'right', upLeft: 'upRight', downLeft: 'downRight' };
+            if (mirrorFrom[dir]) {
+                const src = 'walk' + dirSuffix(mirrorFrom[dir]);
+                if (has(src)) return { key: src, flip: true };
+            }
+            // collapse a diagonal to its dominant cardinal
+            const card = cardinalOf(dir);
+            if (card !== dir) {
+                if (has('walk' + dirSuffix(card))) return { key: 'walk' + dirSuffix(card), flip: false };
+                if (card === 'left' && has('walkRight')) return { key: 'walkRight', flip: true };
+            }
+            return { key: own, flip: false }; // let caller's empty-frame fallback handle it
+        }
+        // =================== END 8-DIRECTION MOVEMENT SUPPORT ===================
 
         // Initialize audio on first user interaction (key or touch)
         document.addEventListener('keydown', () => initAudio(), { once: true });
@@ -29205,14 +29298,17 @@ Item Receive Display:
             // Set keys based on direction (if outside deadzone)
             if (dist > joystickDeadzone) {
                 const angle = Math.atan2(dy, dx);
-                // Right: -45 to 45 degrees
-                if (angle > -Math.PI/4 && angle < Math.PI/4) keys['ArrowRight'] = true;
-                // Down: 45 to 135 degrees
-                if (angle > Math.PI/4 && angle < 3*Math.PI/4) keys['ArrowDown'] = true;
-                // Left: 135 to -135 degrees
-                if (angle > 3*Math.PI/4 || angle < -3*Math.PI/4) keys['ArrowLeft'] = true;
-                // Up: -135 to -45 degrees
-                if (angle > -3*Math.PI/4 && angle < -Math.PI/4) keys['ArrowUp'] = true;
+                const P = Math.PI;
+                // 8 sectors of 45°. Diagonal sectors set TWO arrows; the engine derives a diagonal
+                // facing from the (dx,dy) pair when the active sprite supports it, else stays cardinal.
+                if (angle > -P/8 && angle <= P/8) { keys['ArrowRight'] = true; }                                 // E
+                else if (angle > P/8 && angle <= 3*P/8) { keys['ArrowRight'] = true; keys['ArrowDown'] = true; } // SE
+                else if (angle > 3*P/8 && angle <= 5*P/8) { keys['ArrowDown'] = true; }                          // S
+                else if (angle > 5*P/8 && angle <= 7*P/8) { keys['ArrowDown'] = true; keys['ArrowLeft'] = true; }// SW
+                else if (angle > 7*P/8 || angle <= -7*P/8) { keys['ArrowLeft'] = true; }                         // W
+                else if (angle > -7*P/8 && angle <= -5*P/8) { keys['ArrowLeft'] = true; keys['ArrowUp'] = true; }// NW
+                else if (angle > -5*P/8 && angle <= -3*P/8) { keys['ArrowUp'] = true; }                          // N
+                else { keys['ArrowUp'] = true; keys['ArrowRight'] = true; }                                      // NE
             }
         }
 
@@ -29554,7 +29650,7 @@ Item Receive Display:
 
             // Get receive item animation frames based on direction
             const receiveDirMap = { down: 'receiveItemDown', up: 'receiveItemUp', left: 'receiveItemLeft', right: 'receiveItemRight' };
-            const receiveKey = receiveDirMap[player.direction];
+            const receiveKey = receiveDirMap[cardinalOf(player.direction)];
             let receiveFrames = [];
 
             if (playerAnimations) {
@@ -29908,6 +30004,12 @@ Item Receive Display:
                 if (keys['ArrowLeft']) { dx = -1; player.direction = 'left'; player.moving = true; }
                 if (keys['ArrowRight']) { dx = 1; player.direction = 'right'; player.moving = true; }
 
+                // 8-direction facing: override the cardinal above with a diagonal, but ONLY when the
+                // active sprite actually has diagonal walk frames. 4-dir sprites keep last-key-wins.
+                if (player.moving && playerHasDiagonals) {
+                    player.direction = dir8FromVector(dx, dy, true) || player.direction;
+                }
+
                 // Normalize diagonal movement so it's not faster
                 if (dx !== 0 && dy !== 0) {
                     const diag = 0.7071; // 1/sqrt(2)
@@ -29955,15 +30057,15 @@ Item Receive Display:
                 const dirMap = { down: 'walkDown', up: 'walkUp', left: 'walkLeft', right: 'walkRight' };
                 const idleDirMap = { down: 'idleDown', up: 'idleUp', left: 'idleLeft', right: 'idleRight' };
                 if (player.moving) {
-                    currentAnimKey = dirMap[player.direction];
+                    currentAnimKey = resolveWalkKey(playerAnimations, player.direction).key;
                 } else {
-                    const dirIdleKey = idleDirMap[player.direction];
+                    const dirIdleKey = idleDirMap[cardinalOf(player.direction)];
                     if (playerAnimations[dirIdleKey] && playerAnimations[dirIdleKey].length > 0) {
                         currentAnimKey = dirIdleKey;
                     } else if (playerAnimations.idle && playerAnimations.idle.length > 0) {
                         currentAnimKey = 'idle';
                     } else {
-                        currentAnimKey = dirMap[player.direction];
+                        currentAnimKey = dirMap[cardinalOf(player.direction)];
                     }
                 }
             }
@@ -29971,7 +30073,7 @@ Item Receive Display:
             const frameDelay = Math.max(1, Math.round(60 / currentFps));
             if (player.frameTimer >= frameDelay) {
                 player.frameTimer = 0;
-                player.frame = (player.frame + 1) % 4;
+                player.frame = player.frame + 1; // uncapped; draw uses % frames.length so >4-frame walks play fully
             }
 
             // Update animated tile animations - use cached registry (MUCH faster than scanning all tiles)
@@ -30045,7 +30147,7 @@ Item Receive Display:
                 // Advance attack animation frames
                 if (player.attackAnim && playerAnimations) {
                     const attackDirMap = { down: 'attackDown', up: 'attackUp', left: 'attackLeft', right: 'attackRight' };
-                    const attackKey = (player.throwing && player.throwAnimKey) ? player.throwAnimKey : attackDirMap[player.direction];
+                    const attackKey = (player.throwing && player.throwAnimKey) ? player.throwAnimKey : attackDirMap[cardinalOf(player.direction)];
                     let attackFrames = playerAnimations[attackKey] || playerAnimations.attack || [];
 
                     if (attackFrames.length > 0) {
@@ -30185,7 +30287,7 @@ Item Receive Display:
                 other.frameTimer++;
                 if (other.frameTimer >= animSpeed) {
                     other.frameTimer = 0;
-                    other.frame = (other.frame + 1) % 4;
+                    other.frame = other.frame + 1; // uncapped; draw uses % frames.length
                 }
             });
 
@@ -30282,7 +30384,7 @@ Item Receive Display:
 
             // Build interaction cone based on player facing direction
             // Cone checks tiles in front of player (generous reach for interaction)
-            const dir = player.direction || 'down';
+            const dir = cardinalOf(player.direction) || 'down'; // diagonal->cardinal so the interaction cone matches
             const coneTiles = [];
 
             // Always include player's current tile (for overlapping/adjacent NPCs)
@@ -31074,7 +31176,7 @@ Item Receive Display:
                 const walkFrameDelay = Math.max(1, Math.round(60 / walkFps));
                 if (player.frameTimer >= walkFrameDelay) {
                     player.frameTimer = 0;
-                    player.frame = (player.frame + 1) % 4;
+                    player.frame = player.frame + 1; // uncapped; draw uses % frames.length so >4-frame walks play fully
                 }
 
                 // Check if walk duration is complete
@@ -33310,7 +33412,7 @@ Item Receive Display:
                     if (player.throwing && player.throwAnimKey && playerAnimations[player.throwAnimKey] && playerAnimations[player.throwAnimKey].length > 0) {
                         animKey = player.throwAnimKey;
                     } else {
-                        const attackKey = attackDirMap[player.direction];
+                        const attackKey = attackDirMap[cardinalOf(player.direction)];
                         if (playerAnimations[attackKey] && playerAnimations[attackKey].length > 0) {
                             animKey = attackKey;
                         } else if (playerAnimations.attack && playerAnimations.attack.length > 0) {
@@ -33318,7 +33420,7 @@ Item Receive Display:
                             animKey = 'attack';
                         } else {
                             // No attack animation, use walk
-                            animKey = dirMap[player.direction];
+                            animKey = dirMap[cardinalOf(player.direction)];
                         }
                     }
                 } else if (isReceivingItem && receivingItemData) {
@@ -33329,14 +33431,14 @@ Item Receive Display:
                         left: 'receiveItemLeft',
                         right: 'receiveItemRight'
                     };
-                    const receiveKey = receiveItemDirMap[player.direction];
+                    const receiveKey = receiveItemDirMap[cardinalOf(player.direction)];
                     if (playerAnimations[receiveKey] && playerAnimations[receiveKey].length > 0) {
                         animKey = receiveKey;
                     } else if (playerAnimations.receivedItem && playerAnimations.receivedItem.length > 0) {
                         animKey = 'receivedItem';
                     } else {
                         // No receive animation, use idle
-                        const dirIdleKey = idleDirMap[player.direction];
+                        const dirIdleKey = idleDirMap[cardinalOf(player.direction)];
                         if (playerAnimations[dirIdleKey] && playerAnimations[dirIdleKey].length > 0) {
                             animKey = dirIdleKey;
                         } else {
@@ -33344,10 +33446,13 @@ Item Receive Display:
                         }
                     }
                 } else if (player.moving) {
-                    animKey = dirMap[player.direction];
+                    // Walk: resolve diagonal->mirror->cardinal (handles 8-dir and 4-dir sprites)
+                    const _wr = resolveWalkKey(playerAnimations, player.direction);
+                    animKey = _wr.key;
+                    if (_wr.flip) flipX = true;
                 } else {
                     // Check for directional idle first, then fall back to generic idle
-                    const dirIdleKey = idleDirMap[player.direction];
+                    const dirIdleKey = idleDirMap[cardinalOf(player.direction)];
                     if (playerAnimations[dirIdleKey] && playerAnimations[dirIdleKey].length > 0) {
                         animKey = dirIdleKey;
                     } else {
@@ -33427,7 +33532,7 @@ Item Receive Display:
 
                 if (player.attacking) {
                     row = walkFrames[player.direction].row;
-                    col = walkFrames[player.direction].cols[Math.min(player.frame, walkFrames[player.direction].cols.length - 1)];
+                    col = walkFrames[player.direction].cols[player.frame % walkFrames[player.direction].cols.length];
                     if (player.direction === 'left') flipX = true;
                 } else if (player.moving) {
                     const walk = walkFrames[player.direction];
@@ -33518,7 +33623,7 @@ Item Receive Display:
                 ctx.fill();
 
                 // Draw attack hitbox preview (dark blue, always visible in debug)
-                const dir = player.direction;
+                const dir = cardinalOf(player.direction); // collapse diagonal->cardinal for hitbox geometry
                 const hbRange = playerHitboxRange[dir] || 40;
                 const hbWidth = playerHitboxWidth[dir] || 60;
                 const hbOffX = playerHitboxOffsetX[dir] || 0;
@@ -33618,20 +33723,22 @@ Item Receive Display:
 
                 if (other.animation === 'attack') {
                     // Check for directional attack animation
-                    const attackKey = attackDirMap[dir];
+                    const attackKey = attackDirMap[cardinalOf(dir)];
                     if (playerAnimations[attackKey] && playerAnimations[attackKey].length > 0) {
                         animKey = attackKey;
                     } else if (playerAnimations.attack && playerAnimations.attack.length > 0) {
                         animKey = 'attack';
                     } else {
-                        animKey = dirMap[dir];
+                        animKey = dirMap[cardinalOf(dir)];
                     }
                     useAttackFrame = true;
                 } else if (other.animation === 'walk') {
-                    animKey = dirMap[dir];
+                    const _wr = resolveWalkKey(playerAnimations, dir);
+                    animKey = _wr.key;
+                    if (_wr.flip) flipX = true;
                 } else {
                     // Idle - check for directional idle first
-                    const dirIdleKey = idleDirMap[dir];
+                    const dirIdleKey = idleDirMap[cardinalOf(dir)];
                     if (playerAnimations[dirIdleKey] && playerAnimations[dirIdleKey].length > 0) {
                         animKey = dirIdleKey;
                     } else {
@@ -33697,15 +33804,16 @@ Item Receive Display:
                 };
 
                 let row = 0, col = 0;
+                const ldir = cardinalOf(dir); // legacy 4-key tables have no diagonals; collapse to avoid undefined lookup
                 if (other.animation === 'walk') {
-                    const walk = walkFrames[dir];
+                    const walk = walkFrames[ldir];
                     row = walk.row;
                     col = walk.cols[other.frame % walk.cols.length];
-                    if (dir === 'left') flipX = true;
+                    if (ldir === 'left') flipX = true;
                 } else {
                     row = 0;
-                    col = idleFrames[dir][other.frame % idleFrames[dir].length];
-                    if (dir === 'left') flipX = true;
+                    col = idleFrames[ldir][other.frame % idleFrames[ldir].length];
+                    if (ldir === 'left') flipX = true;
                 }
 
                 srcX = col * frameWidth;
@@ -33783,21 +33891,28 @@ Item Receive Display:
             // Use waypoint animation if set AND has frames, otherwise use walk/idle based on state
             let animKey;
             let useAttackFrame = false;
+            let npcWalkFlip = false; // set by resolveWalkKey when a diagonal/left mirrors its opposite
             // Check if playing attack animation (enemy attacking)
             if (state.attackAnimTimer > 0 && placed.isEnemy) {
-                const attackKey = attackDirMap[state.direction];
+                const attackKey = attackDirMap[cardinalOf(state.direction)];
                 if (anims[attackKey] && anims[attackKey].length > 0) {
                     animKey = attackKey;
                     useAttackFrame = true;
                 } else {
-                    // No attack anim, use walk anim
-                    animKey = dirMap[state.direction];
+                    // No attack anim, use walk anim (diagonal-aware)
+                    const _wr = resolveWalkKey(anims, state.direction);
+                    animKey = _wr.key;
+                    if (_wr.flip) npcWalkFlip = true;
                 }
             } else if (state.waypointAnimation && state.waypointAnimation !== 'walk' &&
                 anims[state.waypointAnimation] && anims[state.waypointAnimation].length > 0) {
                 animKey = state.waypointAnimation;
+            } else if (state.moving) {
+                const _wr = resolveWalkKey(anims, state.direction);
+                animKey = _wr.key;
+                if (_wr.flip) npcWalkFlip = true;
             } else {
-                animKey = state.moving ? dirMap[state.direction] : 'idle';
+                animKey = 'idle';
             }
             let anim = anims[animKey];
 
@@ -33855,7 +33970,7 @@ Item Receive Display:
             // Handle horizontal flip - either for left fallback OR if animation is marked as mirrored
             const animMirrors = npc.animMirrors || {};
             const isMirrored = animMirrors[animKey];
-            const flipX = isMirrored || (state.direction === 'left' && !anims.walkLeft?.length);
+            const flipX = isMirrored || npcWalkFlip || (state.direction === 'left' && !anims.walkLeft?.length);
 
             // Blink effect when NPC takes damage (skip drawing on odd frames)
             if (state.hitFlash > 0) {
