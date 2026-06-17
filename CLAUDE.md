@@ -5,6 +5,24 @@
 - **GAME_VERSION:** `0.1.0` (declared near top of `world-builder.html`; displayed on the main menu; stamped into every save as `gameVersion`).
 - **SAVE_SCHEMA_VERSION:** `1` (stamped into every save; `migrateProjectData(p)` is the migration ladder — add new `if (v < N)` hops as the schema evolves).
 
+## ⚠️ RULE: Save/load field parity (read before adding ANY field to a data object)
+
+When you add a new field to any data object (items, NPCs, props, staticObjects, sounds, quests, dialogs, etc.), it MUST round-trip through BOTH save AND load.
+
+- **Save is automatic:** `getProjectData()` uses spread-with-strip, so saves pick up new fields for free.
+- **Load is the trap:** the per-entity loaders rebuild each object. If a loader uses an **explicit field whitelist** (`items[i] = { name:…, frames:… }`), it **silently drops** anything not listed. Spread-based loaders (`items[i] = { ...itemData, …defaults }`) keep everything.
+
+**DO:** `obj[i] = { ...saved, requiredField: saved.requiredField || default, _img: new Image() };`
+**DON'T:** `obj[i] = { name: saved.name, frames: saved.frames };`  ← drops every other field.
+
+**The tell (why it's sneaky):** it works perfectly in **Test Map** (data goes straight through, no save/load), then "breaks" only **after a save + reload**. So a bug that only appears after reloading a save is almost always a *load*-path field drop, NOT a save bug. The data is never lost from the JSON file — the loader discards it on the way in, so fixing the loader recovers it from existing saves.
+
+**Two load paths — audit BOTH when adding a field:**
+1. `loadProject()` (~21025) — loading a `.json` save file.
+2. `loadFullProject()` (~19280) — co-op / multiplayer full-project sync.
+
+**Audited 2026-06-16:** converted the last whitelist loaders to spread — `loadProject`: items, props, staticObjects, sounds. `loadFullProject`: sounds. (npcs, animatedProps, playerCharacters, staticObjects already spread; quests/shops/dialogs/placed* direct-assign.) The **items whitelist drop is what made the boomerang `behavior` field vanish after save+load** — classic "works in test, breaks after reload."
+
 ## Wave-1 patch pass (2026-04-17)
 
 Large fix pass landed in one session. See `/Users/khabefox/zelda-game/AUDIT/MOTHER_PLAN.md` for the full plan and `/Users/khabefox/.claude/plans/peppy-pondering-pony.md` for the condensed roadmap.

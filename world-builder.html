@@ -1514,6 +1514,8 @@
                     </div>
 
                     <button onclick="goBackToCollision()" class="retro-btn retro-purple" style="margin-top:15px; width:100%;">Edit Tile Collisions</button>
+                    <button id="findTilesetBtn" onclick="toggleFindTilesetMode()" class="retro-btn retro-blue" style="margin-top:8px; width:100%;">🔍 Find Tileset</button>
+                    <div id="findTilesetResult" style="display:none; font-size:11px; color:#5cf; margin-top:6px; text-align:center; line-height:1.4;"></div>
                 </div>
 
                 <h3 style="margin-top:15px;">Layers</h3>
@@ -3931,6 +3933,7 @@
         let tilesetImg = null;
         let tilesets = []; // Array of { name, img, data } for multiple tilesets
         let currentTilesetIndex = 0;
+        let paintTilesetZoom = 2; // palette display zoom (Shift+scroll over palette to change). 1=see-all, 8=big
         let tilesetSortOrder = 'added'; // 'added' or 'alpha'
         let tilesetSearchTerm = '';
         let tileCollisions = {}; // "tilesetIndex:x,y" -> [{x,y}, ...]
@@ -4504,6 +4507,52 @@
             drawPaintTileset();
             drawPropTileset();
             renderMap();
+        }
+
+        // ===== Find Tileset: click a tile on the map to discover which tileset it's from =====
+        let findTilesetMode = false;
+        function toggleFindTilesetMode() {
+            findTilesetMode = !findTilesetMode;
+            if (findTilesetMode) copyMode = false; // don't fight the copy click-capture
+            const btn = document.getElementById('findTilesetBtn');
+            if (btn) {
+                btn.classList.toggle('active', findTilesetMode);
+                btn.textContent = findTilesetMode ? '✕ Cancel — click a tile' : '🔍 Find Tileset';
+            }
+            if (typeof mapCanvas !== 'undefined' && mapCanvas) mapCanvas.style.cursor = findTilesetMode ? 'help' : '';
+            const res = document.getElementById('findTilesetResult');
+            if (res && !findTilesetMode) res.style.display = 'none';
+        }
+
+        function findTilesetAt(x, y) {
+            const res = document.getElementById('findTilesetResult');
+            // Find the top-most VISIBLE tile cell at this spot — that's what the user clicked on.
+            let found = null;
+            for (let li = layers.length - 1; li >= 0; li--) {
+                if (!layerVisibility[li]) continue;
+                const row = layers[li] && layers[li][y];
+                const cell = row && row[x];
+                if (cell && cell.type === 'tile') { found = cell; break; }
+            }
+            if (!found) {
+                if (res) { res.style.display = 'block'; res.style.color = '#f88'; res.textContent = 'No tile at that spot — try another (hidden layers are skipped).'; }
+                return;
+            }
+            const idx = found.tilesetIndex || 0;
+            const ts = tilesets[idx];
+            const name = ts ? ts.name : ('Tileset #' + idx);
+            if (ts) selectTilesetFromPicker(idx); // select it so collisions can be edited right away
+            if (res) {
+                res.style.display = 'block';
+                res.style.color = '#5cf';
+                res.textContent = 'From “' + name + '” (#' + idx + ') — selected. Now hit “Edit Tile Collisions”.';
+            }
+            console.log('[FIND TILESET] tile at', x + ',' + y, '-> tileset #' + idx, name);
+            // One pick, then exit the mode.
+            findTilesetMode = false;
+            const btn = document.getElementById('findTilesetBtn');
+            if (btn) { btn.classList.remove('active'); btn.textContent = '🔍 Find Tileset'; }
+            if (typeof mapCanvas !== 'undefined' && mapCanvas) mapCanvas.style.cursor = '';
         }
 
         // Close tileset picker when clicking outside
@@ -6661,7 +6710,7 @@
         function drawPaintTileset() {
             if (!tilesetImg) return;
 
-            const displayZoom = 2;
+            const displayZoom = paintTilesetZoom;
             paintTilesetCanvas.width = tilesetImg.naturalWidth * displayZoom;
             paintTilesetCanvas.height = tilesetImg.naturalHeight * displayZoom;
 
@@ -6962,7 +7011,7 @@
         paintTilesetCanvas.addEventListener('mousedown', (e) => {
             if (mode !== 'tile') return;
             const rect = paintTilesetCanvas.getBoundingClientRect();
-            const displayZoom = 2;
+            const displayZoom = paintTilesetZoom;
             const x = Math.floor((e.clientX - rect.left) / displayZoom / gridSize) * gridSize;
             const y = Math.floor((e.clientY - rect.top) / displayZoom / gridSize) * gridSize;
 
@@ -6988,7 +7037,7 @@
             e.preventDefault();
             const touch = e.touches[0];
             const rect = paintTilesetCanvas.getBoundingClientRect();
-            const displayZoom = 2;
+            const displayZoom = paintTilesetZoom;
             const x = Math.floor((touch.clientX - rect.left) / displayZoom / gridSize) * gridSize;
             const y = Math.floor((touch.clientY - rect.top) / displayZoom / gridSize) * gridSize;
 
@@ -7008,9 +7057,30 @@
             tilesetSelecting = false;
         });
 
+        // Shift + scroll wheel zooms the tileset palette:
+        //   zoom OUT (scroll down) to see/grab more tiles at once, zoom IN (scroll up) for tiny items.
+        // Plain scroll (no Shift) is left alone so the palette still scrolls normally.
+        paintTilesetCanvas.addEventListener('wheel', (e) => {
+            if (!e.shiftKey) return;
+            e.preventDefault();
+            const prev = paintTilesetZoom;
+            paintTilesetZoom = Math.max(1, Math.min(8, prev + (e.deltaY < 0 ? 1 : -1)));
+            if (paintTilesetZoom === prev) return;
+            // Anchor the zoom on the tile under the cursor so it doesn't jump away.
+            const rect = paintTilesetCanvas.getBoundingClientRect();
+            const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+            const ratio = paintTilesetZoom / prev;
+            drawPaintTileset(); // re-renders the canvas at the new zoom
+            const sc = paintTilesetCanvas.parentElement;
+            if (sc) {
+                if (sc.scrollWidth > sc.clientWidth) sc.scrollLeft += cx * (ratio - 1);
+                if (sc.scrollHeight > sc.clientHeight) sc.scrollTop += cy * (ratio - 1);
+            }
+        }, { passive: false });
+
         function updateTileSelectionTouch(touch) {
             const rect = paintTilesetCanvas.getBoundingClientRect();
-            const displayZoom = 2;
+            const displayZoom = paintTilesetZoom;
             const x = Math.floor((touch.clientX - rect.left) / displayZoom / gridSize) * gridSize;
             const y = Math.floor((touch.clientY - rect.top) / displayZoom / gridSize) * gridSize;
 
@@ -7035,7 +7105,7 @@
 
         function updateTileSelection(e) {
             const rect = paintTilesetCanvas.getBoundingClientRect();
-            const displayZoom = 2;
+            const displayZoom = paintTilesetZoom;
             const x = Math.floor((e.clientX - rect.left) / displayZoom / gridSize) * gridSize;
             const y = Math.floor((e.clientY - rect.top) / displayZoom / gridSize) * gridSize;
 
@@ -7134,6 +7204,13 @@
                 if (handleMapClickForQuestNpc(x, y)) {
                     return;
                 }
+            }
+
+            // Find-tileset pick mode — capture the click, report the source tileset
+            if (findTilesetMode) {
+                if (e.button === 0) findTilesetAt(x, y);
+                else toggleFindTilesetMode(); // right-click cancels
+                return;
             }
 
             if (copyMode) {
@@ -19008,6 +19085,8 @@
         let gamePlayersInBuilder = new Map(); // id -> {x, y, name, direction, currentMap, animation, frame, lastFrameTime}
         let gamePlayerAnimInterval = null; // Animation loop for game players in builder
         let builderGameSocket = null; // socket to game server to see testers
+        let builderPlaySocket = null; // read-only listener on the live PLAY party (shows URL viewers on the builder)
+        let liveRoomCode = null;      // room the host is currently live in (set by goLive)
 
         // Track builder co-op players in the room
         let builderPlayersInRoom = new Map(); // id -> {name, joinedAt}
@@ -19127,6 +19206,43 @@
                 gamePlayersInBuilder.clear();
                 stopGamePlayerAnimLoop();
             };
+        }
+
+        // Read-only listener on the live PLAY party so viewers who joined by URL show up on the
+        // builder canvas (the play party is a separate room from the default game party watched by
+        // connectToGameServerForBuilder). play.ts strips gameType, so we DON'T filter on it here —
+        // that room only ever holds game2d viewers. Mirrors the tester listener otherwise.
+        function connectBuilderToPlayParty(room) {
+            if (!room) return;
+            try { if (builderPlaySocket) builderPlaySocket.close(); } catch (e) {}
+            const url = 'wss://multiplayer.lakotafox.partykit.dev/parties/play/' + encodeURIComponent(room);
+            console.log('[BUILDER PLAY] Watching live viewers at', url);
+            builderPlaySocket = new WebSocket(url);
+            builderPlaySocket.onmessage = (event) => {
+                let data; try { data = JSON.parse(event.data); } catch (e) { return; }
+                if (data.type === 'welcome' && Array.isArray(data.players)) {
+                    data.players.forEach(p => {
+                        p.frame = 0; p.lastFrameTime = Date.now();
+                        gamePlayersInBuilder.set(p.id, p);
+                    });
+                    if (data.players.length) { startGamePlayerAnimLoop(); renderMap(); }
+                } else if (data.type === 'join' && data.player) {
+                    data.player.frame = 0; data.player.lastFrameTime = Date.now();
+                    gamePlayersInBuilder.set(data.player.id, data.player);
+                    startGamePlayerAnimLoop(); renderMap();
+                } else if (data.type === 'update' && data.player) {
+                    const ex = gamePlayersInBuilder.get(data.player.id);
+                    data.player.frame = ex ? ex.frame : 0;
+                    data.player.lastFrameTime = ex ? ex.lastFrameTime : Date.now();
+                    gamePlayersInBuilder.set(data.player.id, data.player);
+                } else if (data.type === 'leave' && data.playerId) {
+                    gamePlayersInBuilder.delete(data.playerId);
+                    if (gamePlayersInBuilder.size === 0) stopGamePlayerAnimLoop();
+                    renderMap();
+                }
+            };
+            builderPlaySocket.onclose = () => { console.log('[BUILDER PLAY] Disconnected from play party'); };
+            builderPlaySocket.onerror = () => { console.log('[BUILDER PLAY] Play party socket error'); };
         }
 
         // Animation loop for game players shown in builder
@@ -19441,6 +19557,7 @@
             if (Array.isArray(project.sounds)) {
                 project.sounds.forEach((s, i) => {
                     sounds[i] = {
+                        ...s, // preserve all saved fields — don't whitelist
                         name: s.name,
                         data: s.data,
                         duration: s.duration || 0,
@@ -21158,6 +21275,7 @@
                     const img = new Image();
                     img.onload = () => {
                         props[i] = {
+                            ...propData, // preserve all saved fields — don't whitelist
                             name: propData.name,
                             img: img,
                             data: propData.data,
@@ -21322,6 +21440,7 @@
                 console.log('Loading', p.staticObjects.length, 'static objects');
                 p.staticObjects.forEach((objData, i) => {
                     staticObjects[i] = {
+                        ...objData, // preserve all saved fields — don't whitelist
                         name: objData.name,
                         spriteData: objData.spriteData,
                         width: objData.width,
@@ -21380,6 +21499,7 @@
                 console.log('Loading', p.sounds.length, 'sounds');
                 p.sounds.forEach((soundData, i) => {
                     sounds[i] = {
+                        ...soundData, // preserve all saved fields — don't whitelist
                         name: soundData.name,
                         data: soundData.data,
                         duration: soundData.duration || 0,
@@ -21455,6 +21575,7 @@
             if (p.items && p.items.length > 0) {
                 p.items.forEach((itemData, i) => {
                     items[i] = {
+                        ...itemData, // preserve all fields (behavior/ability config etc.) — don't whitelist
                         id: itemData.id || ('item_' + i), // Ensure ID exists
                         name: itemData.name,
                         spriteData: itemData.spriteData,
@@ -21465,6 +21586,7 @@
                         idleFrame: itemData.idleFrame || 0,
                         maxStack: itemData.maxStack || 99
                     };
+                    delete items[i]._spriteImg; // re-created below
                     // Preload sprite image
                     if (itemData.spriteData) {
                         const img = new Image();
@@ -24128,6 +24250,11 @@
         let quests = [];  // Loaded from projectData
         let questSoundsData = [];  // Quest sounds library
         let playerInventory = {};  // { [itemId]: quantity }
+        // Hoisted to top-level (was declared inside initGame) so the quest-condition functions
+        // defined above initGame (hasInventoryItem/isConditionMet) can read the real inventory.
+        // initGame assigns to these (no re-declaration) so all runtime code shares one instance.
+        let itemsData = [];          // runtime item definitions (projectData.items)
+        let inventorySlots = [];     // Array of { itemIndex, quantity } or null — the REAL inventory
         let gameProgress = {
             npcsSpokenTo: {},       // { [npcUid]: true }
             enemiesDefeated: {},    // { [npcUid]: count }
@@ -27065,7 +27192,7 @@
         }
 
         // === ITEMS SYSTEM (interactive objects like chests) ===
-        const itemsData = projectData.items || [];
+        itemsData = projectData.items || []; // assigns hoisted top-level var (see decl near playerInventory)
         const placedItemsData = projectData.placedItems || [];
         const itemImages = {}; // Preloaded item sprite images
         const itemStates = {}; // Runtime state for each placed item: { used: false, animating: false, frame: 0 }
@@ -27095,7 +27222,7 @@
         const INVENTORY_SIZE = 40;  // Total slots (4 rows x 10 columns)
         const HOTBAR_SIZE = 10;     // First 10 slots shown in HUD
         const SLOT_SIZE = 40;       // Pixel size of each slot in UI
-        let inventorySlots = [];    // Array of { itemIndex, quantity } or null
+        inventorySlots = [];    // assigns hoisted top-level var (see decl near playerInventory)
         let cursorItem = null;      // Item held on cursor: { itemIndex, quantity } or null
         let inventoryOpen = false;  // Is full inventory popup open
         let selectedHotbarSlot = 0; // Currently selected hotbar slot (0-9)
@@ -32870,9 +32997,13 @@ Item Receive Display:
 
                             ctx.imageSmoothingEnabled = false;
 
-                            // Handle rotation
+                            // Handle rotation / flip
                             const rot = cell.rotation || 0;
-                            if (rot !== 0) continue; // Skip rotated tiles (already drawn full in trunk pass)
+                            // Skip rotated OR flipped tiles — drawTileTrunk already drew them FULL
+                            // (its early-return fires on rot !== 0 OR cell.flipped). Without the
+                            // cell.flipped check here, a flipped tile's canopy was redrawn UN-flipped on
+                            // top of the full flipped tile, scrambling the crown/holes.
+                            if (rot !== 0 || cell.flipped) continue;
 
                             // Draw canopy using clipping path for freeform line
                             ctx.save();
@@ -34058,6 +34189,14 @@ Item Receive Display:
                 doc.write(loaderHTML);
                 doc.close();
                 testGameWindow = frame.contentWindow;
+                // The engine binds keydown to the iframe's document, so without focus the player
+                // can't walk until they tap/click the frame. Grab focus now (we're inside the JOIN
+                // click gesture) and re-grab it on any tap so keyboard control works immediately.
+                const focusGame = () => { try { frame.contentWindow.focus(); } catch (e) {} };
+                focusGame();
+                setTimeout(focusGame, 100); // after the engine parses/attaches listeners
+                frame.contentWindow.addEventListener('pointerdown', focusGame);
+                frame.contentWindow.addEventListener('touchstart', focusGame, { passive: true });
                 logTestEvent('Joined live world (in-page)');
             } else {
                 // Desktop test: open in a popup window.
@@ -34111,6 +34250,10 @@ Item Receive Display:
                     done = true; clearTimeout(watchdog);
                     const url = location.origin + location.pathname + '?room=' + encodeURIComponent(room);
                     showGoLiveInfo(room, url, sizeMB, null);
+                    // Remember we're live + start watching the play party so viewers show on the builder,
+                    // and so Test Map joins the SAME live room (host & viewers together in-game).
+                    liveRoomCode = room;
+                    connectBuilderToPlayParty(room);
                 } else if (m.type === 'error') {
                     done = true; clearTimeout(watchdog);
                     showGoLiveInfo(room, null, sizeMB, '⚠ ' + (m.message || 'upload error') + ' — close (✕) and retry');
