@@ -1412,7 +1412,6 @@
 
                 <h3>Quick Actions</h3>
                 <div class="tool-buttons">
-                    <button onclick="selectAllCollision()">All Solid</button>
                     <button onclick="clearAllCollision()" class="danger">Clear All</button>
                 </div>
 
@@ -27753,8 +27752,14 @@
                         if (attackMode === 'touch' || state.aiState === 'lunge') {
                             damagePlayer(damage);
                             state.damageCooldown = cooldownTime;
-                            // Trigger attack animation
-                            state.attackAnimTimer = 30; // ~0.5 sec of attack anim
+                            // Trigger attack animation — size the window so it plays the attack anim
+                            // ONCE at the NPC's configured FPS (matches walk/idle), not a fixed 0.5s.
+                            const _atkDef = npcs[placed.npcIndex];
+                            const _atkKey = { down: 'attackDown', up: 'attackUp', left: 'attackLeft', right: 'attackRight' }[state.direction] || 'attackDown';
+                            const _atkLen = (_atkDef && _atkDef.animations && _atkDef.animations[_atkKey]) ? _atkDef.animations[_atkKey].length : 0;
+                            const _atkFps = placed.animSpeed || (_atkDef && _atkDef.fps) || 8;
+                            const _atkTicks = Math.max(1, Math.round(60 / _atkFps));
+                            state.attackAnimTimer = _atkLen > 0 ? _atkLen * _atkTicks : 30;
                             state.attackAnimFrame = 0;
                             // Trigger post-attack slowdown
                             state.slowdownTimer = slowdownFrames;
@@ -27966,7 +27971,7 @@
                         const animSpeed = Math.max(1, Math.round(60 / fps));
                         if (state.frameTimer >= animSpeed) {
                             state.frameTimer = 0;
-                            state.frame = (state.frame + 1) % 4;
+                            state.frame = state.frame + 1; // uncapped; draw does % anim.length so any frame count works
                         }
                         continue; // Skip normal path movement when chasing/attacking/returning
                     }
@@ -27982,7 +27987,7 @@
                     const animSpeed = Math.max(1, Math.round(60 / fps));
                     if (state.frameTimer >= animSpeed) {
                         state.frameTimer = 0;
-                        state.frame = (state.frame + 1) % 4;
+                        state.frame = state.frame + 1; // uncapped; draw does % anim.length
                     }
                     continue;
                 }
@@ -28014,7 +28019,7 @@
                         const idleAnimSpeed = Math.max(1, Math.round(60 / idleFps));
                         if (state.frameTimer >= idleAnimSpeed) {
                             state.frameTimer = 0;
-                            state.frame = (state.frame + 1) % 4;
+                            state.frame = state.frame + 1; // uncapped; draw does % anim.length so any frame count works
                         }
                         continue;
                     } else {
@@ -28120,7 +28125,7 @@
                 const animSpeed = Math.max(1, Math.round(60 / fps)); // Convert fps to frame delay
                 if (state.frameTimer >= animSpeed) {
                     state.frameTimer = 0;
-                    state.frame = (state.frame + 1) % 4;
+                    state.frame = state.frame + 1; // uncapped; draw does % anim.length
                 }
             }
         }
@@ -33758,9 +33763,11 @@ Item Receive Display:
             // Get current frame (use attack frame counter for attack anims)
             let frameIdx;
             if (useAttackFrame) {
-                // Attack anims cycle through frames based on attack timer
-                const attackAnimSpeed = Math.floor(30 / Math.max(anim.length, 1));
-                frameIdx = Math.min(Math.floor(state.attackAnimFrame / Math.max(attackAnimSpeed, 1)), anim.length - 1);
+                // Advance attack frames at the NPC's configured FPS (same clock as walk/idle) so the
+                // attack speed matches the rest of the animation instead of a fixed window.
+                const atkFps = placed.animSpeed || npc.fps || 8;
+                const atkTicks = Math.max(1, Math.round(60 / atkFps));
+                frameIdx = Math.min(Math.floor(state.attackAnimFrame / atkTicks), anim.length - 1);
             } else {
                 frameIdx = state.frame % anim.length;
             }
