@@ -2345,6 +2345,7 @@
                     <div style="background:#1a1a2e; padding:10px; border-radius:4px; margin-bottom:10px;">
                         <label style="font-size:10px; color:#888;">Add Condition:</label>
                         <select id="conditionType" style="width:100%; margin-bottom:8px;">
+                            <option value="">— Select a condition —</option>
                             <option value="kill">Kill Enemy</option>
                             <option value="talk">Talk to NPC</option>
                             <option value="visit">Visit Location</option>
@@ -16835,6 +16836,12 @@
             const quest = quests[index];
             if (!quest) return;
 
+            // The "Add Condition" type dropdown is a global control for what to add NEXT — it isn't
+            // tied to the quest. Reset it on every quest switch so a stale value (e.g. "Kill") doesn't
+            // look like it's this quest's condition.
+            const condTypeSel = document.getElementById('conditionType');
+            if (condTypeSel) condTypeSel.selectedIndex = 0;
+
             document.getElementById('questName').value = quest.name || '';
             document.getElementById('questDescription').value = quest.description || '';
             document.getElementById('questAutoStart').checked = quest.autoStart || false;
@@ -17424,6 +17431,12 @@
 
             if (settingConditionMode) {
                 cancelSettingCondition();
+                return;
+            }
+
+            if (!type) {
+                const s = document.getElementById('conditionStatus');
+                if (s) s.textContent = 'Pick a condition type first.';
                 return;
             }
 
