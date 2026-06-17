@@ -17269,11 +17269,29 @@
             container.innerHTML = quest.conditions.map((c, i) => {
                 const typeLabels = { enemyDefeated: 'Kill', talkedToNpc: 'Talk', locationVisited: 'Visit', hasItem: 'Has Item' };
                 const isBroken = c.broken;
+                // hasItem and enemyDefeated need a quantity — show an editable count so "3 pineapples"
+                // is ONE condition (count:3), not three duplicate "have ≥1" conditions.
+                const usesCount = (c.type === 'hasItem' || c.type === 'enemyDefeated');
+                const countInput = usesCount
+                    ? '<span style="color:#888; margin-left:6px;">×</span>' +
+                      '<input type="number" min="1" value="' + (c.count || 1) + '" title="how many required" ' +
+                      'onchange="updateConditionCount(' + i + ', this.value)" ' +
+                      'style="width:42px; margin:0 4px; font-size:10px; background:#222; color:#0ff; border:1px solid #555; border-radius:3px; text-align:center;">'
+                    : '';
                 return '<div style="display:flex; justify-content:space-between; align-items:center; padding:4px; margin:2px 0; background:' + (isBroken ? '#4a2a2a' : '#333') + '; border-radius:3px; font-size:10px;">' +
-                    '<span style="color:' + (isBroken ? '#f88' : '#fff') + ';">' + (typeLabels[c.type] || c.type) + ': ' + (c.displayName || 'Unknown') + '</span>' +
+                    '<span style="color:' + (isBroken ? '#f88' : '#fff') + '; flex:1;">' + (typeLabels[c.type] || c.type) + ': ' + (c.displayName || 'Unknown') + '</span>' +
+                    countInput +
                     '<button onclick="removeQuestCondition(' + i + ')" style="padding:2px 6px; font-size:9px; background:#a55;">×</button>' +
                 '</div>';
             }).join('');
+        }
+
+        function updateConditionCount(index, value) {
+            if (selectedQuestIndex < 0) return;
+            const quest = quests[selectedQuestIndex];
+            if (!quest.conditions || !quest.conditions[index]) return;
+            quest.conditions[index].count = Math.max(1, parseInt(value) || 1);
+            broadcastEdit({ editType: 'updateQuest', questId: quest.id, quest: quest });
         }
 
         function removeQuestCondition(index) {
@@ -27796,7 +27814,9 @@
                             if (distToPlayerSq > deaggroRadiusSq) {
                                 state.aggroTimer++;
                                 if (state.aggroTimer > 180) { // 3 seconds at 60fps
-                                    state.aiState = 'return';
+                                    // Patrol/loop enemies rejoin their path (resume from currentWaypoint);
+                                    // others walk back to their spawn point.
+                                    state.aiState = (placed.trigger === 'loop' && path.length > 0) ? 'idle' : 'return';
                                     state.aggroTimer = 0;
                                 }
                             } else {
@@ -27861,7 +27881,8 @@
                                 if (distToPlayerSq <= visionRadiusSq) {
                                     state.aiState = 'chase';
                                 } else {
-                                    state.aiState = 'return';
+                                    // Patrol/loop enemies rejoin their path; others return to spawn.
+                                    state.aiState = (placed.trigger === 'loop' && path.length > 0) ? 'idle' : 'return';
                                 }
                                 state.attackCooldown = 0;
                             }
