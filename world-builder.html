@@ -1870,10 +1870,10 @@
                 <!-- Scale Slider -->
                 <div style="margin-top:10px; padding:8px; background:#1a2a35; border-radius:4px;">
                     <div style="display:flex; align-items:center; justify-content:space-between;">
-                        <span style="font-size:11px; color:#aaa;">Scale:</span>
+                        <span style="font-size:11px; color:#aaa;" title="Scale applied to the NEXT prop you place. To resize an already-placed prop, use Edit Object on Map.">Next-place scale:</span>
                         <span id="animPropScaleValue" style="font-size:10px; color:#4f4;">1.0x</span>
                     </div>
-                    <input type="range" id="animPropScale" min="0.5" max="3" value="1" step="0.25" onchange="updateAnimPropScale()" oninput="updateAnimPropScale()" style="width:100%;">
+                    <input type="range" id="animPropScale" min="0.1" max="3" value="1" step="0.05" onchange="updateAnimPropScale()" oninput="updateAnimPropScale()" style="width:100%;">
                 </div>
 
                 <p style="font-size:10px; color:#666; margin-top:10px;">Select prop from list, then click map to place. Right-click to remove.</p>
@@ -9417,6 +9417,9 @@
             if (mode === 'item') {
                 placedAnimProps.forEach((placed, idx) => {
                     if (placed.mapName && placed.mapName !== currentMapName) return;
+                    // Guard: only draw the overlay where a real animTile cell exists on the CURRENT map.
+                    // Kills cross-map phantom boxes from stale/untagged placedAnimProps entries.
+                    if (!animTileCellExistsAt(placed.x, placed.y)) return;
                     const prop = animatedProps[placed.propIndex];
                     if (!prop || !prop.giveItem) return;
 
@@ -15623,10 +15626,22 @@
         }
 
         // Find an interactive anim prop (with giveItem) at the given map coordinates
+        // placedAnimProps is a STALE all-maps registry (placement writes animTile cells into `layers`,
+        // not this array; legacy entries also lack mapName). Verify a real animTile cell actually exists
+        // at these coords on the CURRENT map's layers. Prevents cross-map phantom highlight boxes/hit-tests.
+        function animTileCellExistsAt(x, y) {
+            for (let li = 0; li < layers.length; li++) {
+                const layer = layers[li];
+                if (layer && layer[y] && layer[y][x] && layer[y][x].type === 'animTile') return true;
+            }
+            return false;
+        }
+
         function findInteractivePropAt(x, y) {
             for (let i = 0; i < placedAnimProps.length; i++) {
                 const placed = placedAnimProps[i];
                 if (placed.mapName && placed.mapName !== currentMapName) continue;
+                if (!animTileCellExistsAt(placed.x, placed.y)) continue;
 
                 const prop = animatedProps[placed.propIndex];
                 if (!prop || !prop.giveItem) continue;
@@ -15980,11 +15995,11 @@
                 cell.scale = scale;
             }
 
-            // Propagate scale to all tiles of multi-tile prop
-            const prop = animatedProps[cell.propIndex];
-            if (prop && (prop.tilesW > 1 || prop.tilesH > 1)) {
-                const tilesW = prop.tilesW || 1;
-                const tilesH = prop.tilesH || 1;
+            // Propagate scale to all tiles of multi-tile prop.
+            // NOTE: tilesW/tilesH live on the CELL (set at placement), NOT on the prop definition.
+            const tilesW = cell.tilesW || 1;
+            const tilesH = cell.tilesH || 1;
+            if (tilesW > 1 || tilesH > 1) {
                 for (let ty = 0; ty < tilesH; ty++) {
                     for (let tx = 0; tx < tilesW; tx++) {
                         if (tx === 0 && ty === 0) continue;
@@ -16047,11 +16062,11 @@
                 }
             }
 
-            // Propagate scale to all tiles of multi-tile prop
-            const prop = animatedProps[cell.propIndex];
-            if (prop && (prop.tilesW > 1 || prop.tilesH > 1)) {
-                const tilesW = prop.tilesW || 1;
-                const tilesH = prop.tilesH || 1;
+            // Propagate scale to all tiles of multi-tile prop.
+            // NOTE: tilesW/tilesH live on the CELL (set at placement), NOT on the prop definition.
+            const tilesW = cell.tilesW || 1;
+            const tilesH = cell.tilesH || 1;
+            if (tilesW > 1 || tilesH > 1) {
                 for (let ty = 0; ty < tilesH; ty++) {
                     for (let tx = 0; tx < tilesW; tx++) {
                         if (tx === 0 && ty === 0) continue; // Skip origin, already updated
