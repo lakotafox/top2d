@@ -26,13 +26,38 @@
             justify-content: center;
             align-items: center;
             background: #000;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Full-screen looping video behind the menu */
+        #landingBgVideo {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 0;
+            pointer-events: none;
         }
 
         .load-box {
             text-align: center;
             padding: 40px 50px;
-            background: #000;
+            background: rgba(0, 0, 0, 0.7);
             border: 4px solid #fff;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+            /* Cool load-in: grow from center with a subtle overshoot */
+            animation: growIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+
+        @keyframes growIn {
+            0%   { transform: scale(0);    opacity: 0; }
+            60%  {                         opacity: 1; }
+            100% { transform: scale(1);    opacity: 1; }
         }
 
         .load-box h1 {
@@ -1146,6 +1171,9 @@
     </div>
     <!-- PHASE 1: LOAD -->
     <div id="loadPhase" class="phase active">
+        <video id="landingBgVideo" autoplay loop muted playsinline>
+            <source src="assets/landing-bg.mp4" type="video/mp4">
+        </video>
         <div class="load-box" id="mainMenu">
             <h1>ADVENTURE<br>CRAFTER</h1>
             <p>- WORLD BUILDER -</p>
@@ -13070,6 +13098,45 @@
         const buttonActionSound = new Audio('sounds/button-select.mp3'); // Final action (join/build/start)
         buttonActionSound.volume = 0.5;
 
+        // Landing-page theme song. Plays on the menu, fades out when the game starts.
+        const landingTheme = new Audio('assets/landing-theme.mp3');
+        landingTheme.loop = true;
+        landingTheme.volume = 0.6;
+        let landingThemeStopped = false;
+
+        function startLandingTheme() {
+            if (landingThemeStopped) return;
+            landingTheme.play().catch(() => {});
+        }
+
+        function stopLandingTheme() {
+            if (landingThemeStopped) return;
+            landingThemeStopped = true;
+            const fade = setInterval(() => {
+                if (landingTheme.volume > 0.06) {
+                    landingTheme.volume = Math.max(0, landingTheme.volume - 0.06);
+                } else {
+                    landingTheme.pause();
+                    landingTheme.currentTime = 0;
+                    clearInterval(fade);
+                }
+            }, 40);
+        }
+
+        // Autoplay-with-sound is blocked until a user gesture, so kick the theme
+        // off on the first click/keypress if the initial play() is refused.
+        window.addEventListener('DOMContentLoaded', () => {
+            landingTheme.play().catch(() => {
+                const kick = () => {
+                    document.removeEventListener('pointerdown', kick);
+                    document.removeEventListener('keydown', kick);
+                    startLandingTheme();
+                };
+                document.addEventListener('pointerdown', kick);
+                document.addEventListener('keydown', kick);
+            });
+        });
+
         function playButtonSound() {
             buttonNavSound.currentTime = 0;
             buttonNavSound.play().catch(() => {});
@@ -13078,6 +13145,7 @@
         function playActionSound() {
             buttonActionSound.currentTime = 0;
             buttonActionSound.play().catch(() => {});
+            stopLandingTheme(); // game is starting — fade the menu theme out
         }
 
         // Set up NPC canvas mouse handlers
@@ -23936,6 +24004,7 @@
         }
 
         function testMap() {
+            if (typeof stopLandingTheme === 'function') stopLandingTheme(); // game launching — fade menu theme
             // Open visible console and clear previous logs (skip on the public join path).
             if (!window.__joinMode) openTestConsole();
             testLogs = [];
