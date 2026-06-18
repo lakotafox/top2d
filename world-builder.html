@@ -1685,7 +1685,7 @@
                                 <label style="font-size:11px;">Walk Speed:</label>
                                 <span id="npcSpeedValue" style="font-size:10px; color:#4af;">3</span>
                             </div>
-                            <input type="range" id="npcWalkSpeed" min="1" max="10" value="3" onchange="updateNpcSpeed()" style="width:100%;">
+                            <input type="range" id="npcWalkSpeed" min="0.5" max="10" step="0.25" value="3" oninput="updateNpcSpeed()" onchange="updateNpcSpeed()" style="width:100%;">
                         </div>
                         <div style="margin-bottom:10px;">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -4078,6 +4078,67 @@
         let propTool = 'select'; // 'select', 'collision', 'erase'
         let propBrushSize = 4;
         let propPainting = false;
+
+        // ===================== 8-DIRECTION MOVEMENT SUPPORT (top-level) =====================
+        // Defined at top-level so BOTH the editor (renderMap etc.) AND the game engine can call them.
+        // Diagonal facing values are camelCase: 'upLeft','upRight','downLeft','downRight'.
+        // Anim slot = 'walk' + dirSuffix(dir) -> 'walkUpLeft' etc. Diagonals drive WALK anim only;
+        // everything else collapses to cardinal via cardinalOf(); projectiles use dirToVec().
+        // A diagonal facing is only assigned when hasDiagonalAnims(sprite) is true (4-dir safe).
+        function dirSuffix(dir) { return dir.charAt(0).toUpperCase() + dir.slice(1); }
+        function dir8FromVector(dx, dy, allowDiagonal) {
+            if (!dx && !dy) return null;
+            const ax = Math.abs(dx), ay = Math.abs(dy);
+            if (allowDiagonal && ax > 0.0001 && ay > 0.0001 && ax > ay * 0.41 && ay > ax * 0.41) {
+                return (dy < 0 ? 'up' : 'down') + (dx < 0 ? 'Left' : 'Right');
+            }
+            if (ax > ay) return dx < 0 ? 'left' : 'right';
+            return dy < 0 ? 'up' : 'down';
+        }
+        function cardinalOf(dir) {
+            switch (dir) {
+                case 'upLeft': case 'upRight': return 'up';
+                case 'downLeft': case 'downRight': return 'down';
+                default: return dir;
+            }
+        }
+        function dirToVec(dir) {
+            const d = 0.7071;
+            switch (dir) {
+                case 'left':  return { x: -1, y: 0 };
+                case 'right': return { x: 1,  y: 0 };
+                case 'up':    return { x: 0,  y: -1 };
+                case 'down':  return { x: 0,  y: 1 };
+                case 'upLeft':    return { x: -d, y: -d };
+                case 'upRight':   return { x: d,  y: -d };
+                case 'downLeft':  return { x: -d, y: d };
+                case 'downRight': return { x: d,  y: d };
+                default: return { x: 0, y: 1 };
+            }
+        }
+        function hasDiagonalAnims(anims) {
+            return !!(anims && ((anims.walkUpLeft && anims.walkUpLeft.length) ||
+                (anims.walkUpRight && anims.walkUpRight.length) ||
+                (anims.walkDownLeft && anims.walkDownLeft.length) ||
+                (anims.walkDownRight && anims.walkDownRight.length)));
+        }
+        function resolveWalkKey(anims, dir) {
+            const has = k => !!(anims && anims[k] && anims[k].length > 0);
+            const own = 'walk' + dirSuffix(dir);
+            if (has(own)) return { key: own, flip: false };
+            const mirrorFrom = { left: 'right', upLeft: 'upRight', downLeft: 'downRight' };
+            if (mirrorFrom[dir]) {
+                const src = 'walk' + dirSuffix(mirrorFrom[dir]);
+                if (has(src)) return { key: src, flip: true };
+            }
+            const card = cardinalOf(dir);
+            if (card !== dir) {
+                if (has('walk' + dirSuffix(card))) return { key: 'walk' + dirSuffix(card), flip: false };
+                if (card === 'left' && has('walkRight')) return { key: 'walkRight', flip: true };
+            }
+            return { key: own, flip: false };
+        }
+        // =================== END 8-DIRECTION MOVEMENT SUPPORT ===================
 
         // Animated Props System
         let animatedProps = []; // Array of animated prop definitions { name, spriteData, frameWidth, frameHeight, frames: [{x,y,w,h},...], type: 'loop'|'interactive', fps }
@@ -8319,6 +8380,15 @@
                                     const drawY = originPy - propCenterOffsetY + scaledTileOffsetY;
 
                                     mapCtx.imageSmoothingEnabled = false;
+                                    // Per-instance horizontal mirror (reflect whole prop about its screen-center)
+                                    const mirror = cell.mirror;
+                                    if (mirror) {
+                                        mapCtx.save();
+                                        const centerScreenX = originPx - propCenterOffsetX + scaledPropWidth / 2;
+                                        mapCtx.translate(centerScreenX, 0);
+                                        mapCtx.scale(-1, 1);
+                                        mapCtx.translate(-centerScreenX, 0);
+                                    }
                                     // Draw with rotation support
                                     const rot = cell.rotation || 0;
                                     if (rot === 0) {
@@ -8334,6 +8404,7 @@
                                         mapCtx.drawImage(prop._spriteImg, srcX, srcY, gridSize, gridSize, rotDrawX, rotDrawY, scaledTileSize, scaledTileSize);
                                         mapCtx.restore();
                                     }
+                                    if (mirror) mapCtx.restore();
 
                                     // Show label in animProp mode (only on origin tile)
                                     if (mode === 'animProp' && offsetX === 0 && offsetY === 0) {
@@ -8515,6 +8586,7 @@
                     const spriteImg = prop._spriteImg;
                     const drawX = hoverMapPos.x * tileSize;
                     const drawY = hoverMapPos.y * tileSize;
+                    const scale = currentAnimPropScale || 1; // preview at the scale it will be placed
 
                     mapCtx.globalAlpha = 0.5;
                     if (spriteImg && frames.length > 0) {
@@ -8526,27 +8598,38 @@
                         const rot = tileRotation;
                         const placedW = (rot === 90 || rot === 270) ? origH : origW;
                         const placedH = (rot === 90 || rot === 270) ? origW : origH;
-                        const drawW = placedW * tileSize;
+                        const drawW = placedW * tileSize; // footprint (tiles it occupies)
                         const drawH = placedH * tileSize;
+                        // Scaled sprite size, centered within the footprint (matches placed render)
+                        const sW = origW * tileSize * scale;
+                        const sH = origH * tileSize * scale;
 
                         mapCtx.imageSmoothingEnabled = false;
-                        // Draw with rotation
+                        // Draw with rotation, scaled and centered
                         if (rot === 0) {
-                            mapCtx.drawImage(spriteImg, frame.x, frame.y, frame.w, frame.h, drawX, drawY, origW * tileSize, origH * tileSize);
+                            const sx = drawX + (origW * tileSize - sW) / 2;
+                            const sy = drawY + (origH * tileSize - sH) / 2;
+                            mapCtx.drawImage(spriteImg, frame.x, frame.y, frame.w, frame.h, sx, sy, sW, sH);
                         } else {
                             mapCtx.save();
                             mapCtx.translate(drawX + drawW / 2, drawY + drawH / 2);
                             mapCtx.rotate(rot * Math.PI / 180);
-                            // After rotation, draw centered
-                            mapCtx.drawImage(spriteImg, frame.x, frame.y, frame.w, frame.h, -origW * tileSize / 2, -origH * tileSize / 2, origW * tileSize, origH * tileSize);
+                            // After rotation, draw centered at scaled size
+                            mapCtx.drawImage(spriteImg, frame.x, frame.y, frame.w, frame.h, -sW / 2, -sH / 2, sW, sH);
                             mapCtx.restore();
                         }
 
                         mapCtx.globalAlpha = 1;
-                        // Draw outline around full prop area
+                        // Solid outline = actual scaled size; dashed = tile footprint it snaps to
+                        const oxC = drawX + (origW * tileSize - sW) / 2;
+                        const oyC = drawY + (origH * tileSize - sH) / 2;
                         mapCtx.strokeStyle = '#f0a';
                         mapCtx.lineWidth = 2;
+                        mapCtx.strokeRect(oxC, oyC, sW, sH);
+                        mapCtx.setLineDash([4, 4]);
+                        mapCtx.lineWidth = 1;
                         mapCtx.strokeRect(drawX, drawY, drawW, drawH);
+                        mapCtx.setLineDash([]);
                     } else {
                         // Placeholder preview
                         mapCtx.fillStyle = '#f0a';
@@ -13672,7 +13755,7 @@
         function updateNpcSpeed() {
             if (selectedPlacedNpcIndex < 0) return;
             const placed = placedNpcs[selectedPlacedNpcIndex];
-            const speed = parseInt(document.getElementById('npcWalkSpeed').value);
+            const speed = parseFloat(document.getElementById('npcWalkSpeed').value);
             placed.speed = speed;
             document.getElementById('npcSpeedValue').textContent = speed;
             broadcastEdit({ editType: 'updatePlacedNpc', index: selectedPlacedNpcIndex, npc: placed });
@@ -15936,6 +16019,7 @@
             const currentWaitTime = cell.instanceWaitTime || 2;
             const currentSpeed = cell.instanceSpeed !== undefined ? cell.instanceSpeed : 1;
             const currentScale = cell.scale !== undefined ? cell.scale : 1;
+            const currentMirror = !!cell.mirror;
 
             const popup = document.createElement('div');
             popup.id = 'animPropEditPopup';
@@ -15962,6 +16046,10 @@
             html += '<input type="range" id="editAnimSpeed" min="0.25" max="3" step="0.25" value="' + currentSpeed + '" style="flex:1;" oninput="document.getElementById(\'speedValue\').textContent = this.value + \'x\'">';
             html += '<span id="speedValue" style="color:#4af; min-width:40px;">' + currentSpeed + 'x</span>';
             html += '</div></div>';
+            html += '<div style="margin-bottom:4px;">';
+            html += '<label style="color:#ccc; display:flex; align-items:center; gap:8px; cursor:pointer;">';
+            html += '<input type="checkbox" id="editAnimMirror"' + (currentMirror ? ' checked' : '') + ' onchange="previewAnimPropMirror(' + x + ', ' + y + ', ' + layer + ', this.checked)"> Mirror (flip horizontally)';
+            html += '</label></div>';
             html += '</div>';
 
             // Right column - Animation Mode
@@ -16053,12 +16141,36 @@
             renderMap();
         }
 
+        // Live-preview a per-instance horizontal mirror (applies to all tiles of the prop).
+        function previewAnimPropMirror(originX, originY, layerIdx, checked) {
+            const layer = layers[layerIdx];
+            if (!layer || !layer[originY] || !layer[originY][originX]) return;
+            const cell = layer[originY][originX];
+            if (!cell || cell.type !== 'animTile') return;
+            const apply = (c) => { if (checked) c.mirror = true; else delete c.mirror; };
+            apply(cell);
+            const tilesW = cell.tilesW || 1;
+            const tilesH = cell.tilesH || 1;
+            if (tilesW > 1 || tilesH > 1) {
+                for (let ty = 0; ty < tilesH; ty++) {
+                    for (let tx = 0; tx < tilesW; tx++) {
+                        if (tx === 0 && ty === 0) continue;
+                        const c = layer[originY + ty] && layer[originY + ty][originX + tx];
+                        if (c && c.type === 'animTile') apply(c);
+                    }
+                }
+            }
+            renderMap();
+        }
+
         function saveAnimPropEdit(originX, originY, layerIdx) {
             const mode = document.getElementById('editAnimMode').value;
             const playCount = parseInt(document.getElementById('editPlayCount').value) || 1;
             const waitTime = parseFloat(document.getElementById('editWaitTime').value) || 2;
             const speed = parseFloat(document.getElementById('editAnimSpeed').value) || 1;
             const scale = parseFloat(document.getElementById('editAnimScale').value) || 1;
+            const mirrorEl = document.getElementById('editAnimMirror');
+            const mirror = mirrorEl ? mirrorEl.checked : false;
 
             const layer = layers[layerIdx];
             if (!layer || !layer[originY] || !layer[originY][originX]) return;
@@ -16072,6 +16184,9 @@
             } else {
                 cell.scale = scale;
             }
+
+            // Update instance mirror
+            if (mirror) cell.mirror = true; else delete cell.mirror;
 
             // Update instance speed
             if (speed === 1) {
@@ -16107,11 +16222,9 @@
                         const tileX = originX + tx;
                         const tileY = originY + ty;
                         if (layer[tileY] && layer[tileY][tileX] && layer[tileY][tileX].type === 'animTile') {
-                            if (scale === 1) {
-                                delete layer[tileY][tileX].scale;
-                            } else {
-                                layer[tileY][tileX].scale = scale;
-                            }
+                            const tc = layer[tileY][tileX];
+                            if (scale === 1) { delete tc.scale; } else { tc.scale = scale; }
+                            if (mirror) { tc.mirror = true; } else { delete tc.mirror; }
                         }
                     }
                 }
@@ -28674,82 +28787,8 @@
             ctx.drawImage(lightCanvas, 0, 0);
         }
 
-        // ===================== 8-DIRECTION MOVEMENT SUPPORT =====================
-        // Added 2026-06-17. Diagonal facing values are camelCase: 'upLeft','upRight',
-        // 'downLeft','downRight'. Anim slot = 'walk' + dirSuffix(dir) -> 'walkUpLeft' etc.
-        // DESIGN: diagonals are used for WALK animation only. All other systems (attack
-        // hitbox, attack/idle anim, interaction, ability pose) collapse to the dominant
-        // cardinal via cardinalOf(). Projectiles use the true vector via dirToVec().
-        // SAFETY: a diagonal facing is only ever assigned when hasDiagonalAnims(sprite)
-        // is true, so 4-direction sprites / legacy sprites / old saves behave identically.
-
-        function dirSuffix(dir) { return dir.charAt(0).toUpperCase() + dir.slice(1); }
-
-        // Classify a movement vector into a facing. allowDiagonal gates 8-way vs 4-way.
-        function dir8FromVector(dx, dy, allowDiagonal) {
-            if (!dx && !dy) return null;
-            const ax = Math.abs(dx), ay = Math.abs(dy);
-            if (allowDiagonal && ax > 0.0001 && ay > 0.0001 && ax > ay * 0.41 && ay > ax * 0.41) {
-                return (dy < 0 ? 'up' : 'down') + (dx < 0 ? 'Left' : 'Right');
-            }
-            if (ax > ay) return dx < 0 ? 'left' : 'right';
-            return dy < 0 ? 'up' : 'down';
-        }
-
-        // Collapse any direction (incl. diagonal) to a single cardinal for combat/logic.
-        function cardinalOf(dir) {
-            switch (dir) {
-                case 'upLeft': case 'upRight': return 'up';
-                case 'downLeft': case 'downRight': return 'down';
-                default: return dir;
-            }
-        }
-
-        // True unit vector for a direction (8-way) — used for projectiles.
-        function dirToVec(dir) {
-            const d = 0.7071;
-            switch (dir) {
-                case 'left':  return { x: -1, y: 0 };
-                case 'right': return { x: 1,  y: 0 };
-                case 'up':    return { x: 0,  y: -1 };
-                case 'down':  return { x: 0,  y: 1 };
-                case 'upLeft':    return { x: -d, y: -d };
-                case 'upRight':   return { x: d,  y: -d };
-                case 'downLeft':  return { x: -d, y: d };
-                case 'downRight': return { x: d,  y: d };
-                default: return { x: 0, y: 1 };
-            }
-        }
-
-        // Does this animations object have any diagonal WALK frames? (gates 8-way facing)
-        function hasDiagonalAnims(anims) {
-            return !!(anims && ((anims.walkUpLeft && anims.walkUpLeft.length) ||
-                (anims.walkUpRight && anims.walkUpRight.length) ||
-                (anims.walkDownLeft && anims.walkDownLeft.length) ||
-                (anims.walkDownRight && anims.walkDownRight.length)));
-        }
-
-        // Resolve the walk-anim slot for a direction with diagonal->mirror->cardinal
-        // fallback. Returns { key, flip }. flip=true means draw horizontally mirrored.
-        function resolveWalkKey(anims, dir) {
-            const has = k => !!(anims && anims[k] && anims[k].length > 0);
-            const own = 'walk' + dirSuffix(dir);
-            if (has(own)) return { key: own, flip: false };
-            // mirror a left-family direction from its right-family counterpart
-            const mirrorFrom = { left: 'right', upLeft: 'upRight', downLeft: 'downRight' };
-            if (mirrorFrom[dir]) {
-                const src = 'walk' + dirSuffix(mirrorFrom[dir]);
-                if (has(src)) return { key: src, flip: true };
-            }
-            // collapse a diagonal to its dominant cardinal
-            const card = cardinalOf(dir);
-            if (card !== dir) {
-                if (has('walk' + dirSuffix(card))) return { key: 'walk' + dirSuffix(card), flip: false };
-                if (card === 'left' && has('walkRight')) return { key: 'walkRight', flip: true };
-            }
-            return { key: own, flip: false }; // let caller's empty-frame fallback handle it
-        }
-        // =================== END 8-DIRECTION MOVEMENT SUPPORT ===================
+        // (8-direction movement helpers moved to top-level scope — see near the top of the script
+        //  so both the editor's renderMap and the game engine can call them.)
 
         // Initialize audio on first user interaction (key or touch)
         document.addEventListener('keydown', () => initAudio(), { once: true });
@@ -32898,6 +32937,17 @@ Item Receive Display:
 
             ctx.imageSmoothingEnabled = false;
 
+            // Per-instance horizontal mirror: reflect the whole prop about its screen-center
+            // vertical axis. Wrapping the draw handles multi-tile + scale + rotation in one shot.
+            const mirror = cell.mirror;
+            if (mirror) {
+                ctx.save();
+                const centerScreenX = originPx - propCenterOffsetX + scaledPropWidth / 2;
+                ctx.translate(centerScreenX, 0);
+                ctx.scale(-1, 1);
+                ctx.translate(-centerScreenX, 0);
+            }
+
             // Draw with rotation support
             const rot = cell.rotation || 0;
             if (rot === 0) {
@@ -32913,6 +32963,8 @@ Item Receive Display:
                 ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, rotDrawX, rotDrawY, scaledTileSize, scaledTileSize);
                 ctx.restore();
             }
+
+            if (mirror) ctx.restore();
         }
 
         // Draw only the trunk (bottom) portion of an animated tile with split line
