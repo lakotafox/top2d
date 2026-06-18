@@ -33050,6 +33050,16 @@ Item Receive Display:
             const offsetX = cell.offsetX || 0;
             const offsetY = cell.offsetY || 0;
 
+            // Per-instance horizontal mirror (match drawAnimTile): reflect about the prop's screen-center.
+            const mirror = cell.mirror;
+            const _twTrunk = cell.tilesW || 1;
+            const _cxTrunk = (originX * tileSize - camX) + (_twTrunk * tileSize) / 2;
+            const blit = (sx, sy, sw, sh, dx, dy, dw, dh) => {
+                if (mirror) { ctx.save(); ctx.translate(_cxTrunk, 0); ctx.scale(-1, 1); ctx.translate(-_cxTrunk, 0); }
+                ctx.drawImage(propImg, sx, sy, sw, sh, dx, dy, dw, dh);
+                if (mirror) ctx.restore();
+            };
+
             // Get split Y for this specific tile within the prop
             const tileKey = offsetX + ',' + offsetY;
             let splitY = null;
@@ -33073,7 +33083,7 @@ Item Receive Display:
                 const srcX = frame.x + offsetX * gridSize;
                 const srcY = frame.y + offsetY * gridSize;
                 ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
+                blit(srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
                 return;
             }
 
@@ -33092,7 +33102,7 @@ Item Receive Display:
                 const srcX = frame.x + offsetX * gridSize;
                 const srcY = frame.y + offsetY * gridSize;
                 ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
+                blit(srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
             } else if (localSplitY < gridSize) {
                 // Split is within this tile - draw only trunk (below split)
                 const srcX = frame.x + offsetX * gridSize;
@@ -33102,7 +33112,7 @@ Item Receive Display:
                 const destH = srcH * scale;
 
                 ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(propImg, srcX, srcY, gridSize, srcH, px, destY, tileSize, destH);
+                blit(srcX, srcY, gridSize, srcH, px, destY, tileSize, destH);
             }
             // If localSplitY >= gridSize, split is below this tile - don't draw trunk here
         }
@@ -33639,20 +33649,21 @@ Item Receive Display:
 
                 let row = 0;
                 let col = 0;
+                const pdir = cardinalOf(player.direction); // legacy 4-key tables have no diagonals (defensive)
 
                 if (player.attacking) {
-                    row = walkFrames[player.direction].row;
-                    col = walkFrames[player.direction].cols[player.frame % walkFrames[player.direction].cols.length];
-                    if (player.direction === 'left') flipX = true;
+                    row = walkFrames[pdir].row;
+                    col = walkFrames[pdir].cols[player.frame % walkFrames[pdir].cols.length];
+                    if (pdir === 'left') flipX = true;
                 } else if (player.moving) {
-                    const walk = walkFrames[player.direction];
+                    const walk = walkFrames[pdir];
                     row = walk.row;
                     col = walk.cols[player.frame % walk.cols.length];
-                    if (player.direction === 'left') flipX = true;
+                    if (pdir === 'left') flipX = true;
                 } else {
                     row = 0;
-                    col = idleFrames[player.direction][player.frame % idleFrames[player.direction].length];
-                    if (player.direction === 'left') flipX = true;
+                    col = idleFrames[pdir][player.frame % idleFrames[pdir].length];
+                    if (pdir === 'left') flipX = true;
                 }
 
                 srcX = col * frameWidth;

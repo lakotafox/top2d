@@ -5,6 +5,23 @@
 - **GAME_VERSION:** `0.1.0` (declared near top of `world-builder.html`; displayed on the main menu; stamped into every save as `gameVersion`).
 - **SAVE_SCHEMA_VERSION:** `1` (stamped into every save; `migrateProjectData(p)` is the migration ladder — add new `if (v < N)` hops as the schema evolves).
 
+## 🚨 RULE: `world-builder.html` is TWO documents (read before editing ANY shared function)
+
+The single file `world-builder.html` contains **two separate HTML documents / runtime contexts**:
+
+1. **BUILDER doc** — lines **1–~23893**. The real page you open. Editor, save/load, multiplayer, `renderMap()` (~8246), `drawPlayerPreview()`, all editor UI.
+2. **TEST GAME doc** — a **template-literal string** `const loaderHTML = \`…\`` (**opens ~line 23894, closes ~line 34452**). `testMap()` writes it into a NEW window/iframe via `document.write(loaderHTML)`. It has its **own** `<script>`, its **own** global scope, and gets data only via a `ready`→`project-data` **postMessage** handshake (no shared variables). Game-engine functions live HERE: `initGame()` (~25901), `update()` (~30075), `draw()` (~31399), `gameLoop()` (~34286), `drawPlayer()` (~33483), `drawNPC()` (~33972), `drawAnimTile()`/`drawAnimTileTrunk()` (~32938/33029), `checkAttackHitbox()` (~26853), `dirVector()` (~27003).
+
+**THE TRAP:** the two docs do NOT share scope. **A helper/function used in BOTH must be DEFINED in BOTH** (e.g. the 8-dir helpers `cardinalOf`/`resolveWalkKey`/`hasDiagonalAnims`/`dir8FromVector`/`dirToVec`/`dirSuffix` are duplicated: builder copy ~4088, game copy ~25846). If you add a function in the builder doc and call it from the game doc (or vice-versa), you get a runtime **`X is not defined`** ReferenceError — `node --check` will NOT catch it (the game doc is just a *string* to the builder's parser).
+
+**The tell:** editor works, but **Test Map crashes** with `ReferenceError: X is not defined at initGame` (or renderMap throws every frame → frozen preview). Fix = add the same definition to the OTHER document.
+
+**Also:** inside `loaderHTML`, closing script tags are escaped `<\/script>` (an un-escaped `</script>` would terminate the builder's surrounding script). There are NO `${}` interpolations — every `$` is escaped `\$`; the game string is static and all builder→game data crosses via postMessage at runtime.
+
+**To validate the game doc:** `node --check` on the whole file only checks the builder (game is a string). Extract the `loaderHTML` template's `<script>` body and check that separately, or test in-browser via Test Map.
+
+(Stale note: older "line N" references in this file for game functions like `initGame 17443`, `draw 21092` are out of date — the real game functions are in the ~25900–34286 range. See WORLD-BUILDER-REFERENCE.md "Two-document architecture".)
+
 ## ⚠️ RULE: Save/load field parity (read before adding ANY field to a data object)
 
 When you add a new field to any data object (items, NPCs, props, staticObjects, sounds, quests, dialogs, etc.), it MUST round-trip through BOTH save AND load.
