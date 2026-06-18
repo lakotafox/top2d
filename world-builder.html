@@ -60,6 +60,15 @@
             100% { transform: scale(1);    opacity: 1; }
         }
 
+        /* Hold the main menu hidden until first interaction, then grow it in at the
+           same moment the theme song starts (both gated on the first user gesture). */
+        #mainMenu { animation: none; opacity: 0; transform: scale(0); }
+        body.theme-started #mainMenu {
+            opacity: 1;
+            transform: scale(1);
+            animation: growIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+
         .load-box h1 {
             font-family: 'Press Start 2P', monospace;
             font-size: 20px;
@@ -13123,14 +13132,22 @@
             }, 40);
         }
 
-        // Autoplay-with-sound is blocked until a user gesture, so kick the theme
-        // off on the first click/keypress if the initial play() is refused.
+        // Autoplay-with-sound is blocked until a user gesture, so the theme song —
+        // and the menu grow-in — both wait for the first click/keypress, then fire
+        // together. (.theme-started reveals + animates #mainMenu; see CSS.)
         window.addEventListener('DOMContentLoaded', () => {
-            landingTheme.play().catch(() => {
+            const reveal = () => {
+                document.body.classList.add('theme-started');
+                startLandingTheme();
+            };
+            landingTheme.play().then(() => {
+                // Rare: autoplay allowed — reveal right away.
+                document.body.classList.add('theme-started');
+            }).catch(() => {
                 const kick = () => {
                     document.removeEventListener('pointerdown', kick);
                     document.removeEventListener('keydown', kick);
-                    startLandingTheme();
+                    reveal();
                 };
                 document.addEventListener('pointerdown', kick);
                 document.addEventListener('keydown', kick);
