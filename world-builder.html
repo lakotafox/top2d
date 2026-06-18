@@ -4206,6 +4206,7 @@
         let npcPathDrawing = false; // Currently drawing a path
         let npcPathEditing = false; // Currently editing/moving waypoints
         let npcDraggingWaypoint = -1; // Index of waypoint being dragged (-1 = none)
+        let npcWaypointPropTarget = -1; // Waypoint index awaiting a prop-link click on the map (-1 = off)
         let npcEditorImage = null;
 
         // NPC Path Preview
@@ -7528,6 +7529,16 @@
 
             // NPC mode - place, select, draw path, or edit path
             if (mode === 'npc') {
+                // Prop-link targeting takes priority over draw/edit/select
+                if (npcWaypointPropTarget >= 0) {
+                    if (e.button === 2) { // right-click cancels targeting
+                        npcWaypointPropTarget = -1;
+                        updateNpcWaypointList();
+                    } else if (e.button === 0) {
+                        tryLinkWaypointProp(x, y);
+                    }
+                    return;
+                }
                 if (npcPathEditing && selectedPlacedNpcIndex >= 0) {
                     // Editing path - drag waypoints
                     const placed = placedNpcs[selectedPlacedNpcIndex];
@@ -13803,7 +13814,7 @@
                 const action = wp.animation || 'walk';
                 const hasStop = duration > 0;
 
-                html += `<div style="background:#1a1a2e; border-radius:4px; padding:6px; margin-bottom:6px; border-left:3px solid ${hasStop ? '#4af' : '#444'};">`;
+                html += `<div style="background:#1a1a2e; border-radius:4px; padding:6px; margin-bottom:6px; border-left:3px solid ${wp.triggerProp ? '#fa0' : (hasStop ? '#4af' : '#444')};">`;
 
                 // Header row: waypoint number and position
                 html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">`;
@@ -13831,10 +13842,72 @@
                 }
 
                 html += `</div>`;
+
+                // Trigger-prop control (only meaningful on stop waypoints)
+                if (action !== 'walk') {
+                    html += `<div style="margin-top:6px; padding-top:6px; border-top:1px solid #333;">`;
+                    if (wp.triggerProp) {
+                        const tc = layers[wp.triggerProp.layer] && layers[wp.triggerProp.layer][wp.triggerProp.y] && layers[wp.triggerProp.layer][wp.triggerProp.y][wp.triggerProp.x];
+                        const pd = tc && animatedProps[tc.propIndex];
+                        const pname = pd ? pd.name : 'prop (missing)';
+                        html += `<span style="color:#fa0; font-size:10px;">⚙ Triggers: ${pname}</span> `;
+                        html += `<button onclick="clearWaypointProp(${i})" style="font-size:10px; padding:1px 5px; background:#633; border:1px solid #855; color:#fff; border-radius:3px; cursor:pointer;">✕</button>`;
+                    } else {
+                        const arming = npcWaypointPropTarget === i;
+                        html += `<button onclick="startWaypointPropTarget(${i})" style="font-size:10px; padding:2px 6px; background:${arming ? '#a70' : '#444'}; border:1px solid #666; color:#fff; border-radius:3px; cursor:pointer;">🎯 ${arming ? 'Click prop on map…' : 'Trigger a prop'}</button>`;
+                    }
+                    html += `</div>`;
+                }
+
                 html += `</div>`;
             });
             html += '</div>';
             container.innerHTML = html;
+        }
+
+        // ===== NPC waypoint -> interactive prop linking =====
+        function startWaypointPropTarget(index) {
+            if (selectedPlacedNpcIndex < 0) return;
+            npcWaypointPropTarget = index;
+            // Make sure we're not in draw/edit path mode (they share the map click)
+            npcPathDrawing = false;
+            npcPathEditing = false;
+            updateNpcWaypointList();
+            const info = document.getElementById('npcPathInfo');
+            if (info) { info.textContent = 'Click an INTERACTIVE animated prop on the map to link it to this waypoint.'; info.style.color = '#fa0'; }
+        }
+
+        function clearWaypointProp(index) {
+            if (selectedPlacedNpcIndex < 0) return;
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            if (placed.path && placed.path[index]) {
+                delete placed.path[index].triggerProp;
+                npcWaypointPropTarget = -1;
+                updateNpcWaypointList();
+                broadcastEdit({ editType: 'updatePlacedNpc', index: selectedPlacedNpcIndex, npc: placed });
+            }
+        }
+
+        // Called by the map-click handler when a prop-link is armed. Returns true if it consumed the click.
+        function tryLinkWaypointProp(x, y) {
+            if (npcWaypointPropTarget < 0 || selectedPlacedNpcIndex < 0) return false;
+            const placed = placedNpcs[selectedPlacedNpcIndex];
+            const wp = placed.path && placed.path[npcWaypointPropTarget];
+            if (!wp) { npcWaypointPropTarget = -1; return true; }
+            const hit = findAnimPropAt(x, y);
+            const def = hit && hit.cell ? animatedProps[hit.cell.propIndex] : null;
+            const info = document.getElementById('npcPathInfo');
+            if (!def || def.type !== 'interactive') {
+                if (info) { info.textContent = 'That tile is not an interactive prop. Click an interactive animated prop.'; info.style.color = '#f66'; }
+                return true; // stay armed
+            }
+            wp.triggerProp = { x: hit.x, y: hit.y, layer: hit.layer };
+            npcWaypointPropTarget = -1;
+            if (info) { info.textContent = 'Linked! NPC will trigger "' + def.name + '" at this waypoint.'; info.style.color = '#4f4'; }
+            updateNpcWaypointList();
+            broadcastEdit({ editType: 'updatePlacedNpc', index: selectedPlacedNpcIndex, npc: placed });
+            renderMap();
+            return true;
         }
 
         function setWaypointAction(index, action) {
@@ -28265,9 +28338,19 @@
                             state.frameTimer = 0;
                             state.frame = state.frame + 1; // uncapped; draw does % anim.length so any frame count works
                         }
+                        // Keep the linked prop looping for the whole stop (it self-completes via updateAnimPropInteractions)
+                        if (state._triggerKey) {
+                            const ps = interactivePropStates[state._triggerKey];
+                            if (ps && !ps.animating) { ps.used = false; ps.animating = true; ps.frame = 0; ps.timer = 0; if (animPropFrameTimers[state._triggerKey]) animPropFrameTimers[state._triggerKey].frame = 0; }
+                        }
                         continue;
                     } else {
-                        // Idle complete - advance to next waypoint
+                        // Idle complete - stop the linked prop and advance to next waypoint
+                        if (state._triggerKey) {
+                            const ps = interactivePropStates[state._triggerKey];
+                            if (ps) { ps.animating = false; ps.frame = 0; if (animPropFrameTimers[state._triggerKey]) animPropFrameTimers[state._triggerKey].frame = 0; }
+                            state._triggerKey = null;
+                        }
                         state.idleUntil = 0;
                         state.waypointAnimation = '';
                         state.currentWaypoint++;
@@ -28309,6 +28392,15 @@
                         state.idleUntil = performance.now() + (idleTime * 1000);
                         state.waypointAnimation = wpAnim;
                         state.moving = false;
+                        // NPC-triggered interactive prop: start it animating (re-fires each lap, gives no item)
+                        if (currentWp.triggerProp) {
+                            const tp = currentWp.triggerProp;
+                            const pkey = tp.x + ',' + tp.y + ',' + tp.layer;
+                            const ps = interactivePropStates[pkey] || (interactivePropStates[pkey] = { used: false, animating: false, frame: 0, gaveItem: false });
+                            ps.used = false; ps.animating = true; ps.frame = 0; ps.timer = 0; // re-fire; ignore the player one-time flag
+                            if (animPropFrameTimers[pkey]) animPropFrameTimers[pkey].frame = 0;
+                            state._triggerKey = pkey; // keep it looping while stopped here; cleared on leave
+                        }
                         // Don't advance waypoint - will advance after idle completes
                         continue;
                     }
