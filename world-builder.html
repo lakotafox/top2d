@@ -8391,6 +8391,11 @@
                                     const drawY = originPy - propCenterOffsetY + scaledTileOffsetY;
 
                                     mapCtx.imageSmoothingEnabled = false;
+                                    // Per-instance pixel nudge (fine-position off the grid)
+                                    const _nx = (cell.nudgeX || 0) * (tileSize / gridSize);
+                                    const _ny = (cell.nudgeY || 0) * (tileSize / gridSize);
+                                    const _nudged = _nx || _ny;
+                                    if (_nudged) { mapCtx.save(); mapCtx.translate(_nx, _ny); }
                                     // Per-instance horizontal mirror (reflect whole prop about its screen-center)
                                     const mirror = cell.mirror;
                                     if (mirror) {
@@ -8416,6 +8421,7 @@
                                         mapCtx.restore();
                                     }
                                     if (mirror) mapCtx.restore();
+                                    if (_nudged) mapCtx.restore();
 
                                     // Show label in animProp mode (only on origin tile)
                                     if (mode === 'animProp' && offsetX === 0 && offsetY === 0) {
@@ -16093,6 +16099,8 @@
             const currentSpeed = cell.instanceSpeed !== undefined ? cell.instanceSpeed : 1;
             const currentScale = cell.scale !== undefined ? cell.scale : 1;
             const currentMirror = !!cell.mirror;
+            const currentNudgeX = cell.nudgeX || 0;
+            const currentNudgeY = cell.nudgeY || 0;
 
             const popup = document.createElement('div');
             popup.id = 'animPropEditPopup';
@@ -16123,6 +16131,18 @@
             html += '<label style="color:#ccc; display:flex; align-items:center; gap:8px; cursor:pointer;">';
             html += '<input type="checkbox" id="editAnimMirror"' + (currentMirror ? ' checked' : '') + ' onchange="previewAnimPropMirror(' + x + ', ' + y + ', ' + layer + ', this.checked)"> Mirror (flip horizontally)';
             html += '</label></div>';
+            html += '<div style="margin-top:10px;">';
+            html += '<label style="color:#ccc; display:block; margin-bottom:5px;">Fine position (px) — collision follows:</label>';
+            html += '<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">';
+            html += '<span style="color:#888; width:12px;">X</span>';
+            html += '<input type="range" id="editAnimNudgeX" min="' + (-gridSize) + '" max="' + gridSize + '" step="1" value="' + currentNudgeX + '" style="flex:1;" oninput="document.getElementById(\'nudgeXValue\').textContent = this.value; previewAnimPropNudge(' + x + ', ' + y + ', ' + layer + ')">';
+            html += '<span id="nudgeXValue" style="color:#4af; min-width:26px;">' + currentNudgeX + '</span>';
+            html += '</div>';
+            html += '<div style="display:flex; align-items:center; gap:8px;">';
+            html += '<span style="color:#888; width:12px;">Y</span>';
+            html += '<input type="range" id="editAnimNudgeY" min="' + (-gridSize) + '" max="' + gridSize + '" step="1" value="' + currentNudgeY + '" style="flex:1;" oninput="document.getElementById(\'nudgeYValue\').textContent = this.value; previewAnimPropNudge(' + x + ', ' + y + ', ' + layer + ')">';
+            html += '<span id="nudgeYValue" style="color:#4af; min-width:26px;">' + currentNudgeY + '</span>';
+            html += '</div></div>';
             html += '</div>';
 
             // Right column - Animation Mode
@@ -16236,6 +16256,27 @@
             renderMap();
         }
 
+        // Live-preview a per-instance pixel nudge (applies to all tiles of the prop).
+        function previewAnimPropNudge(originX, originY, layerIdx) {
+            const layer = layers[layerIdx];
+            if (!layer || !layer[originY] || !layer[originY][originX]) return;
+            const cell = layer[originY][originX];
+            if (!cell || cell.type !== 'animTile') return;
+            const nx = parseInt(document.getElementById('editAnimNudgeX').value) || 0;
+            const ny = parseInt(document.getElementById('editAnimNudgeY').value) || 0;
+            const apply = (c) => { if (nx) c.nudgeX = nx; else delete c.nudgeX; if (ny) c.nudgeY = ny; else delete c.nudgeY; };
+            apply(cell);
+            const tilesW = cell.tilesW || 1, tilesH = cell.tilesH || 1;
+            if (tilesW > 1 || tilesH > 1) {
+                for (let ty = 0; ty < tilesH; ty++) for (let tx = 0; tx < tilesW; tx++) {
+                    if (tx === 0 && ty === 0) continue;
+                    const c = layer[originY + ty] && layer[originY + ty][originX + tx];
+                    if (c && c.type === 'animTile') apply(c);
+                }
+            }
+            renderMap();
+        }
+
         function saveAnimPropEdit(originX, originY, layerIdx) {
             const mode = document.getElementById('editAnimMode').value;
             const playCount = parseInt(document.getElementById('editPlayCount').value) || 1;
@@ -16244,6 +16285,10 @@
             const scale = parseFloat(document.getElementById('editAnimScale').value) || 1;
             const mirrorEl = document.getElementById('editAnimMirror');
             const mirror = mirrorEl ? mirrorEl.checked : false;
+            const nudgeXEl = document.getElementById('editAnimNudgeX');
+            const nudgeYEl = document.getElementById('editAnimNudgeY');
+            const nudgeX = nudgeXEl ? (parseInt(nudgeXEl.value) || 0) : 0;
+            const nudgeY = nudgeYEl ? (parseInt(nudgeYEl.value) || 0) : 0;
 
             const layer = layers[layerIdx];
             if (!layer || !layer[originY] || !layer[originY][originX]) return;
@@ -16260,6 +16305,10 @@
 
             // Update instance mirror
             if (mirror) cell.mirror = true; else delete cell.mirror;
+
+            // Update instance pixel nudge (fine-position; collision follows)
+            if (nudgeX) cell.nudgeX = nudgeX; else delete cell.nudgeX;
+            if (nudgeY) cell.nudgeY = nudgeY; else delete cell.nudgeY;
 
             // Update instance speed
             if (speed === 1) {
@@ -16298,6 +16347,8 @@
                             const tc = layer[tileY][tileX];
                             if (scale === 1) { delete tc.scale; } else { tc.scale = scale; }
                             if (mirror) { tc.mirror = true; } else { delete tc.mirror; }
+                            if (nudgeX) { tc.nudgeX = nudgeX; } else { delete tc.nudgeX; }
+                            if (nudgeY) { tc.nudgeY = nudgeY; } else { delete tc.nudgeY; }
                         }
                     }
                 }
@@ -30039,9 +30090,25 @@ Item Receive Display:
                             const localX = Math.floor((point.x % tileSize) / pixelScale);
                             const localY = Math.floor((point.y % tileSize) / pixelScale);
 
-                            // Apply offset for multi-tile animated props
-                            const maskX = localX + maskOffsetX;
-                            const maskY = localY + maskOffsetY;
+                            let maskX, maskY;
+                            if (cell.type === 'animTile' && ((cell.scale && cell.scale !== 1) || cell.nudgeX || cell.nudgeY || cell.mirror)) {
+                                // Inverse-transform the sample point so collision matches the RENDERED prop:
+                                // per-instance scale (about the prop's center), pixel nudge, and horizontal mirror.
+                                const tw = cell.tilesW || 1, th = cell.tilesH || 1;
+                                const pmw = tw * gridSize, pmh = th * gridSize;
+                                const cs = cell.scale || 1;
+                                let sx = (localX + maskOffsetX) - (cell.nudgeX || 0);
+                                let sy = (localY + maskOffsetY) - (cell.nudgeY || 0);
+                                sx = (sx - pmw / 2) / cs + pmw / 2;
+                                sy = (sy - pmh / 2) / cs + pmh / 2;
+                                if (cell.mirror) sx = pmw - 1 - sx;
+                                maskX = Math.floor(sx);
+                                maskY = Math.floor(sy);
+                            } else {
+                                // Apply offset for multi-tile animated props
+                                maskX = localX + maskOffsetX;
+                                maskY = localY + maskOffsetY;
+                            }
 
                             if (maskY >= 0 && maskY < mask.length && mask[maskY]) {
                                 if (maskX >= 0 && maskX < mask[maskY].length && mask[maskY][maskX]) {
@@ -33087,6 +33154,12 @@ Item Receive Display:
 
             ctx.imageSmoothingEnabled = false;
 
+            // Per-instance pixel nudge: fine-position the prop off the grid. Collision shifts to match (checkCollision).
+            const _nx = (cell.nudgeX || 0) * (tileSize / gridSize);
+            const _ny = (cell.nudgeY || 0) * (tileSize / gridSize);
+            const _nudged = _nx || _ny;
+            if (_nudged) { ctx.save(); ctx.translate(_nx, _ny); }
+
             // Per-instance horizontal mirror: reflect the whole prop about its screen-center
             // vertical axis. Wrapping the draw handles multi-tile + scale + rotation in one shot.
             const mirror = cell.mirror;
@@ -33115,6 +33188,7 @@ Item Receive Display:
             }
 
             if (mirror) ctx.restore();
+            if (_nudged) ctx.restore();
         }
 
         // Draw only the trunk (bottom) portion of an animated tile with split line
@@ -33125,9 +33199,9 @@ Item Receive Display:
             if (!propData.frames || propData.frames.length === 0) return;
             if (!propData.splitLine) return;
 
-            // Round to integers to prevent tile seams
-            const px = Math.round(tx * tileSize - camX);
-            const py = Math.round(ty * tileSize - camY);
+            // Round to integers to prevent tile seams (+ per-instance pixel nudge)
+            const px = Math.round(tx * tileSize - camX + (cell.nudgeX || 0) * (tileSize / gridSize));
+            const py = Math.round(ty * tileSize - camY + (cell.nudgeY || 0) * (tileSize / gridSize));
             const scale = tileSize / gridSize;
 
             // Use origin tile position for synced animation
@@ -33145,7 +33219,7 @@ Item Receive Display:
             // Per-instance horizontal mirror (match drawAnimTile): reflect about the prop's screen-center.
             const mirror = cell.mirror;
             const _twTrunk = cell.tilesW || 1;
-            const _cxTrunk = (originX * tileSize - camX) + (_twTrunk * tileSize) / 2;
+            const _cxTrunk = (originX * tileSize - camX) + (_twTrunk * tileSize) / 2 + (cell.nudgeX || 0) * (tileSize / gridSize);
             const blit = (sx, sy, sw, sh, dx, dy, dw, dh) => {
                 if (mirror) { ctx.save(); ctx.translate(_cxTrunk, 0); ctx.scale(-1, 1); ctx.translate(-_cxTrunk, 0); }
                 ctx.drawImage(propImg, sx, sy, sw, sh, dx, dy, dw, dh);
