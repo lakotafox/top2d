@@ -4193,8 +4193,8 @@
 
         // Built-in game over sounds
         const builtinGameOverSounds = [
-            { name: 'Game Over 1', file: 'game-over-417465.mp3' },
-            { name: 'Game Over 2 (Arcade)', file: 'game-over-arcade-6435.mp3' }
+            { name: 'Game Over 1', file: 'sounds/game-over-417465.mp3' },
+            { name: 'Game Over 2 (Arcade)', file: 'sounds/game-over-arcade-6435.mp3' }
         ];
         let builtinGameOverAudios = [null, null]; // Lazy-loaded audio elements
         // Player drag-selection for multi-tile frames
@@ -27106,8 +27106,8 @@
 
         // Built-in game over sounds (lazy loaded)
         const builtinGameOverSounds = [
-            { name: 'Game Over 1', file: 'game-over-417465.mp3' },
-            { name: 'Game Over 2 (Arcade)', file: 'game-over-arcade-6435.mp3' }
+            { name: 'Game Over 1', file: 'sounds/game-over-417465.mp3' },
+            { name: 'Game Over 2 (Arcade)', file: 'sounds/game-over-arcade-6435.mp3' }
         ];
         let builtinGameOverAudios = [null, null];
 
@@ -28193,7 +28193,7 @@
             if (npcTalkSoundBuffer || npcTalkLoading || !audioContext) return;
             npcTalkLoading = true;
             const base = (typeof projectData !== 'undefined' && projectData && projectData.baseUrl) ? projectData.baseUrl : '';
-            fetch(base + 'talkingnpcsound.mp3')
+            fetch(base + 'sounds/talkingnpcsound.mp3')
                 .then(r => r.arrayBuffer())
                 .then(ab => audioContext.decodeAudioData(ab))
                 .then(buf => { npcTalkSoundBuffer = buf; console.log('[NPC TALK] Sound loaded'); })

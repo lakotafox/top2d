@@ -47,7 +47,7 @@
             if (npcTalkSoundBuffer || npcTalkLoading || !audioContext) return;
             npcTalkLoading = true;
             const base = (typeof projectData !== 'undefined' && projectData && projectData.baseUrl) ? projectData.baseUrl : '';
-            fetch(base + 'talkingnpcsound.mp3')
+            fetch(base + 'sounds/talkingnpcsound.mp3')
                 .then(r => r.arrayBuffer())
                 .then(ab => audioContext.decodeAudioData(ab))
                 .then(buf => { npcTalkSoundBuffer = buf; console.log('[NPC TALK] Sound loaded'); })

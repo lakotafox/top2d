@@ -160,8 +160,8 @@
 
         // Built-in game over sounds
         const builtinGameOverSounds = [
-            { name: 'Game Over 1', file: 'game-over-417465.mp3' },
-            { name: 'Game Over 2 (Arcade)', file: 'game-over-arcade-6435.mp3' }
+            { name: 'Game Over 1', file: 'sounds/game-over-417465.mp3' },
+            { name: 'Game Over 2 (Arcade)', file: 'sounds/game-over-arcade-6435.mp3' }
         ];
         let builtinGameOverAudios = [null, null]; // Lazy-loaded audio elements
         // Player drag-selection for multi-tile frames
