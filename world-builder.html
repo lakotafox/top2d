@@ -4042,7 +4042,7 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 171;
+        const GAME_BUILD = 172;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
@@ -16499,7 +16499,8 @@
 
             html += '</div>'; // End flex container
 
-            html += '<div style="display:flex; gap:10px; justify-content:flex-end; margin-top:15px; padding-top:15px; border-top:1px solid #444;">';
+            html += '<div style="display:flex; gap:10px; justify-content:flex-end; align-items:center; margin-top:15px; padding-top:15px; border-top:1px solid #444;">';
+            html += '<button onclick="deleteAnimPropOnMap(' + x + ', ' + y + ', ' + layer + ')" style="padding:8px 20px; background:#a33; color:#fff; border:none; border-radius:4px; cursor:pointer; margin-right:auto;">🗑 Delete</button>';
             html += '<button onclick="closeAnimPropEditPopup()" style="padding:8px 20px; background:#555; color:#fff; border:none; border-radius:4px; cursor:pointer;">Cancel</button>';
             html += '<button onclick="saveAnimPropEdit(' + x + ', ' + y + ', ' + layer + ')" style="padding:8px 20px; background:#fa0; color:#000; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">Save</button>';
             html += '</div>';
@@ -16693,6 +16694,30 @@
             // Broadcast to co-op
             broadcastEdit({ editType: 'tile', layer: layerIdx, x: originX, y: originY, cell: cell, mapName: currentMapName });
 
+            closeAnimPropEditPopup();
+            renderMap();
+        }
+
+        // Delete a placed anim prop (and all its tiles) from the map — handy for clearing
+        // invisible/orphaned props that can't be erased any other way.
+        function deleteAnimPropOnMap(originX, originY, layerIdx) {
+            const layer = layers[layerIdx];
+            if (!layer || !layer[originY] || !layer[originY][originX]) { closeAnimPropEditPopup(); return; }
+            const cell = layer[originY][originX];
+            if (!cell || cell.type !== 'animTile') { closeAnimPropEditPopup(); return; }
+            const tilesW = cell.tilesW || 1;
+            const tilesH = cell.tilesH || 1;
+            // Clear every tile of this prop (set to null = empty) + broadcast each erase.
+            for (let ty = 0; ty < tilesH; ty++) {
+                for (let tx = 0; tx < tilesW; tx++) {
+                    const cx = originX + tx, cy = originY + ty;
+                    if (layer[cy] && layer[cy][cx] && layer[cy][cx].type === 'animTile') {
+                        layer[cy][cx] = null;
+                        broadcastEdit({ editType: 'eraseTile', layer: layerIdx, x: cx, y: cy, mapName: currentMapName });
+                    }
+                }
+            }
+            delete placedAnimPropFrames[originX + ',' + originY + ',' + layerIdx];
             closeAnimPropEditPopup();
             renderMap();
         }
