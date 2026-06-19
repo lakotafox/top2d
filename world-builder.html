@@ -4042,7 +4042,7 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 172;
+        const GAME_BUILD = 173;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
@@ -33554,36 +33554,15 @@ Item Receive Display:
                             }
                         }
                     } else if (cell.type === 'animTile') {
-                        // Animated tile - cycles through frames like a regular tile
+                        // Delegate to the scale/nudge/mirror/rotation-aware renderer so LAYER 0 anim
+                        // props honor cell.scale. (This inline branch used to blit at flat tileSize,
+                        // so props on layer 0 never scaled in-game while layers 1+ did — that's why the
+                        // chest scaled in the builder but not the test game.) Layer 0 is the always-behind
+                        // ground pass, so the whole tile is drawn via drawAnimTile (no trunk/canopy split).
                         const propData = animatedPropsData[cell.propIndex];
-                        const propImg = animPropImages[cell.propIndex];
-                        if (propData && propImg && propImg.complete && propData.frames && propData.frames.length > 0) {
-                            // Use origin tile position for synced animation
-                            const originX = x - (cell.offsetX || 0);
-                            const originY = y - (cell.offsetY || 0);
-                            const key = originX + ',' + originY + ',' + li;
-                            const timer = animPropFrameTimers[key] || { frame: 0 };
-                            const frameIdx = timer.frame % propData.frames.length;
-                            const frame = propData.frames[frameIdx];
-
-                            // Draw only this tile's portion of the frame
-                            const offsetX = cell.offsetX || 0;
-                            const offsetY = cell.offsetY || 0;
-                            const srcX = frame.x + offsetX * gridSize;
-                            const srcY = frame.y + offsetY * gridSize;
-
+                        if (propData && propData.frames && propData.frames.length > 0) {
+                            drawAnimTile(cell, x, y, li, camX, camY, tileSize);
                             count++;
-                            // Draw with rotation support
-                            const rot = cell.rotation || 0;
-                            if (rot === 0) {
-                                ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
-                            } else {
-                                ctx.save();
-                                ctx.translate(px + tileSize / 2, py + tileSize / 2);
-                                ctx.rotate(rot * Math.PI / 180);
-                                ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, -tileSize / 2, -tileSize / 2, tileSize, tileSize);
-                                ctx.restore();
-                            }
                         }
                     }
                 }
