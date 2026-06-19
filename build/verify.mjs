@@ -21,11 +21,12 @@ const bad = (m) => { console.log('  FAIL ' + m); fail++; };
 // 1) rebuild
 execSync('node ' + JSON.stringify(resolve(__dirname, 'build.mjs')), { stdio: 'inherit' });
 
-// 2) byte-identical
+// 2) compare to the frozen pre-split original — INFORMATIONAL only (we intentionally
+//    diverge from it via real edits; the node --check gates below are pass/fail).
 const built = readFileSync(resolve(ROOT, 'world-builder.html'));
-const orig = readFileSync(resolve(ROOT, 'world-builder.original.html'));
-if (sha(built) === sha(orig)) ok('byte-identical to original (' + sha(built) + ')');
-else bad('NOT byte-identical: built=' + sha(built) + ' orig=' + sha(orig));
+const orig = readFileSync(resolve(__dirname, 'world-builder.original.html'));
+if (sha(built) === sha(orig)) ok('byte-identical to frozen original (' + sha(built) + ')');
+else console.log('  note  diverges from frozen original (expected after edits): built=' + sha(built).slice(0, 8) + ' orig=' + sha(orig).slice(0, 8));
 
 const html = built.toString('utf8');
 const tmp = mkdtempSync(join(tmpdir(), 'wb-verify-'));

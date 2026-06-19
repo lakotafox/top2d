@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
-const text = readFileSync(resolve(ROOT, 'world-builder.original.html'), 'utf8');
+const text = readFileSync(resolve(__dirname, 'world-builder.original.html'), 'utf8');
 const L = text.split('\n'); // L[0] is line 1; trailing '' if file ends in '\n'
 console.log('total split elements:', L.length, '(expect 35596 = 35595 lines + trailing "")');
 
