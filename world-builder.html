@@ -3991,7 +3991,7 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 163;
+        const GAME_BUILD = 164;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
@@ -20229,6 +20229,13 @@
             showBuilderStatus('Synced: ' + builderRoomCode);
         }
 
+        // Idempotency guards: a catch-up replay or late-join resync can re-deliver a
+        // place* edit that's already present. Without these, the receivers blind-push
+        // and duplicate the entity. NPCs/triggers carry a uid; items dedup by position.
+        function _placedNpcExists(npc) { return !!(npc && npc.uid && placedNpcs.some(n => n && n.uid === npc.uid)); }
+        function _placedTriggerExists(t) { return !!(t && t.uid && placedTriggers.some(x => x && x.uid === t.uid)); }
+        function _placedItemExists(it) { return !!(it && placedItems.some(p => p && p.x === it.x && p.y === it.y && p.mapName === it.mapName && p.itemIndex === it.itemIndex)); }
+
         function applyRemoteEdit(edit) {
             console.log('[BUILDER MP] Applying remote edit:', edit.editType);
 
@@ -20448,8 +20455,8 @@
                     break;
 
                 case 'placeNpc':
-                    // Add NPC
-                    placedNpcs.push(edit.npc);
+                    // Add NPC (guard against duplicate from catch-up replay / resync)
+                    if (!_placedNpcExists(edit.npc)) placedNpcs.push(edit.npc);
                     updatePlacedNpcList();
                     renderMap();
                     break;
@@ -20464,8 +20471,8 @@
                     break;
 
                 case 'placeTrigger':
-                    // Add trigger
-                    placedTriggers.push(edit.trigger);
+                    // Add trigger (guard against duplicate from catch-up replay / resync)
+                    if (!_placedTriggerExists(edit.trigger)) placedTriggers.push(edit.trigger);
                     updateTriggerList();
                     renderMap();
                     break;
@@ -20501,8 +20508,8 @@
                 }
 
                 case 'placeItem':
-                    // Add item
-                    placedItems.push(edit.item);
+                    // Add item (guard against duplicate from catch-up replay / resync)
+                    if (!_placedItemExists(edit.item)) placedItems.push(edit.item);
                     updatePlacedItemsList();
                     renderMap();
                     console.log('[BUILDER MP] Remote item placed');
@@ -21368,7 +21375,7 @@
                     delete pointLights[edit.key];
                     break;
                 case 'placeNpc':
-                    placedNpcs.push(edit.npc);
+                    if (!_placedNpcExists(edit.npc)) placedNpcs.push(edit.npc);
                     break;
                 case 'removeNpc':
                     if (edit.index >= 0 && edit.index < placedNpcs.length) {
@@ -21376,7 +21383,7 @@
                     }
                     break;
                 case 'placeTrigger':
-                    placedTriggers.push(edit.trigger);
+                    if (!_placedTriggerExists(edit.trigger)) placedTriggers.push(edit.trigger);
                     break;
                 case 'removeTrigger':
                     if (edit.index >= 0 && edit.index < placedTriggers.length) {

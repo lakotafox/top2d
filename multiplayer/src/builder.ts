@@ -67,8 +67,14 @@ export default class BuilderServer implements Party.Server {
 
         case 'requestSince': {
           // A (re)connecting client asks for every edit it missed since `since`.
+          // CRITICAL: never replay the requester's OWN edits back to it. The client
+          // already applied those locally, and its seq cursor does not advance on its
+          // own sends (the server excludes the sender from broadcasts), so without this
+          // filter a tab-switch would re-apply the client's own edits and DUPLICATE
+          // every placed NPC/trigger/item. Genuinely-missed peer edits still replay;
+          // the cursor self-heals to serverSeq via the reply below.
           const since = typeof data.since === 'number' ? data.since : 0;
-          const missed = this.editLog.filter(e => e.seq > since);
+          const missed = this.editLog.filter(e => e.seq > since && (!e.payload || e.payload.senderId !== sender.id));
           console.log(`Catch-up: ${sender.id.slice(0, 4)} since ${since} -> ${missed.length} edits (serverSeq ${this.seq})`);
           for (let i = 0; i < missed.length; i += CATCHUP_CHUNK) {
             const slice = missed.slice(i, i + CATCHUP_CHUNK);
