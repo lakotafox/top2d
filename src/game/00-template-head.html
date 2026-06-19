@@ -1,0 +1,421 @@
+            const loaderHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Map Test</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; }
+        body { background: #000; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: monospace;
+            font-size: 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #debugPanel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.85);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            font-family: monospace;
+            font-size: 12px;
+            min-width: 200px;
+            display: none;
+        }
+        #debugPanel.visible { display: block; }
+        #debugPanel h3 { margin: 0 0 10px 0; color: #4af; font-size: 14px; }
+        #debugPanel label { display: block; margin: 8px 0 4px 0; color: #aaa; }
+        #debugPanel input[type="range"] { width: 100%; }
+        #debugPanel .value { color: #4f8; float: right; }
+        #debugPanel button {
+            margin-top: 10px;
+            padding: 5px 10px;
+            background: #4a7c59;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        #debugPanel button:hover { background: #5a9c69; }
+
+        /* Performance overlay */
+        #perfPanel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.85);
+            padding: 10px 15px;
+            border-radius: 8px;
+            color: white;
+            font-family: monospace;
+            font-size: 11px;
+            min-width: 180px;
+            z-index: 1000;
+            display: none;
+            border: 1px solid #4af;
+        }
+        #perfPanel.visible { display: block; }
+        #perfPanel h3 { margin: 0 0 8px 0; color: #4af; font-size: 12px; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        #perfPanel .perf-row { display: flex; justify-content: space-between; margin: 3px 0; }
+        #perfPanel .perf-label { color: #aaa; }
+        #perfPanel .perf-value { color: #4f8; font-weight: bold; }
+        #perfPanel .perf-value.warning { color: #fa4; }
+        #perfPanel .perf-value.critical { color: #f44; }
+        #perfPanel .fps-graph { height: 30px; background: #222; margin-top: 8px; border-radius: 3px; overflow: hidden; display: flex; align-items: flex-end; }
+        #perfPanel .fps-bar { width: 2px; margin-right: 1px; background: #4f8; transition: height 0.1s; }
+
+        /* Debug log for iPad (no console) */
+        #debugLog {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.9);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 10px;
+            padding: 8px;
+            border-radius: 5px;
+            display: none;
+            z-index: 2000;
+        }
+        #debugLog.visible { display: block; }
+        #debugLog .error { color: #f44; }
+        #debugLog .warn { color: #fa0; }
+        #toggleLogBtn {
+            position: fixed;
+            bottom: 170px;
+            left: 10px;
+            background: rgba(0,100,0,0.8);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 2001;
+        }
+
+        /* Touch controls - Virtual Joystick */
+        #touchControls {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            z-index: 1000;
+            display: none;
+        }
+        @media (pointer: coarse), (max-width: 800px) {
+            #touchControls { display: block; }
+        }
+        /* Left half touch zone for dynamic joystick */
+        #leftTouchZone {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 50%;
+            height: 100%;
+            z-index: 999;
+            touch-action: none;
+            display: none;
+        }
+        @media (pointer: coarse), (max-width: 800px) {
+            #leftTouchZone { display: block; }
+        }
+        .joystick-base {
+            width: 120px;
+            height: 120px;
+            background: rgba(255,255,255,0.15);
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            position: fixed;
+            touch-action: none;
+            display: none;
+            pointer-events: none;
+        }
+        .joystick-base.active {
+            display: block;
+        }
+        .joystick-thumb {
+            width: 50px;
+            height: 50px;
+            background: rgba(255,255,255,0.5);
+            border: 2px solid rgba(255,255,255,0.7);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        .touch-actions {
+            position: fixed;
+            bottom: 50px;
+            right: 30px;
+        }
+        .action-btn {
+            width: 80px;
+            height: 80px;
+            background: rgba(255,100,100,0.3);
+            border: 3px solid rgba(255,100,100,0.5);
+            border-radius: 50%;
+            font-size: 32px;
+            color: white;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        .action-btn:active { background: rgba(255,100,100,0.6); }
+
+        /* Debug buttons */
+        #debugButtons {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: flex;
+            gap: 5px;
+        }
+        #debugButtons button {
+            width: 40px;
+            height: 40px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #666;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #debugButtons button:hover { background: rgba(100,100,100,0.7); }
+        #debugButtons button.active { background: rgba(74,175,89,0.7); border-color: #4af; }
+
+        /* Loading overlay - retro pixel style */
+        #loadingOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            font-family: 'Press Start 2P', monospace;
+            color: white;
+        }
+        #loadingOverlay.hidden { display: none; }
+        #loadingText {
+            font-size: 12px;
+            color: #fff;
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+        }
+        #loadingProgress {
+            width: 200px;
+            height: 16px;
+            background: #000;
+            border: 2px solid #fff;
+            padding: 2px;
+        }
+        #loadingBar {
+            width: 0%;
+            height: 100%;
+            background: #fff;
+            transition: width 0.1s steps(20);
+        }
+        #loadingPercent {
+            margin-top: 15px;
+            font-size: 10px;
+            color: #888;
+        }
+        @keyframes blink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0; }
+        }
+        .blink { animation: blink 1s step-end infinite; }
+        /* 3D Interior styles */
+        #interior3D canvas {
+            display: block;
+        }
+        #exitButton3D {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: 2px solid #4af;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: monospace;
+            z-index: 600;
+        }
+        #exitButton3D:hover { background: rgba(50,100,150,0.8); }
+        .hotspot-label {
+            position: absolute;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading overlay shows immediately -->
+    <div id="loadingOverlay">
+        <div id="loadingText">LOADING</div>
+        <div id="loadingProgress"><div id="loadingBar"></div></div>
+        <div id="loadingPercent">0%</div>
+        <div class="blink" style="margin-top:20px; font-size:8px;">PLEASE WAIT</div>
+    </div>
+    <canvas id="game"></canvas>
+    <!-- 3D Interior container (hidden by default) -->
+    <div id="interior3D" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:500;"></div>
+    <div id="leftTouchZone"></div>
+    <div class="joystick-base" id="joystickBase">
+        <div class="joystick-thumb" id="joystickThumb"></div>
+    </div>
+    <div id="touchControls">
+        <div class="touch-actions">
+            <button class="action-btn" id="interactBtn">A</button>
+            <button class="action-btn" id="attackBtn">⚔</button>
+        </div>
+    </div>
+    <div id="debugButtons">
+        <button onclick="toggleFullscreen()">⛶</button>
+        <button onclick="toggleCollision()">C</button>
+        <button onclick="toggleSoundDebug()">S</button>
+        <button onclick="toggleDebugPanel()">P</button>
+        <button onclick="toggleHitboxPanel()">ATK</button>
+        <button onclick="togglePerfPanel()">FPS</button>
+        <button onclick="hideAllUI()">H</button>
+        <button onclick="closeGame()">✕</button>
+    </div>
+    <div id="info">Move: Arrows | Attack: SPACE | Interact: A</div>
+    <!-- Game Over Overlay -->
+    <div id="gameOverOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; justify-content:center; align-items:center; flex-direction:column;">
+        <div style="text-align:center; font-family:'Press Start 2P', 'Courier New', monospace;">
+            <h1 style="font-size:48px; color:#fff; text-shadow:4px 4px 0 #000; margin-bottom:40px; letter-spacing:8px;">GAME OVER</h1>
+            <div style="display:flex; flex-direction:column; gap:20px;">
+                <button onclick="tryAgain()" style="padding:15px 40px; font-size:18px; font-family:inherit; background:#444; color:#fff; border:3px solid #fff; cursor:pointer; letter-spacing:2px;">TRY AGAIN</button>
+                <button onclick="quitGame()" style="padding:15px 40px; font-size:18px; font-family:inherit; background:#222; color:#888; border:3px solid #666; cursor:pointer; letter-spacing:2px;">QUIT</button>
+            </div>
+        </div>
+    </div>
+    <!-- Dialog Box -->
+    <div id="dialogBox" style="display:none; position:fixed; bottom:60px; left:50%; transform:translateX(-50%); width:80%; max-width:500px; padding:20px; font-family:'Press Start 2P', monospace; font-size:12px; z-index:1000; image-rendering:pixelated;"></div>
+    <!-- Quest Tracker HUD (Retro Style) -->
+    <div id="questTracker" style="display:none; position:fixed; top:10px; right:10px; background:#000; border:3px solid #fff; padding:8px 12px; min-width:160px; max-width:220px; font-family:'Press Start 2P', monospace; color:#fff; z-index:100; cursor:pointer; image-rendering:pixelated;" onclick="toggleQuestLog()">
+        <div id="questTrackerTitle" style="font-weight:bold; color:#fff; margin-bottom:6px; border-bottom:2px solid #fff; padding-bottom:4px; font-size:9px;"></div>
+        <div id="questTrackerObjectives" style="font-size:8px; line-height:1.4;"></div>
+    </div>
+    <!-- Quest Log Popup (Retro Style) -->
+    <div id="questLogPopup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#000; border:4px solid #fff; padding:16px; min-width:280px; max-width:360px; max-height:70vh; overflow-y:auto; z-index:200; font-family:'Press Start 2P', monospace; image-rendering:pixelated;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:2px solid #fff; padding-bottom:8px;">
+            <span style="color:#fff; font-weight:bold; font-size:10px;">QUEST LOG</span>
+            <button onclick="toggleQuestLog()" style="background:none; border:2px solid #fff; color:#fff; font-size:12px; cursor:pointer; padding:2px 6px;">X</button>
+        </div>
+        <div id="questLogContent" style="font-size:8px; line-height:1.5;"></div>
+    </div>
+    <!-- Performance Panel -->
+    <div id="perfPanel">
+        <h3>⚡ Performance</h3>
+        <div class="perf-row"><span class="perf-label">FPS:</span><span class="perf-value" id="perfFPS">60</span></div>
+        <div class="perf-row"><span class="perf-label">Frame Time:</span><span class="perf-value" id="perfFrameTime">16.7ms</span></div>
+        <div class="perf-row"><span class="perf-label">NPCs:</span><span class="perf-value" id="perfNPCs">0</span></div>
+        <div class="perf-row"><span class="perf-label">Triggers:</span><span class="perf-value" id="perfTriggers">0</span></div>
+        <div class="perf-row"><span class="perf-label">Lights:</span><span class="perf-value" id="perfLights">0</span></div>
+        <div class="perf-row"><span class="perf-label">Layers:</span><span class="perf-value" id="perfLayers">0</span></div>
+        <div class="fps-graph" id="fpsGraph"></div>
+        <div style="margin-top:10px; display:flex; gap:5px;">
+            <button id="recordNetBtn" onclick="toggleNetworkRecording()" style="flex:1; padding:5px; font-size:10px; background:#533; color:#fff; border:1px solid #755; border-radius:3px; cursor:pointer;">🔴 Record</button>
+            <button id="copyNetBtn" onclick="copyNetworkLog()" style="flex:1; padding:5px; font-size:10px; background:#335; color:#fff; border:1px solid #557; border-radius:3px; cursor:pointer;" disabled>📋 Copy Log</button>
+        </div>
+        <div id="recordStatus" style="margin-top:5px; font-size:9px; color:#888;"></div>
+    </div>
+    <div id="debugPanel">
+        <h3>Player Settings</h3>
+        <label>Scale: <span class="value" id="scaleVal">1.7</span></label>
+        <input type="range" id="scaleSlider" min="0.1" max="10" step="0.1" value="1.7">
+        <label>Move Speed: <span class="value" id="speedVal">5.5</span></label>
+        <input type="range" id="speedSlider" min="1" max="15" step="0.5" value="5.5">
+        <label>Anim Speed: <span class="value" id="animVal">7</span></label>
+        <input type="range" id="animSlider" min="1" max="20" step="1" value="7">
+        <label>Hitbox Width: <span class="value" id="widthVal">28</span></label>
+        <input type="range" id="widthSlider" min="10" max="60" step="2" value="28">
+        <label>Hitbox Height: <span class="value" id="heightVal">76</span></label>
+        <input type="range" id="heightSlider" min="20" max="100" step="2" value="76">
+        <h3 style="margin-top:15px;">Camera</h3>
+        <label>Zoom: <span class="value" id="zoomVal">0.9</span></label>
+        <input type="range" id="zoomSlider" min="0.5" max="3" step="0.1" value="0.9">
+        <h3 style="margin-top:15px;">Lighting</h3>
+        <label>Darkness: <span class="value" id="darknessVal">0</span>%</label>
+        <input type="range" id="darknessSlider" min="0" max="100" step="5" value="0">
+        <label style="margin-top:10px;"><input type="checkbox" id="torchEnabled"> Player Torch</label>
+        <label>Torch Radius: <span class="value" id="torchRadiusVal">4</span></label>
+        <input type="range" id="torchRadiusSlider" min="1" max="15" step="1" value="4">
+        <label style="margin-top:10px;"><input type="checkbox" id="cycleEnabled"> Enable Day/Night Cycle</label>
+        <label>Cycle Time: <span class="value" id="dayLengthVal">1</span> min</label>
+        <input type="range" id="dayLengthSlider" min="1" max="10" step="0.5" value="1">
+        <div id="timeDisplay" style="color:#4f8;margin-top:5px;"></div>
+        <h3 style="margin-top:15px;">Item Receive Display</h3>
+        <label>Item Scale: <span class="value" id="itemScaleVal">2</span>x</label>
+        <input type="range" id="itemScaleSlider" min="0.5" max="4" step="0.25" value="2">
+        <label>Float Height: <span class="value" id="itemHeightVal">45</span>px</label>
+        <input type="range" id="itemHeightSlider" min="-30" max="150" step="5" value="45">
+        <label>Display Duration: <span class="value" id="itemDurationVal">2</span>s</label>
+        <input type="range" id="itemDurationSlider" min="0.5" max="5" step="0.25" value="2">
+        <label>Final Frame Pause: <span class="value" id="itemPauseVal">1</span>s</label>
+        <input type="range" id="itemPauseSlider" min="0" max="3" step="0.25" value="1">
+        <button onclick="copySettings()">Copy Settings</button>
+    </div>
+    <div id="hitboxPanel" style="display:none; position:fixed; top:60px; left:10px; background:rgba(20,20,40,0.95); padding:12px; border-radius:8px; font-size:10px; color:#fff; z-index:200; width:280px; border:2px solid #66f;">
+        <h3 style="margin:0 0 10px 0; color:#88f;">Attack Hitbox (Per Direction)</h3>
+        <div style="display:flex; gap:5px; margin-bottom:10px;">
+            <button id="hitboxDirUp" onclick="setHitboxDir('up')" style="flex:1; padding:5px; font-size:10px;">↑ Up</button>
+            <button id="hitboxDirDown" onclick="setHitboxDir('down')" class="active" style="flex:1; padding:5px; font-size:10px; background:#66f;">↓ Down</button>
+            <button id="hitboxDirLeft" onclick="setHitboxDir('left')" style="flex:1; padding:5px; font-size:10px;">← Left</button>
+            <button id="hitboxDirRight" onclick="setHitboxDir('right')" style="flex:1; padding:5px; font-size:10px;">→ Right</button>
+        </div>
+        <div style="background:rgba(0,0,0,0.3); padding:8px; border-radius:4px;">
+            <label>Range: <span class="value" id="hbRangeVal">40</span>px</label>
+            <input type="range" id="hbRangeSlider" min="10" max="120" step="5" value="40" style="width:100%;">
+            <label>Width: <span class="value" id="hbWidthVal">60</span>°</label>
+            <input type="range" id="hbWidthSlider" min="20" max="180" step="5" value="60" style="width:100%;">
+            <label>Offset X: <span class="value" id="hbOffsetXVal">0</span>px</label>
+            <input type="range" id="hbOffsetXSlider" min="-50" max="50" step="5" value="0" style="width:100%;">
+            <label>Offset Y: <span class="value" id="hbOffsetYVal">0</span>px</label>
+            <input type="range" id="hbOffsetYSlider" min="-50" max="50" step="5" value="0" style="width:100%;">
+        </div>
+        <div style="margin-top:8px; display:flex; gap:5px;">
+            <button onclick="copyAllHitboxFromDir()" style="flex:1; padding:5px; font-size:9px; background:#484;">Copy to All</button>
+            <button onclick="copyHitboxSettings()" style="flex:1; padding:5px; font-size:9px; background:#448;">Copy JSON</button>
+        </div>
+        <h3 style="margin:12px 0 8px 0; color:#fa0;">Attack Slide</h3>
+        <div style="background:rgba(0,0,0,0.3); padding:8px; border-radius:4px;">
+            <label>Slide Amount: <span class="value" id="slideAmountVal">50</span>%</label>
+            <input type="range" id="slideAmountSlider" min="0" max="100" step="5" value="50" style="width:100%;">
+            <label>Slide Duration: <span class="value" id="slideDurationVal">30</span> frames</label>
+            <input type="range" id="slideDurationSlider" min="5" max="60" step="5" value="30" style="width:100%;">
+        </div>
+        <p style="font-size:8px; color:#888; margin:8px 0 0 0;">Blue=preview, Magenta=active hit. Press C to show.</p>
+    </div>
+    <button id="toggleLogBtn" onclick="toggleDebugLog()">Show Log</button>
+    <div id="debugLog"></div>
+    <script>
