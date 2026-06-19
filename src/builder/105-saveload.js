@@ -253,23 +253,6 @@
                 </button>
             </div>
         `;
-        async function loadDemo() {
-            document.getElementById('saveChoice').innerHTML = '<h1>LOADING...</h1>';
-            try {
-                const response = await fetch('thenewdemo.json');
-                const data = await response.json();
-                pendingSaveData = data;
-                await saveProjectToDB(pendingSaveData);
-                document.getElementById('saveChoice').innerHTML = saveChoiceOriginalHTML;
-                document.getElementById('saveChoice').style.display = 'none';
-                document.getElementById('modeSelect').style.display = 'block';
-            } catch (err) {
-                alert('Error loading demo: ' + err.message);
-                document.getElementById('saveChoice').innerHTML = saveChoiceOriginalHTML;
-                document.getElementById('saveChoice').style.display = 'none';
-                document.getElementById('mainMenu').style.display = 'block';
-            }
-        }
         function loadSaveWithModeSelect(event) {
             const file = event.target.files[0];
             if (!file) return;

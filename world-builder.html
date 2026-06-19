@@ -1181,7 +1181,7 @@
     <!-- PHASE 1: LOAD -->
     <div id="loadPhase" class="phase active">
         <video id="landingBgVideo" autoplay loop muted playsinline>
-            <source src="assets/landing-bg.mp4" type="video/mp4">
+            <source src="assets/ui/landing-bg.mp4" type="video/mp4">
         </video>
         <div class="load-box" id="mainMenu">
             <h1>ADVENTURE<br>CRAFTER</h1>
@@ -13307,7 +13307,7 @@
         buttonActionSound.volume = 0.5;
 
         // Landing-page theme song. Plays on the menu, fades out when the game starts.
-        const landingTheme = new Audio('assets/landing-theme.mp3');
+        const landingTheme = new Audio('assets/audio/music/landing-theme.mp3');
         landingTheme.loop = true;
         landingTheme.volume = 0.6;
         let landingThemeStopped = false;
@@ -19633,23 +19633,6 @@
                 </button>
             </div>
         `;
-        async function loadDemo() {
-            document.getElementById('saveChoice').innerHTML = '<h1>LOADING...</h1>';
-            try {
-                const response = await fetch('thenewdemo.json');
-                const data = await response.json();
-                pendingSaveData = data;
-                await saveProjectToDB(pendingSaveData);
-                document.getElementById('saveChoice').innerHTML = saveChoiceOriginalHTML;
-                document.getElementById('saveChoice').style.display = 'none';
-                document.getElementById('modeSelect').style.display = 'block';
-            } catch (err) {
-                alert('Error loading demo: ' + err.message);
-                document.getElementById('saveChoice').innerHTML = saveChoiceOriginalHTML;
-                document.getElementById('saveChoice').style.display = 'none';
-                document.getElementById('mainMenu').style.display = 'block';
-            }
-        }
         function loadSaveWithModeSelect(event) {
             const file = event.target.files[0];
             if (!file) return;

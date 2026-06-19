@@ -1314,7 +1314,7 @@
         buttonActionSound.volume = 0.5;
 
         // Landing-page theme song. Plays on the menu, fades out when the game starts.
-        const landingTheme = new Audio('assets/landing-theme.mp3');
+        const landingTheme = new Audio('assets/audio/music/landing-theme.mp3');
         landingTheme.loop = true;
         landingTheme.volume = 0.6;
         let landingThemeStopped = false;
