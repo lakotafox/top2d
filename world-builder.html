@@ -3748,7 +3748,7 @@
                         <option value="fishingPole">🎣 Fishing Pole (cast at water)</option>
                     </select>
                     <div id="itemBehaviorConfig" style="display:none;">
-                        <div style="margin-bottom:6px;">
+                        <div id="itemAbilityDamageRow" style="margin-bottom:6px;">
                             <label style="font-size:11px; color:#888;">Damage: <span id="itemAbilityDamageVal">10</span></label>
                             <input type="range" id="itemAbilityDamage" min="1" max="100" value="10" oninput="document.getElementById('itemAbilityDamageVal').textContent=this.value" style="width:100%;">
                         </div>
@@ -3760,9 +3760,13 @@
                             <label style="font-size:11px; color:#888;">Speed: <span id="itemAbilitySpeedVal">7</span></label>
                             <input type="range" id="itemAbilitySpeed" min="2" max="16" value="7" oninput="document.getElementById('itemAbilitySpeedVal').textContent=this.value" style="width:100%;">
                         </div>
-                        <div style="margin-bottom:6px;">
+                        <div id="itemAbilityAnimRow" style="margin-bottom:6px;">
                             <label style="font-size:11px; color:#888;">Player anim on use (blank = attack):</label>
                             <input type="text" id="itemAbilityAnim" placeholder="e.g. throw" style="width:100%;">
+                        </div>
+                        <div id="itemFishingNote" style="display:none; font-size:10px; color:#a8f; line-height:1.5;">
+                            🎣 No damage/range needed. Equip and press attack at the edge of a <b>Fish Zone</b> to cast.
+                            Catches come from the <b>Loot Table</b> (Fishing tab); the player's <b>fishCast/fishWait</b> anims play.
                         </div>
                     </div>
                 </div>
@@ -4014,7 +4018,7 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 166;
+        const GAME_BUILD = 167;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
@@ -8972,7 +8976,7 @@
             }
 
             // Draw triggers when in trigger mode, camera bounds when in camera mode, dialog tiles when in dialog mode
-            if (mode === 'trigger' || mode === 'camera' || mode === 'dialog') {
+            if (mode === 'trigger' || mode === 'camera' || mode === 'dialog' || mode === 'fish') {
                 // Show trigger drag preview (purple box while dragging)
                 if (triggerDragStart && triggerDragEnd) {
                     const x1 = Math.min(triggerDragStart.x, triggerDragEnd.x);
@@ -9287,19 +9291,19 @@
                     mapCtx.fillText((x2 - x1 + 1) + 'x' + (y2 - y1 + 1) + ' tiles', x1 * tileSize + w / 2, y1 * tileSize + h / 2);
                 }
 
-                // Draw fish zones (cyan) — only on the Fishing tab to avoid clutter
+                // Draw fish zones (purple highlight) — only on the Fishing tab to avoid clutter
                 if (mode === 'fish') {
                     fishZones.forEach((z, i) => {
                         const zx = z.x * tileSize, zy = z.y * tileSize;
                         const zw = z.width * tileSize, zh = z.height * tileSize;
-                        mapCtx.fillStyle = 'rgba(0, 170, 255, 0.22)';
+                        mapCtx.fillStyle = 'rgba(168, 85, 255, 0.35)';
                         mapCtx.fillRect(zx, zy, zw, zh);
-                        mapCtx.strokeStyle = '#6cf';
+                        mapCtx.strokeStyle = '#c77dff';
                         mapCtx.lineWidth = 3;
                         mapCtx.setLineDash([8, 4]);
                         mapCtx.strokeRect(zx, zy, zw, zh);
                         mapCtx.setLineDash([]);
-                        mapCtx.fillStyle = '#6cf';
+                        mapCtx.fillStyle = '#e0c0ff';
                         mapCtx.font = 'bold 11px monospace';
                         mapCtx.textAlign = 'left';
                         mapCtx.textBaseline = 'top';
@@ -9313,9 +9317,9 @@
                         const x2 = Math.max(fishZoneDragStart.x, fishZoneDragEnd.x);
                         const y2 = Math.max(fishZoneDragStart.y, fishZoneDragEnd.y);
                         const w = (x2 - x1 + 1) * tileSize, h = (y2 - y1 + 1) * tileSize;
-                        mapCtx.fillStyle = 'rgba(0, 170, 255, 0.25)';
+                        mapCtx.fillStyle = 'rgba(168, 85, 255, 0.45)';
                         mapCtx.fillRect(x1 * tileSize, y1 * tileSize, w, h);
-                        mapCtx.strokeStyle = '#6cf';
+                        mapCtx.strokeStyle = '#c77dff';
                         mapCtx.lineWidth = 3;
                         mapCtx.strokeRect(x1 * tileSize, y1 * tileSize, w, h);
                         mapCtx.fillStyle = '#fff';
@@ -15846,7 +15850,13 @@
         function itemBehaviorChanged() {
             const b = document.getElementById('itemBehavior').value;
             document.getElementById('itemBehaviorConfig').style.display = (b === 'none') ? 'none' : 'block';
+            const isFishing = (b === 'fishingPole');
+            // Fishing pole uses fish zones + the loot table, not damage/range/speed/anim-on-use.
+            document.getElementById('itemAbilityDamageRow').style.display = isFishing ? 'none' : 'block';
+            document.getElementById('itemAbilityRangeRow').style.display = isFishing ? 'none' : 'block';
             document.getElementById('itemAbilitySpeedRow').style.display = (b === 'boomerang') ? 'block' : 'none';
+            document.getElementById('itemAbilityAnimRow').style.display = isFishing ? 'none' : 'block';
+            document.getElementById('itemFishingNote').style.display = isFishing ? 'block' : 'none';
         }
         function readItemBehaviorFields() {
             const behavior = document.getElementById('itemBehavior').value || 'none';
