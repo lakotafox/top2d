@@ -3567,6 +3567,20 @@
                             </select>
                             <p style="font-size:9px; color:#666; margin-top:4px;">Player receives this item when interacting (A key)</p>
                         </div>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:12px 0 8px; border-top:1px solid #2a4a5a; padding-top:10px;">
+                            <input type="checkbox" id="animPropLock" onchange="animPropLockChanged()">
+                            <span style="font-size:12px;">🔒 Requires Key to Open</span>
+                        </label>
+                        <div id="animPropLockSection" style="display:none;">
+                            <label style="font-size:10px; color:#888;">Key Item:</label>
+                            <select id="animPropLockSelect" style="width:100%; margin-top:4px;">
+                                <option value="-1">-- No items defined --</option>
+                            </select>
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:6px; font-size:11px; color:#aaa;">
+                                <input type="checkbox" id="animPropLockConsume" checked> Consume key on use
+                            </label>
+                            <p style="font-size:9px; color:#666; margin-top:4px;">Player must hold this key to open. Otherwise shows "Locked".</p>
+                        </div>
                     </div>
                 </div>
 
@@ -4018,7 +4032,7 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 169;
+        const GAME_BUILD = 170;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
@@ -14521,6 +14535,15 @@
                     } else {
                         document.getElementById('animPropItemSection').style.display = 'none';
                     }
+                    // Load lock (requires-key) settings
+                    const lockIdx = (prop.lockItemIndex !== undefined) ? prop.lockItemIndex : -1;
+                    document.getElementById('animPropLock').checked = lockIdx >= 0;
+                    document.getElementById('animPropLockSection').style.display = lockIdx >= 0 ? 'block' : 'none';
+                    document.getElementById('animPropLockConsume').checked = prop.lockConsume !== false;
+                    if (lockIdx >= 0) {
+                        animPropUpdateLockDropdown();
+                        if (lockIdx < items.length) document.getElementById('animPropLockSelect').value = lockIdx;
+                    }
                 } else {
                     document.getElementById('animPropInteractOptions').style.display = 'none';
                     document.getElementById('animPropItemSection').style.display = 'none';
@@ -15416,6 +15439,34 @@
             }
         }
 
+        function animPropLockChanged() {
+            const locked = document.getElementById('animPropLock').checked;
+            document.getElementById('animPropLockSection').style.display = locked ? 'block' : 'none';
+            if (locked) animPropUpdateLockDropdown();
+        }
+
+        function animPropUpdateLockDropdown() {
+            const select = document.getElementById('animPropLockSelect');
+            const currentValue = select.value;
+            select.innerHTML = '';
+            if (items.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = '-1';
+                opt.textContent = '-- No items defined (create in Items tab) --';
+                select.appendChild(opt);
+            } else {
+                items.forEach((item, i) => {
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.textContent = item.name || ('Item ' + (i + 1));
+                    select.appendChild(opt);
+                });
+            }
+            if (currentValue && parseInt(currentValue) >= 0 && parseInt(currentValue) < items.length) {
+                select.value = currentValue;
+            }
+        }
+
         function animPropSave() {
             const name = document.getElementById('animPropNameInput').value.trim();
             if (!name) {
@@ -15436,6 +15487,9 @@
             const propType = document.getElementById('animPropType').value;
             const giveItem = document.getElementById('animPropGiveItem').checked;
             const giveItemIndex = giveItem ? parseInt(document.getElementById('animPropItemSelect').value) : -1;
+            const lockOn = document.getElementById('animPropLock').checked;
+            const lockItemIndex = lockOn ? parseInt(document.getElementById('animPropLockSelect').value) : -1;
+            const lockConsume = document.getElementById('animPropLockConsume').checked;
 
             const propData = {
                 name: name,
@@ -15449,6 +15503,8 @@
                 splitLine: animPropSplitLine ? JSON.parse(JSON.stringify(animPropSplitLine)) : null,
                 giveItem: giveItem,
                 giveItemIndex: giveItemIndex,
+                lockItemIndex: lockItemIndex,
+                lockConsume: lockConsume,
                 _spriteImg: animPropEditorImage // Store the loaded image
             };
 
@@ -22023,7 +22079,9 @@
                         collisionMasks: propData.collisionMasks || legacyMask,
                         splitLine: propData.splitLine || null,
                         giveItem: propData.giveItem || false,
-                        giveItemIndex: propData.giveItemIndex ?? -1
+                        giveItemIndex: propData.giveItemIndex ?? -1,
+                        lockItemIndex: propData.lockItemIndex ?? -1,
+                        lockConsume: propData.lockConsume !== false
                     };
 
                     // Load sprite sheet image if present
@@ -26078,6 +26136,34 @@
             let total = 0;
             for (const slot of inventorySlots) { if (slot && slot.itemIndex === idx) total += slot.quantity; }
             return total >= quantity;
+        }
+
+        // Remove qty of an item from the real inventory (used to consume keys on a locked open).
+        function consumeInventoryItem(idx, qty = 1) {
+            for (let i = 0; i < inventorySlots.length && qty > 0; i++) {
+                const slot = inventorySlots[i];
+                if (slot && slot.itemIndex === idx) {
+                    const take = Math.min(slot.quantity || 1, qty);
+                    slot.quantity = (slot.quantity || 1) - take;
+                    qty -= take;
+                    if (slot.quantity <= 0) inventorySlots[i] = null;
+                }
+            }
+        }
+
+        // Lightweight on-screen toast (e.g. "Locked"), self-contained DOM overlay.
+        function showGameToast(text, ms = 1500) {
+            let el = document.getElementById('gameToast');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'gameToast';
+                el.style.cssText = 'position:fixed; top:18%; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.85); color:#fff; padding:10px 18px; border:2px solid #c77dff; border-radius:6px; font-family:monospace; font-size:14px; z-index:99999; pointer-events:none; transition:opacity 0.3s; opacity:0;';
+                document.body.appendChild(el);
+            }
+            el.textContent = text;
+            el.style.opacity = '1';
+            clearTimeout(el._t);
+            el._t = setTimeout(function () { el.style.opacity = '0'; }, ms);
         }
 
         // Tracking hooks - call these when events happen
@@ -30312,6 +30398,17 @@ Item Receive Display:
 
                         // Skip if already animating
                         if (interactivePropStates[key].animating) continue;
+
+                        // Locked? Require the key item in inventory; consume it (or not) per config.
+                        const _lockIdx = (propData.lockItemIndex !== undefined) ? propData.lockItemIndex : -1;
+                        if (_lockIdx >= 0) {
+                            if (!hasInventoryItem(_lockIdx)) {
+                                const _kn = (itemsData[_lockIdx] && itemsData[_lockIdx].name) || 'a key';
+                                showGameToast('🔒 Locked — needs ' + _kn);
+                                continue; // can't open without the key
+                            }
+                            if (propData.lockConsume !== false) consumeInventoryItem(_lockIdx, 1);
+                        }
 
                         // Trigger animation!
                         interactivePropStates[key].animating = true;
