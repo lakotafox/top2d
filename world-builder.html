@@ -4013,6 +4013,16 @@
                 <input type="number" id="doorFadeDuration" value="0.5" min="0" max="3" step="0.1" style="width:100%; padding:8px; font-size:14px; background:#333; color:#fff; border:1px solid #555; box-sizing:border-box;">
             </div>
 
+            <div style="margin-bottom:15px;">
+                <label style="display:block; margin-bottom:5px; color:#aaa;">🔒 Requires Key (optional):</label>
+                <select id="doorLockSelect" style="width:100%; padding:8px; font-size:14px; background:#333; color:#fff; border:1px solid #555; box-sizing:border-box;">
+                    <option value="-1">None (unlocked)</option>
+                </select>
+                <label style="display:flex; align-items:center; gap:6px; margin-top:6px; font-size:11px; color:#aaa;">
+                    <input type="checkbox" id="doorLockConsume" checked> Consume key on use
+                </label>
+            </div>
+
             <div style="display:flex; gap:10px; justify-content:flex-end;">
                 <button onclick="closeDoorMapModal()" style="padding:8px 16px; background:#555; color:#fff;">Cancel</button>
                 <button id="doorModalConfirmBtn" onclick="confirmDoorMapModal()" style="padding:8px 16px; background:#4af; color:#000; font-weight:bold;">Set Spawn →</button>
@@ -4032,7 +4042,7 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 170;
+        const GAME_BUILD = 171;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
@@ -23256,6 +23266,16 @@
             setWalkDirection('down');
             updateDoorModalOptions();
 
+            // Populate the "Requires Key" dropdown from items
+            const lockSel = document.getElementById('doorLockSelect');
+            if (lockSel) {
+                lockSel.innerHTML = '<option value="-1">None (unlocked)</option>' +
+                    items.map((it, i) => '<option value="' + i + '">' + (it.name || ('Item ' + (i + 1))) + '</option>').join('');
+                lockSel.value = '-1';
+            }
+            const lockConsumeEl = document.getElementById('doorLockConsume');
+            if (lockConsumeEl) lockConsumeEl.checked = true;
+
             // Show modal
             document.getElementById('doorMapModal').style.display = 'flex';
         }
@@ -23358,7 +23378,10 @@
                 walkDuration: isWalkOver && !useWalkOutPoint ? parseFloat(document.getElementById('doorWalkDuration').value) : 0,
                 fadeDuration: parseFloat(document.getElementById('doorFadeDuration').value),
                 // Door animation properties (for interact doors)
-                animTiles: useDoorAnim ? [] : null // Array of {x, y, layer} tiles to hide on open
+                animTiles: useDoorAnim ? [] : null, // Array of {x, y, layer} tiles to hide on open
+                // Key/lock: -1 = unlocked
+                lockItemIndex: parseInt(document.getElementById('doorLockSelect')?.value ?? '-1'),
+                lockConsume: document.getElementById('doorLockConsume') ? document.getElementById('doorLockConsume').checked : true
             };
             // Reset for next trigger
             pendingTriggerWidth = 1;
@@ -31951,6 +31974,18 @@ Item Receive Display:
 
         // Execute the actual map switch
         function executeMapTransition(trigger) {
+            // Locked door? Require the key item in inventory; consume it (or not) per config.
+            const _lockIdx = (trigger.lockItemIndex !== undefined) ? trigger.lockItemIndex : -1;
+            if (_lockIdx >= 0) {
+                if (!hasInventoryItem(_lockIdx)) {
+                    const _kn = (itemsData[_lockIdx] && itemsData[_lockIdx].name) || 'a key';
+                    showGameToast('🔒 Locked — needs ' + _kn);
+                    isTransitioning = false;
+                    pendingTransition = null;
+                    return;
+                }
+                if (trigger.lockConsume !== false) consumeInventoryItem(_lockIdx, 1);
+            }
             console.log('=== DOOR TRANSITION ===');
             console.log('Door ' + trigger.doorNumber + ' used: "' + trigger.mapName + '" -> "' + trigger.targetMap + '"');
             console.log('Player spawning at tile (' + trigger.targetX + ', ' + trigger.targetY + ')');
