@@ -1,9 +1,30 @@
 # World Builder - Project Understanding
 
+## 🚨 MODULAR BUILD — edit `src/`, NEVER edit `world-builder.html` directly
+
+`world-builder.html` is now a **GENERATED build artifact**, assembled from modules in `src/` by `build/build.mjs`. **Editing `world-builder.html` by hand is futile — the next build overwrites it.**
+
+**Workflow:**
+1. Edit the relevant module under `src/`.
+2. `npm run build` (= `node build/build.mjs`) → regenerates `world-builder.html`.
+3. `npm run verify` (= `node build/verify.mjs`) → rebuilds + `node --check`s BOTH docs (the pass/fail gate). It also prints an informational "diverges from frozen original" note — expected after any real edit.
+4. Commit the `src/` change **and** the regenerated `world-builder.html` together (static hosting serves the single file directly).
+
+**Module map:**
+- `src/head/` — `<head>`, CSS link, body markup, opening `<script>`.
+- `src/builder/` — the EDITOR (globals, collision, tiles, player, npc, animprops, items/sound/lighting, dialog/quest/shop, fishing, multiplayer, save/load, …). `GAME_VERSION`/`GAME_BUILD` live in `src/builder/10-globals.js`.
+- `src/game/engine/` — the runtime ENGINE (init, update, draw, gameloop, sound, etc.) — this is the `loaderHTML` template content kept as CLEAN un-escaped JS; the build re-escapes it on the way in.
+- `src/styles.css`, `src/styles2.css` — builder CSS.
+- `build/` — `build.mjs` (assemble), `verify.mjs`, `escape.mjs`, `manifest.json`, `world-builder.original.html` (frozen pre-split reference).
+
+**Repo folders:** root = `world-builder.html` (built), `index.html`, `package.json`, `README.md`, `CLAUDE.md`. Then `src/` · `build/` · `assets/{sprites/{player,npc,enemy}, tiles, ui, audio/{sfx,music,voice}, source}` · `sounds/` (built-in runtime audio, path-loaded by string) · `docs/` · `multiplayer/` (PartyKit server) · `tavern/` (live 3D side-door, reachable from the editor dropdown) · `.github/` (Pages deploy).
+
+**Two-document trap, now across module trees:** `src/builder/*` = the BUILDER doc; `src/game/engine/*` = the GAME doc (separate runtime scope). A helper used in both must be DEFINED in both trees. An asset path may appear in both — change both. (See the detailed rule below.)
+
 ## Version
 
 - **GAME_VERSION:** `0.1.0` (declared near top of `world-builder.html`; displayed on the main menu; stamped into every save as `gameVersion`).
-- **GAME_BUILD:** integer build number = **number of commits on `main`**, shown on the main menu as `v0.1.<GAME_BUILD>` (semver where the patch IS the commit count, so it climbs every push). **RULE: every time you commit/push to `main`, bump `GAME_BUILD` to match `git rev-list --count HEAD` for the commit being made** (i.e. current count + 1 if you're adding one commit). This keeps the homescreen number in lockstep with pushes to main. Declared right under `GAME_VERSION` in `world-builder.html`. (Bump the `0.1` minor only on deliberate feature milestones; go to `1.0` at launch.)
+- **GAME_BUILD:** integer build number = **number of commits on `main`**, shown on the main menu as `v0.1.<GAME_BUILD>` (semver where the patch IS the commit count, so it climbs every push). **RULE: every time you commit/push to `main`, bump `GAME_BUILD` to match `git rev-list --count HEAD` for the commit being made** (i.e. current count + 1 if you're adding one commit). This keeps the homescreen number in lockstep with pushes to main. Declared in `src/builder/10-globals.js` right under `GAME_VERSION` (then rebuild). (Bump the `0.1` minor only on deliberate feature milestones; go to `1.0` at launch.)
 - **SAVE_SCHEMA_VERSION:** `1` (stamped into every save; `migrateProjectData(p)` is the migration ladder — add new `if (v < N)` hops as the schema evolves).
 
 ## 🚨 RULE: `world-builder.html` is TWO documents (read before editing ANY shared function)
@@ -17,11 +38,11 @@ The single file `world-builder.html` contains **two separate HTML documents / ru
 
 **The tell:** editor works, but **Test Map crashes** with `ReferenceError: X is not defined at initGame` (or renderMap throws every frame → frozen preview). Fix = add the same definition to the OTHER document.
 
-**Also:** inside `loaderHTML`, closing script tags are escaped `<\/script>` (an un-escaped `</script>` would terminate the builder's surrounding script). There are NO `${}` interpolations — every `$` is escaped `\$`; the game string is static and all builder→game data crosses via postMessage at runtime.
+**Also (escaping):** inside `loaderHTML`, closing script tags are escaped `<\/script>`. The template uses NO `${}` interpolations, so the build escapes a `$` **only when immediately followed by `{`** (`\${`) — a lone `$` stays raw (regex anchors, the `$` gold glyph). `build/escape.mjs` encodes this exact rule; **you never hand-escape** — you edit clean JS in `src/game/engine/` and the build re-escapes on assembly. (Old note "every `$` is escaped" was wrong.) Builder→game data crosses via postMessage at runtime.
 
 **To validate the game doc:** `node --check` on the whole file only checks the builder (game is a string). Extract the `loaderHTML` template's `<script>` body and check that separately, or test in-browser via Test Map.
 
-(Stale note: older "line N" references in this file for game functions like `initGame 17443`, `draw 21092` are out of date — the real game functions are in the ~25900–34286 range. See WORLD-BUILDER-REFERENCE.md "Two-document architecture".)
+(Stale note: older "line N" references in this file for game functions like `initGame 17443`, `draw 21092` are out of date — the real game functions are in the ~25900–34286 range. See docs/WORLD-BUILDER-REFERENCE.md "Two-document architecture".)
 
 ## ⚠️ RULE: Save/load field parity (read before adding ANY field to a data object)
 
@@ -66,11 +87,11 @@ Landed in this order:
 
 ## IMPORTANT: Session Workflow
 
-**START of session:** Read `WORLD-BUILDER-REFERENCE.md` for detailed architecture, variable names, line numbers, and common bugs/fixes.
+**START of session:** Read `docs/WORLD-BUILDER-REFERENCE.md` for detailed architecture, variable names, line numbers, and common bugs/fixes.
 
-**DURING session:** When you learn something new about the codebase (bugs, patterns, gotchas), add it to `WORLD-BUILDER-REFERENCE.md`.
+**DURING session:** When you learn something new about the codebase (bugs, patterns, gotchas), add it to `docs/WORLD-BUILDER-REFERENCE.md`.
 
-**END of session / low context:** Update `WORLD-BUILDER-REFERENCE.md` with any new learnings before context runs out.
+**END of session / low context:** Update `docs/WORLD-BUILDER-REFERENCE.md` with any new learnings before context runs out.
 
 ---
 
