@@ -4018,7 +4018,7 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 167;
+        const GAME_BUILD = 168;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
@@ -23694,8 +23694,19 @@
             const x2 = Math.max(fishZoneDragStart.x, fishZoneDragEnd.x);
             const y2 = Math.max(fishZoneDragStart.y, fishZoneDragEnd.y);
 
-            // Each drag ADDS a new zone (unlike camera bounds which expands one).
-            fishZones.push({ x: x1, y: y1, width: x2 - x1 + 1, height: y2 - y1 + 1 });
+            const nz = { x: x1, y: y1, width: x2 - x1 + 1, height: y2 - y1 + 1 };
+            // Like camera bounds: a drag that OVERLAPS existing zone(s) expands/merges them
+            // into one big area (great for a whole river); a separate drag makes a new pond.
+            const overlaps = (a, b) => a.x <= b.x + b.width - 1 && a.x + a.width - 1 >= b.x && a.y <= b.y + b.height - 1 && a.y + a.height - 1 >= b.y;
+            const touched = fishZones.filter(z => overlaps(z, nz));
+            if (touched.length) {
+                let mx1 = nz.x, my1 = nz.y, mx2 = nz.x + nz.width - 1, my2 = nz.y + nz.height - 1;
+                touched.forEach(z => { mx1 = Math.min(mx1, z.x); my1 = Math.min(my1, z.y); mx2 = Math.max(mx2, z.x + z.width - 1); my2 = Math.max(my2, z.y + z.height - 1); });
+                fishZones = fishZones.filter(z => !touched.includes(z));
+                fishZones.push({ x: mx1, y: my1, width: mx2 - mx1 + 1, height: my2 - my1 + 1 });
+            } else {
+                fishZones.push(nz);
+            }
             broadcastEdit({ editType: 'fishZones', zones: fishZones, mapName: currentMapName });
 
             fishZoneDragStart = null;
@@ -32318,6 +32329,28 @@ Item Receive Display:
                     const doorNum = trigger.doorNumber || '?';
                     ctx.fillText('Door ' + doorNum, sx + tileSize / 2, sy + tileSize / 2 - 6);
                     ctx.fillText('from ' + trigger.mapName, sx + tileSize / 2, sy + tileSize / 2 + 6);
+                });
+            }
+
+            // Draw fish zones (purple) when collision debug (C key) is enabled
+            if (showCollision) {
+                const fzMd = mapsData[currentGameMap];
+                const fz = (fzMd && fzMd.fishZones) || [];
+                fz.forEach((z, i) => {
+                    const px = z.x * tileSize - camX;
+                    const py = z.y * tileSize - camY;
+                    const pw = z.width * tileSize;
+                    const ph = z.height * tileSize;
+                    ctx.fillStyle = 'rgba(168, 85, 255, 0.4)';
+                    ctx.fillRect(px, py, pw, ph);
+                    ctx.strokeStyle = '#c77dff';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(px, py, pw, ph);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 12px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('🎣 FISH ' + (i + 1), px + pw / 2, py + ph / 2);
                 });
             }
 
