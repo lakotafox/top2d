@@ -1,0 +1,898 @@
+    </style>
+
+    <!-- Player Editor Modal -->
+    <div class="anim-modal" id="playerModal">
+        <div class="anim-modal-content">
+            <!-- Sidebar -->
+            <div class="anim-sidebar">
+                <h2 style="margin-top:0;">Player Character</h2>
+
+                <!-- Step 1: Load Sprite Sheet -->
+                <div style="margin-bottom:15px;">
+                    <h3>1. Sprite Sheets</h3>
+                    <input type="file" id="playerFileInput" accept="image/*" onchange="playerLoadSheet(event)" style="display:none;">
+                    <button onclick="document.getElementById('playerFileInput').click()" style="width:100%; background:#3a5;">+ Add Sheet</button>
+                    <div id="playerSheetTabs" style="margin-top:8px; display:flex; flex-direction:column; gap:4px;"></div>
+                    <div id="playerFileName" style="font-size:11px; color:#4f8; margin-top:5px;"></div>
+                </div>
+
+                <!-- Step 2: Frame Size -->
+                <div id="playerFrameSection" style="margin-bottom:15px; display:none;">
+                    <h3>2. Frame Size</h3>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <div style="flex:1;">
+                            <label style="font-size:11px; color:#888;">Width:</label>
+                            <input type="number" id="playerFrameW" value="64" min="8" max="256" onchange="playerSetFrameSizeFromInput()" style="width:100%;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:11px; color:#888;">Height:</label>
+                            <input type="number" id="playerFrameH" value="64" min="8" max="256" onchange="playerSetFrameSizeFromInput()" style="width:100%;">
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:#888;" id="playerGridInfo"></div>
+                </div>
+
+                <!-- Step 3: Animation Selection -->
+                <div id="playerAnimSection" style="margin-bottom:15px; display:none;">
+                    <h3>3. Select Animation</h3>
+                    <div id="playerAnimButtons" style="display:flex; flex-direction:column; gap:5px;">
+                        <div class="player-anim-category walk">Walk</div>
+                        <div style="display:flex; gap:4px;">
+                            <button id="playerAnimDown" onclick="playerSelectAnim('walkDown')" class="player-anim-btn walk-btn active" style="flex:1; padding:6px; font-size:11px;">↓ Walk</button>
+                            <button id="playerAnimUp" onclick="playerSelectAnim('walkUp')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">↑ Walk</button>
+                            <button id="playerAnimLeft" onclick="playerSelectAnim('walkLeft')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">← Walk</button>
+                            <button id="playerAnimRight" onclick="playerSelectAnim('walkRight')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">→ Walk</button>
+                        </div>
+                        <div class="player-anim-category walk" style="font-size:10px; opacity:0.85;">Diagonal Walk (optional · 8-direction)</div>
+                        <div style="display:flex; gap:4px;">
+                            <button id="playerAnimDownLeft" onclick="playerSelectAnim('walkDownLeft')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">↙ Walk</button>
+                            <button id="playerAnimDownRight" onclick="playerSelectAnim('walkDownRight')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">↘ Walk</button>
+                            <button id="playerAnimUpLeft" onclick="playerSelectAnim('walkUpLeft')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">↖ Walk</button>
+                            <button id="playerAnimUpRight" onclick="playerSelectAnim('walkUpRight')" class="player-anim-btn walk-btn" style="flex:1; padding:6px; font-size:11px;">↗ Walk</button>
+                        </div>
+                        <div class="player-anim-category idle">Idle</div>
+                        <button id="playerAnimIdle" onclick="playerSelectAnim('idle')" class="player-anim-btn idle-btn" style="padding:6px; font-size:11px;" title="Single idle for all directions">Idle (All)</button>
+                        <div style="font-size:10px; color:#888; margin:3px 0;">or directional:</div>
+                        <div style="display:flex; gap:4px;">
+                            <button id="playerAnimIdleDown" onclick="playerSelectAnim('idleDown')" class="player-anim-btn idle-btn" style="flex:1; padding:5px; font-size:10px;">↓</button>
+                            <button id="playerAnimIdleUp" onclick="playerSelectAnim('idleUp')" class="player-anim-btn idle-btn" style="flex:1; padding:5px; font-size:10px;">↑</button>
+                            <button id="playerAnimIdleLeft" onclick="playerSelectAnim('idleLeft')" class="player-anim-btn idle-btn" style="flex:1; padding:5px; font-size:10px;">←</button>
+                            <button id="playerAnimIdleRight" onclick="playerSelectAnim('idleRight')" class="player-anim-btn idle-btn" style="flex:1; padding:5px; font-size:10px;">→</button>
+                        </div>
+                        <div class="player-anim-category attack">Attack</div>
+                        <div style="display:flex; gap:4px;">
+                            <button id="playerAnimAttackDown" onclick="playerSelectAnim('attackDown')" class="player-anim-btn attack-btn" style="flex:1; padding:6px; font-size:11px;">↓ Atk</button>
+                            <button id="playerAnimAttackUp" onclick="playerSelectAnim('attackUp')" class="player-anim-btn attack-btn" style="flex:1; padding:6px; font-size:11px;">↑ Atk</button>
+                            <button id="playerAnimAttackLeft" onclick="playerSelectAnim('attackLeft')" class="player-anim-btn attack-btn" style="flex:1; padding:6px; font-size:11px;">← Atk</button>
+                            <button id="playerAnimAttackRight" onclick="playerSelectAnim('attackRight')" class="player-anim-btn attack-btn" style="flex:1; padding:6px; font-size:11px;">→ Atk</button>
+                        </div>
+                        <div style="margin-top:5px; font-size:10px;">
+                            <label style="color:#888;">Movement: </label>
+                            <select id="playerAttackMovement" style="font-size:10px; padding:2px; background:#333; color:#fff; border:1px solid #555;">
+                                <option value="stop">Stop</option>
+                                <option value="slide">Slide then stop</option>
+                                <option value="move">Keep moving</option>
+                            </select>
+                        </div>
+                        <div id="playerHitboxSection" style="margin-top:5px; display:none; padding:8px; background:#2a1a2a; border:1px solid #606; border-radius:4px;">
+                            <div style="font-size:10px; color:#c8f; font-weight:bold; margin-bottom:6px;">Attack Hitbox (Per Direction)</div>
+                            <div style="display:flex; gap:3px; margin-bottom:6px;">
+                                <button id="phbDirUp" onclick="setPlayerHitboxDir('up')" style="flex:1; padding:3px; font-size:9px;">↑</button>
+                                <button id="phbDirDown" onclick="setPlayerHitboxDir('down')" class="active" style="flex:1; padding:3px; font-size:9px; background:#606;">↓</button>
+                                <button id="phbDirLeft" onclick="setPlayerHitboxDir('left')" style="flex:1; padding:3px; font-size:9px;">←</button>
+                                <button id="phbDirRight" onclick="setPlayerHitboxDir('right')" style="flex:1; padding:3px; font-size:9px;">→</button>
+                            </div>
+                            <div style="margin-bottom:4px;">
+                                <label style="font-size:9px; color:#888;">Range: <span id="playerHitboxRangeVal">40</span>px</label>
+                                <input type="range" id="playerHitboxRange" min="10" max="120" value="40" oninput="updatePlayerHitboxShape()" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:4px;">
+                                <label style="font-size:9px; color:#888;">Width: <span id="playerHitboxWidthVal">60</span>°</label>
+                                <input type="range" id="playerHitboxWidth" min="20" max="180" value="60" oninput="updatePlayerHitboxShape()" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:4px;">
+                                <label style="font-size:9px; color:#888;">Offset X: <span id="playerHitboxOffsetXVal">0</span>px</label>
+                                <input type="range" id="playerHitboxOffsetX" min="-50" max="50" value="0" oninput="updatePlayerHitboxShape()" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:4px;">
+                                <label style="font-size:9px; color:#888;">Offset Y: <span id="playerHitboxOffsetYVal">0</span>px</label>
+                                <input type="range" id="playerHitboxOffsetY" min="-50" max="50" value="0" oninput="updatePlayerHitboxShape()" style="width:100%;">
+                            </div>
+                            <button onclick="copyPlayerHitboxToAll()" style="width:100%; padding:3px; font-size:9px; background:#464; margin-top:4px;">Copy to All Directions</button>
+                            <p style="font-size:8px; color:#888; margin:4px 0 0 0;">Adjust hitbox per direction. Test with C key.</p>
+                        </div>
+                        <div class="player-anim-category interact">Interact</div>
+                        <button id="playerAnimInteract" onclick="playerSelectAnim('interact')" class="player-anim-btn interact-btn" style="padding:6px; font-size:11px;">Interact</button>
+                        <div class="player-anim-category death">Death</div>
+                        <button id="playerAnimDeath" onclick="playerSelectAnim('death')" class="player-anim-btn death-btn" style="padding:6px; font-size:11px;">Death</button>
+                        <!-- Game Over Sound Selection -->
+                        <div style="margin:8px 0; padding:6px; background:#2a1a2a; border:1px solid #644; border-radius:4px;">
+                            <label style="font-size:10px; color:#f88;">Game Over Sound:</label>
+                            <select id="playerGameOverSound" onchange="playerUpdateGameOverSound()" style="width:100%; margin-top:4px; background:#1a1a2e; color:#fff; border:1px solid #555; padding:4px; font-size:11px;">
+                                <option value="-1">None</option>
+                            </select>
+                            <button onclick="playerPreviewGameOverSound()" style="width:100%; margin-top:4px; padding:4px; font-size:10px; background:#644;">Preview Sound</button>
+                        </div>
+                        <div class="player-anim-category special">Receive Item</div>
+                        <button id="playerAnimReceivedItem" onclick="playerSelectAnim('receivedItem')" class="player-anim-btn special-btn" style="padding:6px; font-size:11px;">Receive (All)</button>
+                        <div style="display:flex; gap:2px; margin-top:2px;">
+                            <button id="playerAnimReceiveItemDown" onclick="playerSelectAnim('receiveItemDown')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">↓</button>
+                            <button id="playerAnimReceiveItemUp" onclick="playerSelectAnim('receiveItemUp')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">↑</button>
+                            <button id="playerAnimReceiveItemLeft" onclick="playerSelectAnim('receiveItemLeft')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">←</button>
+                            <button id="playerAnimReceiveItemRight" onclick="playerSelectAnim('receiveItemRight')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">→</button>
+                        </div>
+                        <div class="player-anim-category special">🎣 Fishing</div>
+                        <div style="font-size:9px; color:#888; margin:2px 0;">Cast (one-shot)</div>
+                        <div style="display:flex; gap:2px;">
+                            <button id="playerAnimFishCastDown" onclick="playerSelectAnim('fishCastDown')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">↓</button>
+                            <button id="playerAnimFishCastUp" onclick="playerSelectAnim('fishCastUp')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">↑</button>
+                            <button id="playerAnimFishCastLeft" onclick="playerSelectAnim('fishCastLeft')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">←</button>
+                            <button id="playerAnimFishCastRight" onclick="playerSelectAnim('fishCastRight')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">→</button>
+                        </div>
+                        <div style="font-size:9px; color:#888; margin:4px 0 2px;">Wait for bite (loop)</div>
+                        <div style="display:flex; gap:2px;">
+                            <button id="playerAnimFishWaitDown" onclick="playerSelectAnim('fishWaitDown')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">↓</button>
+                            <button id="playerAnimFishWaitUp" onclick="playerSelectAnim('fishWaitUp')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">↑</button>
+                            <button id="playerAnimFishWaitLeft" onclick="playerSelectAnim('fishWaitLeft')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">←</button>
+                            <button id="playerAnimFishWaitRight" onclick="playerSelectAnim('fishWaitRight')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">→</button>
+                        </div>
+                    </div>
+                    <!-- Custom animations list -->
+                    <div id="playerCustomAnimList" style="margin-top:8px;"></div>
+                    <!-- Add custom animation -->
+                    <div style="display:flex; gap:5px; margin-top:8px;">
+                        <input type="text" id="playerCustomAnimName" placeholder="e.g. roll, cast" style="flex:1; padding:4px; font-size:11px;">
+                        <button onclick="playerAddCustomAnim()" style="padding:4px 8px; font-size:11px; background:#4a4;">+ Add</button>
+                    </div>
+                    <p style="font-size:10px; color:#666; margin-top:8px;">Drag on sprite sheet to select multi-tile frames</p>
+                </div>
+
+                <!-- Step 4: Name -->
+                <div id="playerNameSection" style="margin-bottom:15px; display:none;">
+                    <h3>4. Name</h3>
+                    <input type="text" id="playerNameInput" placeholder="e.g. hero, knight" style="width:100%;">
+                </div>
+
+                <!-- Step 5: Scale & Shadow -->
+                <div id="playerScaleShadowSection" style="margin-bottom:15px; display:none;">
+                    <h3>5. Scale & Shadow</h3>
+                    <!-- Scale Slider -->
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:10px; color:#888;">Sprite Scale: <span id="playerScaleVal">1.0</span>x</label>
+                        <input type="range" id="playerScaleSlider" min="0.5" max="3" step="0.1" value="1" oninput="updatePlayerScalePreview()" style="width:100%;">
+                        <div style="font-size:9px; color:#666;">Make sprite larger or smaller in game</div>
+                    </div>
+                    <!-- Shadow Controls -->
+                    <div style="padding:8px; background:#1a1a2a; border:1px solid #446; border-radius:4px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <span style="font-size:10px; color:#88f; font-weight:bold;">Shadow</span>
+                            <label style="font-size:10px; color:#888;">
+                                <input type="checkbox" id="playerNoShadow" onchange="updatePlayerShadowPreview()"> No Shadow
+                            </label>
+                        </div>
+                        <div id="playerShadowControls">
+                            <div style="margin-bottom:4px;">
+                                <label style="font-size:9px; color:#888;">X Offset: <span id="playerShadowOffsetXVal">0</span>px</label>
+                                <input type="range" id="playerShadowOffsetXSlider" min="-20" max="20" value="0" oninput="updatePlayerShadowPreview()" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:4px;">
+                                <label style="font-size:9px; color:#888;">Y Offset: <span id="playerShadowOffsetYVal">4</span>px</label>
+                                <input type="range" id="playerShadowOffsetYSlider" min="0" max="20" value="4" oninput="updatePlayerShadowPreview()" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:4px;">
+                                <label style="font-size:9px; color:#888;">Width: <span id="playerShadowWidthVal">35</span>%</label>
+                                <input type="range" id="playerShadowWidthSlider" min="10" max="60" value="35" oninput="updatePlayerShadowPreview()" style="width:100%;">
+                            </div>
+                            <div>
+                                <label style="font-size:9px; color:#888;">Height: <span id="playerShadowHeightVal">12</span>%</label>
+                                <input type="range" id="playerShadowHeightSlider" min="5" max="25" value="12" oninput="updatePlayerShadowPreview()" style="width:100%;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div style="margin-top:auto;">
+                    <button onclick="playerSave()" style="width:100%; background:#4f8; color:#000; margin-bottom:10px;">Save Character</button>
+                    <button onclick="playerCancel()" style="width:100%; background:#a55;">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Main Area -->
+            <div class="anim-main">
+                <div class="anim-header">
+                    <h2>Sprite Sheet</h2>
+                    <span style="color:#888; font-size:12px;">Click frames to add to current animation</span>
+                    <div style="display:flex; align-items:center; gap:5px; margin-left:auto;">
+                        <span style="color:#888; font-size:11px;">Zoom:</span>
+                        <button onclick="playerZoomOut()" style="padding:2px 8px; font-size:14px;">-</button>
+                        <span id="playerZoomLevel" style="color:#4f8; font-size:11px; min-width:35px; text-align:center;">3x</span>
+                        <button onclick="playerZoomIn()" style="padding:2px 8px; font-size:14px;">+</button>
+                    </div>
+                </div>
+
+                <div class="anim-canvas-area">
+                    <canvas id="playerEditorCanvas"></canvas>
+                </div>
+
+                <!-- Bottom Bar: Animation Frames -->
+                <div class="anim-frames-bar">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <span><strong id="playerCurrentAnimName" style="color:#4f8;">Walk Down</strong>: <span id="playerFrameCount">0</span> frames</span>
+                        <div style="display:flex; align-items:center; gap:15px;">
+                            <!-- Live Preview -->
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <canvas id="playerLivePreview" width="96" height="96" style="border:2px solid #4f8; border-radius:4px; background:#111; image-rendering:pixelated;"></canvas>
+                                <div style="font-size:11px;">
+                                    <div style="display:flex; align-items:center; gap:5px;">
+                                        <span style="color:#888;">Speed:</span>
+                                        <input type="range" id="playerSpeedSlider" min="1" max="24" value="8" style="width:80px;" oninput="playerUpdateSpeed()">
+                                        <span id="playerSpeedLabel" style="color:#4f8; min-width:35px;">8 fps</span>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:5px; margin-top:5px;">
+                                        <label style="color:#888; cursor:pointer;"><input type="checkbox" id="playerPingPong" onchange="playerUpdatePingPong()"> Ping-Pong</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <button id="playerMirrorBtn" onclick="playerToggleMirror()" style="background:#555; padding:5px 10px; font-size:11px; border:1px solid #888;">Mirror</button>
+                            <button onclick="playerClearCurrentAnim()" style="background:#a55; padding:5px 10px; font-size:11px;">Clear</button>
+                        </div>
+                    </div>
+                    <div class="anim-frames-list" id="playerFramesList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dialog Editor Modal -->
+    <div class="anim-modal" id="dialogModal">
+        <div class="anim-modal-content" style="width:900px; max-width:95vw;">
+            <div style="display:flex; gap:20px; height:100%;">
+                <!-- Left: Controls -->
+                <div style="flex:0 0 220px; background:#1a1a2e; padding:15px; border-radius:8px; overflow-y:auto;">
+                    <h2 style="margin-top:0; color:#88f; font-size:16px;">Dialog Editor</h2>
+
+                    <!-- Dialog Name -->
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:10px; color:#aaa; display:block; margin-bottom:4px;">Dialog Name:</label>
+                        <input type="text" id="dialogNameInput" placeholder="e.g. villager_greeting" style="width:100%; padding:6px; font-size:12px;">
+                    </div>
+
+                    <!-- Style Selection -->
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:10px; color:#aaa; display:block; margin-bottom:4px;">Style:</label>
+                        <select id="dialogStyleSelect" style="width:100%; padding:6px;" onchange="updateDialogPreview()">
+                            <option value="1">Classic NES</option>
+                            <option value="2">Final Fantasy</option>
+                            <option value="3">Pokemon</option>
+                            <option value="4">Earthbound</option>
+                            <option value="5">Chrono Trigger</option>
+                            <option value="6">Modern Pixel</option>
+                        </select>
+                    </div>
+
+                    <!-- Colors -->
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:10px; color:#aaa; display:block; margin-bottom:4px;">Colors:</label>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                            <div>
+                                <label style="font-size:9px; color:#666;">Background</label>
+                                <input type="color" id="dialogBgColor" value="#000000" style="width:100%; height:24px;" onchange="updateDialogPreview()">
+                            </div>
+                            <div>
+                                <label style="font-size:9px; color:#666;">Border</label>
+                                <input type="color" id="dialogBorderColor" value="#ffffff" style="width:100%; height:24px;" onchange="updateDialogPreview()">
+                            </div>
+                            <div>
+                                <label style="font-size:9px; color:#666;">Text</label>
+                                <input type="color" id="dialogTextColor" value="#ffffff" style="width:100%; height:24px;" onchange="updateDialogPreview()">
+                            </div>
+                            <div>
+                                <label style="font-size:9px; color:#666;">Accent</label>
+                                <input type="color" id="dialogAccentColor" value="#ffffff" style="width:100%; height:24px;" onchange="updateDialogPreview()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Size -->
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:10px; color:#aaa; display:block; margin-bottom:4px;">Size:</label>
+                        <div style="display:flex; gap:6px;">
+                            <div style="flex:1;">
+                                <label style="font-size:9px; color:#666;">Width</label>
+                                <input type="number" id="dialogWidth" value="280" min="100" max="500" style="width:100%; padding:4px;" onchange="updateDialogPreview()">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:9px; color:#666;">Height</label>
+                                <input type="number" id="dialogHeight" value="80" min="50" max="200" style="width:100%; padding:4px;" onchange="updateDialogPreview()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Type Speed -->
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:10px; color:#aaa; display:block; margin-bottom:4px;">Type Speed: <span id="dialogTypeSpeedVal">30</span> chars/sec</label>
+                        <input type="range" id="dialogTypeSpeed" min="0" max="100" value="30" style="width:100%;" oninput="document.getElementById('dialogTypeSpeedVal').textContent = this.value == 0 ? 'Instant' : this.value">
+                        <div style="font-size:8px; color:#666; margin-top:2px;">0 = instant, higher = faster typing</div>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div style="display:flex; gap:6px; margin-top:15px;">
+                        <button onclick="saveDialog()" style="flex:1; padding:8px; background:#484; font-size:12px;">Save</button>
+                        <button onclick="closeDialogEditor()" style="flex:1; padding:8px; background:#644; font-size:12px;">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Middle: Pages and Text Editor -->
+                <div style="flex:0 0 280px; display:flex; flex-direction:column; gap:12px;">
+                    <!-- Pages List -->
+                    <div style="background:#1a1a2e; padding:12px; border-radius:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <h3 style="margin:0; color:#fa0; font-size:13px;">Pages</h3>
+                            <button onclick="addDialogPage()" style="padding:4px 8px; background:#484; font-size:11px;">+ Add</button>
+                        </div>
+                        <div id="dialogPagesList" style="display:flex; gap:6px; flex-wrap:wrap; max-height:50px; overflow-y:auto;">
+                            <div class="dialog-page active" onclick="selectDialogPageEditor(0)">1</div>
+                        </div>
+                    </div>
+
+                    <!-- Current Page Editor -->
+                    <div style="background:#1a1a2e; padding:12px; border-radius:8px; flex:1; overflow-y:auto;">
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:10px; color:#aaa; display:block; margin-bottom:4px;">Speaker Name:</label>
+                            <input type="text" id="dialogSpeaker" placeholder="NPC name or leave empty" style="width:100%; padding:6px;" onkeyup="updateDialogPreview()">
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:10px; color:#aaa; display:block; margin-bottom:4px;">Text:</label>
+                            <textarea id="dialogTextInput" rows="3" placeholder="Enter dialog text..." style="width:100%; padding:6px; resize:vertical;" onkeyup="updateDialogPreview()"></textarea>
+                        </div>
+
+                        <!-- Dialog Choices Section -->
+                        <div style="background:#2a2a1a; padding:8px; border-radius:4px; border:1px solid #a80;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <label style="font-size:10px; color:#fa0; font-weight:bold;">Choices (optional):</label>
+                                <button onclick="addDialogChoice()" style="padding:2px 6px; font-size:9px; background:#4a7c59;">+ Add</button>
+                            </div>
+                            <div id="dialogChoicesList" style="font-size:10px; color:#888;">
+                                No choices (auto-advance)
+                            </div>
+                            <div style="font-size:8px; color:#666; margin-top:4px;">
+                                Add choices for Accept/Decline quests or branching paths
+                            </div>
+                        </div>
+
+                        <button onclick="removeCurrentDialogPage()" style="margin-top:6px; padding:4px 8px; background:#644; font-size:10px;">Delete Page</button>
+                    </div>
+                </div>
+
+                <!-- Right: Preview (big and prominent) -->
+                <div style="flex:1; background:#111; padding:20px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:350px;">
+                    <label style="font-size:12px; color:#888; display:block; margin-bottom:15px;">Live Preview</label>
+                    <div style="background:#000; padding:20px; border-radius:4px; box-shadow:0 0 20px rgba(0,0,0,0.5);">
+                        <canvas id="dialogPreviewCanvas" width="280" height="80" style="image-rendering:pixelated; display:block;"></canvas>
+                    </div>
+                    <div style="margin-top:15px; text-align:center;">
+                        <span style="font-size:10px; color:#666;">Press A to advance</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Animated Prop Editor Modal -->
+    <div class="anim-modal" id="animPropModal">
+        <div class="anim-modal-content">
+            <!-- Sidebar -->
+            <div class="anim-sidebar">
+                <h2 style="margin-top:0;">Animated Prop</h2>
+
+                <!-- Step 1: Load Sprite Sheet -->
+                <div style="margin-bottom:20px;">
+                    <h3>1. Sprite Sheet</h3>
+                    <input type="file" id="animPropFileInput" accept="image/*" onchange="animPropLoadSheet(event)">
+                    <button onclick="document.getElementById('animPropFileInput').click()" style="width:100%;">Load Image</button>
+                    <div id="animPropFileName" style="font-size:11px; color:#4af; margin-top:5px;"></div>
+                </div>
+
+                <!-- Step 2: Frame Size -->
+                <div id="animPropFrameSection" style="margin-bottom:20px; display:none;">
+                    <h3>2. Frame Size</h3>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <div style="flex:1;">
+                            <label style="font-size:11px; color:#888;">Width:</label>
+                            <input type="number" id="animPropFrameW" value="16" min="8" max="256" onchange="animPropUpdateGrid()" style="width:100%;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:11px; color:#888;">Height:</label>
+                            <input type="number" id="animPropFrameH" value="16" min="8" max="256" onchange="animPropUpdateGrid()" style="width:100%;">
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:#888;" id="animPropGridInfo"></div>
+                </div>
+
+                <!-- Step 3: Animation Type -->
+                <div id="animPropTypeSection" style="margin-bottom:20px; display:none;">
+                    <h3>3. Animation Type</h3>
+                    <select id="animPropType" style="width:100%;" onchange="animPropTypeChanged()">
+                        <option value="loop">Loop (continuous)</option>
+                        <option value="interactive">Interactive (on trigger)</option>
+                    </select>
+                    <p style="font-size:10px; color:#666; margin-top:5px;">Adjust speed with slider in preview below</p>
+
+                    <!-- Interact options (shown when type is 'interactive') -->
+                    <div id="animPropInteractOptions" style="display:none; margin-top:10px; padding:10px; background:#1a2a35; border-radius:5px;">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:8px;">
+                            <input type="checkbox" id="animPropGiveItem" onchange="animPropGiveItemChanged()">
+                            <span style="font-size:12px;">Give Item on Interact</span>
+                        </label>
+                        <div id="animPropItemSection" style="display:none;">
+                            <label style="font-size:10px; color:#888;">Select Item:</label>
+                            <select id="animPropItemSelect" style="width:100%; margin-top:4px;">
+                                <option value="-1">-- No items defined --</option>
+                            </select>
+                            <p style="font-size:9px; color:#666; margin-top:4px;">Player receives this item when interacting (A key)</p>
+                        </div>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:12px 0 8px; border-top:1px solid #2a4a5a; padding-top:10px;">
+                            <input type="checkbox" id="animPropLock" onchange="animPropLockChanged()">
+                            <span style="font-size:12px;">🔒 Requires Key to Open</span>
+                        </label>
+                        <div id="animPropLockSection" style="display:none;">
+                            <label style="font-size:10px; color:#888;">Key Item:</label>
+                            <select id="animPropLockSelect" style="width:100%; margin-top:4px;">
+                                <option value="-1">-- No items defined --</option>
+                            </select>
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:6px; font-size:11px; color:#aaa;">
+                                <input type="checkbox" id="animPropLockConsume" checked> Consume key on use
+                            </label>
+                            <p style="font-size:9px; color:#666; margin-top:4px;">Player must hold this key to open. Otherwise shows "Locked".</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4: Collision & Depth -->
+                <div id="animPropCollisionSection" style="margin-bottom:20px; display:none;">
+                    <h3>4. Collision & Depth</h3>
+                    <div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:10px;">
+                        <button id="animPropToolNone" class="active" onclick="setAnimPropTool('none')" style="padding:5px 8px; font-size:11px;">Select</button>
+                        <button id="animPropToolCollision" onclick="setAnimPropTool('collision')" style="padding:5px 8px; font-size:11px; background:#a55;">Collision</button>
+                        <button id="animPropToolErase" onclick="setAnimPropTool('erase')" style="padding:5px 8px; font-size:11px;">Erase</button>
+                        <button id="animPropToolSplit" onclick="setAnimPropTool('split')" style="padding:5px 8px; font-size:11px; background:#0aa;">Split</button>
+                    </div>
+
+                    <!-- Brush Size for Collision -->
+                    <div id="animPropBrushSection" style="display:none; margin-bottom:10px;">
+                        <div style="margin-bottom:8px; padding:6px; background:#2a1a1a; border:1px solid #a55; border-radius:4px;">
+                            <span style="font-size:10px; color:#aaa;">Click any frame to paint. Copy from:</span>
+                            <select id="animPropCollisionFrameSelect" onchange="setAnimPropCollisionFrame(this.value)" style="margin-left:5px; padding:2px; font-size:10px;">
+                                <option value="0">Frame 1</option>
+                            </select>
+                            <button onclick="copyCollisionToAllFrames()" style="margin-left:5px; padding:2px 6px; font-size:9px; background:#a55;">Copy to All</button>
+                        </div>
+                        <div style="margin-bottom:5px;">
+                            <span style="font-size:10px; color:#aaa;">Shape:</span>
+                            <button id="animPropShapeSquare" class="active" onclick="setAnimPropBrushShape('square')" style="padding:3px 6px; font-size:10px;">■ Square</button>
+                            <button id="animPropShapeCircle" onclick="setAnimPropBrushShape('circle')" style="padding:3px 6px; font-size:10px;">● Circle</button>
+                            <button id="animPropShapeRect" onclick="setAnimPropBrushShape('rect')" style="padding:3px 6px; font-size:10px;">▬ Rect</button>
+                        </div>
+                        <div id="animPropBrushSizeRow">
+                            <span style="font-size:10px; color:#aaa;">Size:</span>
+                            <button id="animPropBrush1" onclick="setAnimPropBrush(1)" style="padding:3px 6px; font-size:10px;">1</button>
+                            <button id="animPropBrush2" onclick="setAnimPropBrush(2)" style="padding:3px 6px; font-size:10px;">2</button>
+                            <button id="animPropBrush4" class="active" onclick="setAnimPropBrush(4)" style="padding:3px 6px; font-size:10px;">4</button>
+                            <button id="animPropBrush8" onclick="setAnimPropBrush(8)" style="padding:3px 6px; font-size:10px;">8</button>
+                        </div>
+                        <div id="animPropRectSizeRow" style="display:none; margin-top:5px;">
+                            <span style="font-size:10px; color:#aaa;">W:</span>
+                            <input type="number" id="animPropRectW" value="8" min="2" max="32" style="width:40px; font-size:10px;" onchange="updateAnimPropRectSize()">
+                            <span style="font-size:10px; color:#aaa; margin-left:5px;">H:</span>
+                            <input type="number" id="animPropRectH" value="4" min="2" max="32" style="width:40px; font-size:10px;" onchange="updateAnimPropRectSize()">
+                        </div>
+                    </div>
+
+                    <!-- Split Controls -->
+                    <div id="animPropSplitControls" style="display:none; margin-bottom:10px; padding:8px; background:#1a3a3e; border-radius:5px;">
+                        <div style="font-size:10px; color:#0ff; margin-bottom:5px;">Draw split line on tiles (drag to draw)</div>
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <label style="font-size:10px; display:flex; align-items:center; gap:4px; cursor:pointer;">
+                                <input type="checkbox" id="animPropFlatLine" checked>
+                                <span>Flat Line</span>
+                            </label>
+                            <span style="font-size:10px;">Y:</span>
+                            <input type="number" id="animPropSplitY" value="8" min="0" max="16" style="width:40px; padding:2px; font-size:10px;">
+                            <button onclick="setAnimPropSplitY()" style="padding:2px 6px; font-size:9px; background:#0aa;">Set Y</button>
+                            <button onclick="clearAnimPropSplit()" style="padding:2px 6px; font-size:9px; background:#a55;">Clear</button>
+                        </div>
+                        <div style="font-size:9px; color:#888; margin-top:4px;">C = Canopy (top) | T = Trunk (Y-sorted)</div>
+                    </div>
+
+                    <p style="font-size:10px; color:#666;">Paint on any frame. Collision/split data applies to all frames.</p>
+                </div>
+
+                <!-- Step 5: Name -->
+                <div id="animPropNameSection" style="margin-bottom:20px; display:none;">
+                    <h3>5. Name</h3>
+                    <input type="text" id="animPropNameInput" placeholder="e.g. torch, chest, door" style="width:100%;">
+                </div>
+
+                <!-- Actions -->
+                <div style="margin-top:auto;">
+                    <button onclick="animPropSave()" style="width:100%; background:#4af; color:#000; margin-bottom:10px;">Save Prop</button>
+                    <button onclick="animPropCancel()" style="width:100%; background:#a55;">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Main Area -->
+            <div class="anim-main">
+                <div class="anim-header">
+                    <h2>Sprite Sheet</h2>
+                    <span style="color:#888; font-size:12px;">Click or drag to select frames (multi-tile supported)</span>
+                    <div style="display:flex; align-items:center; gap:5px; margin-left:auto;">
+                        <span style="color:#888; font-size:11px;">Zoom:</span>
+                        <button onclick="animPropZoomOut()" style="padding:2px 8px; font-size:14px;">-</button>
+                        <span id="animPropZoomLevel" style="color:#4af; font-size:11px; min-width:35px; text-align:center;">3x</span>
+                        <button onclick="animPropZoomIn()" style="padding:2px 8px; font-size:14px;">+</button>
+                    </div>
+                </div>
+
+                <div class="anim-canvas-area">
+                    <canvas id="animPropEditorCanvas"></canvas>
+                </div>
+
+                <!-- Bottom Bar: Animation Frames -->
+                <div class="anim-frames-bar">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <span>Animation Frames: <strong id="animPropFrameCount" style="color:#4af;">0</strong></span>
+                        <div style="display:flex; align-items:center; gap:15px;">
+                            <!-- Live Preview -->
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <canvas id="animPropLivePreview" width="48" height="48" style="border:2px solid #4af; border-radius:4px; background:#111; image-rendering:pixelated;"></canvas>
+                                <div style="font-size:11px;">
+                                    <div style="display:flex; align-items:center; gap:5px; margin-bottom:4px;">
+                                        <span style="color:#888;">Speed:</span>
+                                        <input type="range" id="animPropSpeedSlider" min="1" max="24" value="8" style="width:80px;" oninput="animPropUpdateSpeed()">
+                                        <span id="animPropSpeedLabel" style="color:#4af; min-width:35px;">8 fps</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="animPropClearFrames()" style="background:#a55; padding:5px 10px; font-size:11px;">Clear</button>
+                        </div>
+                    </div>
+                    <div class="anim-frames-list" id="animPropFramesList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Item Editor Modal -->
+    <div class="anim-modal" id="itemModal">
+        <div class="anim-modal-content">
+            <!-- Sidebar -->
+            <div class="anim-sidebar">
+                <h2 style="margin-top:0;">Interactive Item</h2>
+
+                <!-- Step 1: Load Sprite Sheet -->
+                <div style="margin-bottom:20px;">
+                    <h3>1. Sprite Sheet</h3>
+                    <input type="file" id="itemFileInput" accept="image/*" onchange="itemLoadSheet(event)" style="display:none;">
+                    <button onclick="document.getElementById('itemFileInput').click()" style="width:100%;">Load Image</button>
+                    <div id="itemFileName" style="font-size:11px; color:#4f8; margin-top:5px;"></div>
+                </div>
+
+                <!-- Step 2: Frame Size -->
+                <div id="itemFrameSection" style="margin-bottom:20px; display:none;">
+                    <h3>2. Frame Size</h3>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <div style="flex:1;">
+                            <label style="font-size:11px; color:#888;">Width:</label>
+                            <input type="number" id="itemFrameW" value="16" min="8" max="256" onchange="itemUpdateGrid()" style="width:100%;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:11px; color:#888;">Height:</label>
+                            <input type="number" id="itemFrameH" value="16" min="8" max="256" onchange="itemUpdateGrid()" style="width:100%;">
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:#888;" id="itemGridInfo"></div>
+                </div>
+
+                <!-- Step 3: Idle Frame -->
+                <div id="itemIdleSection" style="margin-bottom:20px; display:none;">
+                    <h3>3. Idle Frame</h3>
+                    <p style="font-size:10px; color:#666; margin-bottom:8px;">Which frame shows before player interacts</p>
+                    <select id="itemIdleFrame" style="width:100%;">
+                        <option value="0">Frame 1 (first)</option>
+                    </select>
+                </div>
+
+                <!-- Step 4: Name -->
+                <div id="itemNameSection" style="margin-bottom:20px; display:none;">
+                    <h3>4. Name</h3>
+                    <input type="text" id="itemNameInput" placeholder="e.g. chest, pot, crate" style="width:100%;">
+                </div>
+
+                <!-- Step 5: Max Stack (for inventory) -->
+                <div id="itemStackSection" style="margin-bottom:20px; display:none;">
+                    <h3>5. Max Stack</h3>
+                    <p style="font-size:10px; color:#666; margin-bottom:8px;">How many can stack in one inventory slot</p>
+                    <input type="number" id="itemMaxStack" value="99" min="1" max="999" style="width:100%;">
+                </div>
+
+                <!-- Step 6: Behavior (makes the item usable from the hotbar via the attack button) -->
+                <div id="itemBehaviorSection" style="margin-bottom:20px; display:none;">
+                    <h3>6. Behavior</h3>
+                    <p style="font-size:10px; color:#666; margin-bottom:8px;">Equip in hotbar, press attack to use.</p>
+                    <select id="itemBehavior" onchange="itemBehaviorChanged()" style="width:100%; margin-bottom:8px;">
+                        <option value="none">None (just an item)</option>
+                        <option value="sword">🗡 Sword (melee weapon)</option>
+                        <option value="boomerang">🪃 Boomerang (throw &amp; return)</option>
+                        <option value="fishingPole">🎣 Fishing Pole (cast at water)</option>
+                    </select>
+                    <div id="itemBehaviorConfig" style="display:none;">
+                        <div id="itemAbilityDamageRow" style="margin-bottom:6px;">
+                            <label style="font-size:11px; color:#888;">Damage: <span id="itemAbilityDamageVal">10</span></label>
+                            <input type="range" id="itemAbilityDamage" min="1" max="100" value="10" oninput="document.getElementById('itemAbilityDamageVal').textContent=this.value" style="width:100%;">
+                        </div>
+                        <div id="itemAbilityRangeRow" style="margin-bottom:6px;">
+                            <label style="font-size:11px; color:#888;">Range: <span id="itemAbilityRangeVal">180</span>px</label>
+                            <input type="range" id="itemAbilityRange" min="40" max="400" value="180" oninput="document.getElementById('itemAbilityRangeVal').textContent=this.value" style="width:100%;">
+                        </div>
+                        <div id="itemAbilitySpeedRow" style="margin-bottom:6px;">
+                            <label style="font-size:11px; color:#888;">Speed: <span id="itemAbilitySpeedVal">7</span></label>
+                            <input type="range" id="itemAbilitySpeed" min="2" max="16" value="7" oninput="document.getElementById('itemAbilitySpeedVal').textContent=this.value" style="width:100%;">
+                        </div>
+                        <div id="itemAbilityAnimRow" style="margin-bottom:6px;">
+                            <label style="font-size:11px; color:#888;">Player anim on use (blank = attack):</label>
+                            <input type="text" id="itemAbilityAnim" placeholder="e.g. throw" style="width:100%;">
+                        </div>
+                        <div id="itemFishingNote" style="display:none; font-size:10px; color:#a8f; line-height:1.5;">
+                            🎣 No damage/range needed. Equip and press attack at the edge of a <b>Fish Zone</b> to cast.
+                            Catches come from the <b>Loot Table</b> (Fishing tab); the player's <b>fishCast/fishWait</b> anims play.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div style="margin-top:auto;">
+                    <button onclick="itemSave()" style="width:100%; background:#4f8; color:#000; margin-bottom:5px;">Save Item</button>
+                    <button onclick="itemSaveAndContinue()" style="width:100%; background:#48a; color:#fff; margin-bottom:5px;">Save & Create Another</button>
+                    <button onclick="itemCancel()" style="width:100%; background:#a55;">Done</button>
+                </div>
+            </div>
+
+            <!-- Main Area -->
+            <div class="anim-main">
+                <div class="anim-header">
+                    <h2>Sprite Sheet</h2>
+                    <span style="color:#888; font-size:12px;">Click frames in order: idle first, then animation sequence</span>
+                    <div style="display:flex; align-items:center; gap:5px; margin-left:auto;">
+                        <span style="color:#888; font-size:11px;">Zoom:</span>
+                        <button onclick="itemZoomOut()" style="padding:2px 8px; font-size:14px;">-</button>
+                        <span id="itemZoomLevel" style="color:#4f8; font-size:11px; min-width:35px; text-align:center;">3x</span>
+                        <button onclick="itemZoomIn()" style="padding:2px 8px; font-size:14px;">+</button>
+                    </div>
+                </div>
+
+                <div class="anim-canvas-area">
+                    <canvas id="itemEditorCanvas"></canvas>
+                </div>
+
+                <!-- Bottom Bar: Animation Frames -->
+                <div class="anim-frames-bar">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <span>Animation Frames: <strong id="itemFrameCount" style="color:#4f8;">0</strong></span>
+                        <div style="display:flex; align-items:center; gap:15px;">
+                            <!-- Live Preview -->
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <canvas id="itemLivePreview" width="48" height="48" style="border:2px solid #4f8; border-radius:4px; background:#111; image-rendering:pixelated;"></canvas>
+                                <div style="font-size:11px;">
+                                    <div style="display:flex; align-items:center; gap:5px;">
+                                        <span style="color:#888;">Speed:</span>
+                                        <input type="range" id="itemSpeedSlider" min="1" max="24" value="8" style="width:80px;" oninput="itemUpdateSpeed()">
+                                        <span id="itemSpeedLabel" style="color:#4f8; min-width:35px;">8 fps</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="itemClearFrames()" style="background:#a55; padding:5px 10px; font-size:11px;">Clear</button>
+                        </div>
+                    </div>
+                    <div class="anim-frames-list" id="itemFramesList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shop Editor Modal -->
+    <div id="shopModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:2000; justify-content:center; align-items:center;">
+        <div style="background:#2a2a2a; border-radius:8px; max-width:600px; width:90%; max-height:85vh; overflow:hidden; border:2px solid #fa0; display:flex; flex-direction:column;">
+            <!-- Header -->
+            <div style="padding:12px 15px; background:#1a1a1a; border-bottom:1px solid #444; display:flex; justify-content:space-between; align-items:center;">
+                <h2 style="margin:0; color:#fa0; font-size:16px;">Edit Shop</h2>
+                <button onclick="closeShopEditor()" style="background:none; border:none; color:#888; font-size:20px; cursor:pointer; padding:0 5px;">&times;</button>
+            </div>
+
+            <!-- Content -->
+            <div style="padding:15px; overflow-y:auto; flex:1;">
+                <!-- Shop Name -->
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Shop Name:</label>
+                    <input type="text" id="shopEditorName" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; margin-top:4px; box-sizing:border-box;" placeholder="General Store">
+                </div>
+
+                <!-- Greeting Message -->
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Greeting Message (optional):</label>
+                    <textarea id="shopEditorGreeting" rows="2" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; margin-top:4px; box-sizing:border-box; resize:vertical; font-family:inherit;" placeholder="Welcome to my shop! Take a look around..."></textarea>
+                    <div style="font-size:9px; color:#666; margin-top:2px;">Shown when player opens shop</div>
+                </div>
+
+                <!-- Default Sell Rate -->
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Default Sell Rate: <span id="sellRateDisplay">50</span>%</label>
+                    <input type="range" id="shopEditorSellRate" value="50" min="0" max="100" style="width:100%; margin-top:4px;" oninput="document.getElementById('sellRateDisplay').textContent=this.value">
+                    <div style="font-size:9px; color:#666;">% of buy price shop pays for items not in buy list (0 = don't accept)</div>
+                </div>
+
+                <!-- Shop Music -->
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Shop Music (optional):</label>
+                    <div style="display:flex; gap:5px; margin-top:4px;">
+                        <select id="shopEditorMusic" style="flex:1; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                            <option value="-1">(None)</option>
+                        </select>
+                        <input type="file" id="musicSoundInput" accept="audio/*" onchange="loadSound(event, 'music')" style="display:none;">
+                        <button onclick="document.getElementById('musicSoundInput').click()" style="padding:8px 12px;" title="Add Music">+</button>
+                    </div>
+                    <div id="musicSoundsList" style="max-height:60px; overflow-y:auto; margin-top:5px; font-size:10px;"></div>
+                    <div style="font-size:9px; color:#666; margin-top:2px;">Fades in when shop opens, fades out when closed</div>
+                </div>
+
+                <!-- Items For Sale -->
+                <div style="margin-bottom:15px; background:#1a2a1a; padding:10px; border-radius:4px; border:1px solid #4a8;">
+                    <label style="font-size:12px; color:#4f8; font-weight:bold; display:block; margin-bottom:8px;">Items For Sale</label>
+                    <div id="shopInventoryList" style="max-height:120px; overflow-y:auto; margin-bottom:8px; min-height:40px;">
+                        <div style="color:#666; font-size:11px; text-align:center; padding:10px;">No items for sale yet</div>
+                    </div>
+                    <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
+                        <select id="shopAddItemSelect" style="flex:1; min-width:120px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;">
+                            <option value="">(Select item)</option>
+                        </select>
+                        <div style="display:flex; align-items:center; gap:3px;">
+                            <span style="font-size:10px; color:#fa0;">Price:</span>
+                            <input type="number" id="shopAddItemPrice" style="width:55px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="1" value="10" title="Price">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:3px;">
+                            <span style="font-size:10px; color:#888;">Stock:</span>
+                            <input type="number" id="shopAddItemStock" style="width:50px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="-1" value="-1" title="Stock (-1 = unlimited)">
+                        </div>
+                        <button onclick="shopAddInventoryItem()" style="padding:6px 12px; background:#4a4; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">Add</button>
+                    </div>
+                    <div style="font-size:9px; color:#666; margin-top:4px;">Stock: -1 = unlimited</div>
+                </div>
+
+                <!-- Buy List -->
+                <div style="background:#2a1a1a; padding:10px; border-radius:4px; border:1px solid #a64;">
+                    <label style="font-size:12px; color:#f84; font-weight:bold; display:block; margin-bottom:8px;">Items Shop Will Buy</label>
+                    <div id="shopBuyList" style="max-height:100px; overflow-y:auto; margin-bottom:8px; min-height:40px;">
+                        <div style="color:#666; font-size:11px; text-align:center; padding:10px;">Shop uses default rate for all items</div>
+                    </div>
+                    <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
+                        <select id="shopAddBuyItemSelect" style="flex:1; min-width:120px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;">
+                            <option value="">(Select item)</option>
+                        </select>
+                        <div style="display:flex; align-items:center; gap:3px;">
+                            <span style="font-size:10px; color:#4a8;">Pays:</span>
+                            <input type="number" id="shopAddBuyItemPrice" style="width:55px; padding:6px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; font-size:11px;" min="1" value="5" title="Price shop pays">
+                        </div>
+                        <button onclick="shopAddBuyListItem()" style="padding:6px 12px; background:#844; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">Add</button>
+                    </div>
+                    <div style="font-size:9px; color:#666; margin-top:4px;">Price shop pays player for this item</div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="padding:12px 15px; border-top:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#1a1a1a;">
+                <button onclick="deleteShopFromEditor()" style="padding:8px 15px; background:#633; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">Delete</button>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="previewShopUI()" style="padding:8px 15px; background:#448; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">Preview</button>
+                    <button onclick="closeShopEditor()" style="padding:8px 20px; background:#444; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">Cancel</button>
+                    <button onclick="saveShopEditor()" style="padding:8px 20px; background:linear-gradient(135deg, #fa0, #c80); color:#000; border:none; border-radius:3px; cursor:pointer; font-weight:bold; font-size:12px;">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Door Target Map Modal -->
+    <div id="doorMapModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:10000; justify-content:center; align-items:center;">
+        <div style="background:#2a2a2a; padding:20px; border-radius:8px; min-width:300px; border:2px solid #4af;">
+            <h3 style="margin:0 0 15px 0; color:#4af;">Door <span id="doorModalNumber">1</span></h3>
+
+            <div id="doorMapSelectDiv">
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:5px; color:#aaa;">Target map:</label>
+                    <select id="doorMapSelect" style="width:100%; padding:8px; font-size:14px; background:#333; color:#fff; border:1px solid #555;">
+                    </select>
+                </div>
+
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:5px; color:#aaa;">Or create new map:</label>
+                    <input type="text" id="doorNewMapName" placeholder="Enter new map name..." style="width:100%; padding:8px; font-size:14px; background:#333; color:#fff; border:1px solid #555; box-sizing:border-box;">
+                </div>
+            </div>
+
+            <div style="margin-bottom:15px; padding-top:15px; border-top:1px solid #444;">
+                <label style="display:block; margin-bottom:5px; color:#aaa;">Door Type:</label>
+                <select id="doorModalType" onchange="updateDoorModalOptions()" style="width:100%; padding:8px; font-size:14px; background:#333; color:#fff; border:1px solid #555;">
+                    <option value="walkover">Walk Over (auto)</option>
+                    <option value="interact">Interact (press button)</option>
+                    <option value="external">External Link (to another HTML)</option>
+                </select>
+            </div>
+
+            <!-- External options (shown only for external type) -->
+            <div id="externalOptions" style="display:none; margin-bottom:15px; background:#1a2a3a; padding:10px; border-radius:4px;">
+                <label style="display:block; margin-bottom:8px; color:#0ff; font-weight:bold;">Destination:</label>
+                <select id="externalDestination" style="width:100%; padding:8px; font-size:14px; background:#333; color:#fff; border:1px solid #555;">
+                    <option value="tavern/test-3d-tavern.html">Tavern (3D)</option>
+                </select>
+                <p style="margin:8px 0 0 0; font-size:11px; color:#888;">Player will be transported to this location</p>
+            </div>
+
+            <!-- Walkover options (shown only for walkover type) -->
+            <div id="walkoverOptions" style="margin-bottom:15px; background:#222; padding:10px; border-radius:4px;">
+                <label style="display:block; margin-bottom:8px; color:#4af; font-weight:bold;">Walk-Out Settings:</label>
+
+                <div style="margin-bottom:10px;">
+                    <label style="display:flex; align-items:center; gap:8px; color:#fff; cursor:pointer;">
+                        <input type="checkbox" id="useWalkOutPoint" onchange="toggleWalkOutMode()" style="width:18px; height:18px;">
+                        <span>Set walk-out destination (click on map)</span>
+                    </label>
+                    <p style="margin:5px 0 0 26px; font-size:11px; color:#888;">Player auto-walks to this point before fade</p>
+                </div>
+
+                <div id="walkDirectionOptions">
+                    <label style="display:block; margin-bottom:5px; color:#aaa;">Or walk direction:</label>
+                    <div style="display:flex; gap:5px; margin-bottom:10px;">
+                        <button type="button" onclick="setWalkDirection('up')" id="walkDirUp" style="flex:1; padding:8px; background:#444; border:2px solid #555; color:#fff; cursor:pointer;">↑</button>
+                        <button type="button" onclick="setWalkDirection('down')" id="walkDirDown" style="flex:1; padding:8px; background:#444; border:2px solid #555; color:#fff; cursor:pointer;">↓</button>
+                        <button type="button" onclick="setWalkDirection('left')" id="walkDirLeft" style="flex:1; padding:8px; background:#444; border:2px solid #555; color:#fff; cursor:pointer;">←</button>
+                        <button type="button" onclick="setWalkDirection('right')" id="walkDirRight" style="flex:1; padding:8px; background:#444; border:2px solid #555; color:#fff; cursor:pointer;">→</button>
+                    </div>
+                    <label style="display:block; margin-bottom:5px; color:#aaa;">Walk Duration (seconds):</label>
+                    <input type="number" id="doorWalkDuration" value="0.5" min="0.1" max="5" step="0.1" style="width:100%; padding:8px; font-size:14px; background:#333; color:#fff; border:1px solid #555; box-sizing:border-box;">
+                </div>
+            </div>
+
+            <!-- Interact options (shown only for interact type) -->
+            <div id="interactOptions" style="display:none; margin-bottom:15px; background:#222; padding:10px; border-radius:4px;">
+                <label style="display:block; margin-bottom:8px; color:#f84; font-weight:bold;">Door Animation:</label>
+                <div style="margin-bottom:10px;">
+                    <label style="display:flex; align-items:center; gap:8px; color:#fff; cursor:pointer;">
+                        <input type="checkbox" id="useDoorAnimation" style="width:18px; height:18px;">
+                        <span>Animate door tiles (paint after placing)</span>
+                    </label>
+                    <p style="margin:5px 0 0 26px; font-size:11px; color:#888;">Selected tiles will disappear when door opens</p>
+                </div>
+            </div>
+
+            <div style="margin-bottom:15px;">
+                <label style="display:block; margin-bottom:5px; color:#aaa;">Fade Duration (seconds, 0 = instant):</label>
+                <input type="number" id="doorFadeDuration" value="0.5" min="0" max="3" step="0.1" style="width:100%; padding:8px; font-size:14px; background:#333; color:#fff; border:1px solid #555; box-sizing:border-box;">
+            </div>
+
+            <div style="margin-bottom:15px;">
+                <label style="display:block; margin-bottom:5px; color:#aaa;">🔒 Requires Key (optional):</label>
+                <select id="doorLockSelect" style="width:100%; padding:8px; font-size:14px; background:#333; color:#fff; border:1px solid #555; box-sizing:border-box;">
+                    <option value="-1">None (unlocked)</option>
+                </select>
+                <label style="display:flex; align-items:center; gap:6px; margin-top:6px; font-size:11px; color:#aaa;">
+                    <input type="checkbox" id="doorLockConsume" checked> Consume key on use
+                </label>
+            </div>
+
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button onclick="closeDoorMapModal()" style="padding:8px 16px; background:#555; color:#fff;">Cancel</button>
+                <button id="doorModalConfirmBtn" onclick="confirmDoorMapModal()" style="padding:8px 16px; background:#4af; color:#000; font-weight:bold;">Set Spawn →</button>
+            </div>
+        </div>
+    </div>
+
+    <script>

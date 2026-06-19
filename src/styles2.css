@@ -1,0 +1,217 @@
+        .pratt-box {
+            position: relative;
+            animation: prattSlide 0.3s ease-out;
+        }
+        .pratt-border {
+            position: absolute;
+            inset: -4px;
+            background: linear-gradient(45deg, #f84, #ff0, #4f8, #4ff, #f4f, #f84);
+            background-size: 400% 400%;
+            animation: prattRainbow 3s linear infinite;
+            border-radius: 12px;
+        }
+        .pratt-content {
+            position: relative;
+            background: #111;
+            padding: 25px 35px;
+            border-radius: 8px;
+            text-align: center;
+            min-width: 320px;
+        }
+        .pratt-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+        .pratt-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0 0 12px 0;
+            letter-spacing: 4px;
+        }
+        .pratt-subtitle {
+            color: #4f8;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        .pratt-message {
+            color: #ccc;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        .pratt-highlight {
+            color: #f4f;
+            font-weight: bold;
+        }
+        .pratt-warning {
+            color: #fa0;
+            font-size: 13px;
+            margin-bottom: 20px;
+        }
+        .pratt-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        .pratt-btn {
+            padding: 10px 30px;
+            font-size: 14px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .pratt-btn:hover {
+            transform: scale(1.05);
+        }
+        .pratt-btn:active {
+            transform: scale(0.95);
+        }
+        .pratt-btn-yes {
+            background: linear-gradient(180deg, #4a4 0%, #282 100%);
+            color: #fff;
+            box-shadow: 0 4px 0 #151, 0 0 20px #4f84;
+        }
+        .pratt-btn-no {
+            background: linear-gradient(180deg, #555 0%, #333 100%);
+            color: #aaa;
+            box-shadow: 0 4px 0 #222;
+        }
+        .pratt-footer {
+            color: #555;
+            font-size: 10px;
+            margin-top: 15px;
+            font-style: italic;
+        }
+        @keyframes prattSlide {
+            0% { transform: translateY(-30px); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes prattRainbow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 400% 50%; }
+        }
+
+        /* Player Animation Buttons - Retro Style */
+        .player-anim-btn {
+            border: 2px solid #333;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            text-shadow: 1px 1px 0 rgba(0,0,0,0.5);
+            position: relative;
+        }
+        .player-anim-btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.2);
+        }
+        .player-anim-btn:active {
+            transform: translateY(1px);
+        }
+        .player-anim-btn.has-frames::after {
+            content: '';
+            position: absolute;
+            top: -3px;
+            right: -3px;
+            background: #4f8;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            border: 2px solid #111;
+        }
+
+        /* Walk buttons - Green */
+        .player-anim-btn.walk-btn {
+            background: linear-gradient(180deg, #3a5 0%, #283 100%);
+            border-color: #4c7;
+            color: #cfc;
+        }
+        .player-anim-btn.walk-btn.active {
+            background: linear-gradient(180deg, #5f8 0%, #3a5 100%);
+            border-color: #8fc;
+            box-shadow: 0 0 10px #4f8, inset 0 0 5px rgba(255,255,255,0.3);
+            color: #fff;
+        }
+
+        /* Idle buttons - Cyan */
+        .player-anim-btn.idle-btn {
+            background: linear-gradient(180deg, #357 0%, #235 100%);
+            border-color: #58a;
+            color: #adf;
+        }
+        .player-anim-btn.idle-btn.active {
+            background: linear-gradient(180deg, #5af 0%, #38d 100%);
+            border-color: #8df;
+            box-shadow: 0 0 10px #4af, inset 0 0 5px rgba(255,255,255,0.3);
+            color: #fff;
+        }
+
+        /* Attack buttons - Red */
+        .player-anim-btn.attack-btn {
+            background: linear-gradient(180deg, #744 0%, #522 100%);
+            border-color: #966;
+            color: #fcc;
+        }
+        .player-anim-btn.attack-btn.active {
+            background: linear-gradient(180deg, #f66 0%, #a44 100%);
+            border-color: #f99;
+            box-shadow: 0 0 10px #f44, inset 0 0 5px rgba(255,255,255,0.3);
+            color: #fff;
+        }
+
+        /* Interact buttons - Purple */
+        .player-anim-btn.interact-btn {
+            background: linear-gradient(180deg, #458 0%, #336 100%);
+            border-color: #68a;
+            color: #cdf;
+        }
+        .player-anim-btn.interact-btn.active {
+            background: linear-gradient(180deg, #8af 0%, #58c 100%);
+            border-color: #adf;
+            box-shadow: 0 0 10px #8af, inset 0 0 5px rgba(255,255,255,0.3);
+            color: #fff;
+        }
+
+        /* Death buttons - Dark Red */
+        .player-anim-btn.death-btn {
+            background: linear-gradient(180deg, #633 0%, #411 100%);
+            border-color: #855;
+            color: #faa;
+        }
+        .player-anim-btn.death-btn.active {
+            background: linear-gradient(180deg, #c44 0%, #833 100%);
+            border-color: #f66;
+            box-shadow: 0 0 10px #f44, inset 0 0 5px rgba(255,255,255,0.3);
+            color: #fff;
+        }
+
+        /* Special buttons - Gold */
+        .player-anim-btn.special-btn {
+            background: linear-gradient(180deg, #754 0%, #532 100%);
+            border-color: #a86;
+            color: #fda;
+        }
+        .player-anim-btn.special-btn.active {
+            background: linear-gradient(180deg, #fa4 0%, #c84 100%);
+            border-color: #fc8;
+            box-shadow: 0 0 10px #fa4, inset 0 0 5px rgba(255,255,255,0.3);
+            color: #fff;
+        }
+
+        /* Category headers */
+        .player-anim-category {
+            font-size: 10px;
+            font-weight: bold;
+            padding: 4px 8px;
+            margin: 8px 0 4px 0;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .player-anim-category.walk { background: #283; color: #8fc; }
+        .player-anim-category.idle { background: #235; color: #8df; }
+        .player-anim-category.attack { background: #522; color: #faa; }
+        .player-anim-category.interact { background: #336; color: #adf; }
+        .player-anim-category.death { background: #411; color: #f88; }
+        .player-anim-category.special { background: #532; color: #fd8; }

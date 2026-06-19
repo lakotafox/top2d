@@ -1,0 +1,1159 @@
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Phase screens */
+        .phase { display: none; height: 100vh; }
+        .phase.active { display: flex; }
+
+        /* Public landing gate: hide dev/builder buttons until the secret password is typed */
+        body:not(.dev-unlocked) .dev-only { display: none !important; }
+
+        /* LOAD PHASE */
+        #loadPhase {
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Full-screen looping video behind the menu */
+        #landingBgVideo {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .load-box {
+            text-align: center;
+            padding: 40px 50px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 4px solid #fff;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+            /* Cool load-in: grow from center with a subtle overshoot */
+            animation: growIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+
+        @keyframes growIn {
+            0%   { transform: scale(0);    opacity: 0; }
+            60%  {                         opacity: 1; }
+            100% { transform: scale(1);    opacity: 1; }
+        }
+
+        /* Hold the main menu hidden until first interaction, then grow it in at the
+           same moment the theme song starts (both gated on the first user gesture). */
+        #mainMenu { animation: none; opacity: 0; transform: scale(0); }
+        body.theme-started #mainMenu {
+            opacity: 1;
+            transform: scale(1);
+            animation: growIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+
+        .load-box h1 {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 20px;
+            color: #fff;
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+
+        .load-box p {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 8px;
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        .retro-btn {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 10px;
+            padding: 12px 20px;
+            margin: 8px;
+            background: #000;
+            color: #fff;
+            border: 2px solid #fff;
+            cursor: pointer;
+        }
+
+        .retro-btn:hover {
+            background: #fff;
+            color: #000;
+        }
+
+        @keyframes blink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0; }
+        }
+        .blink { animation: blink 1s step-end infinite; }
+
+        /* COLLISION PHASE */
+        #collisionPhase {
+            flex-direction: column;
+        }
+
+        .collision-header {
+            background: #2a2a4e;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #4af;
+        }
+
+        .collision-header h2 { color: #4af; }
+
+        .collision-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .collision-sidebar {
+            width: 280px;
+            background: #2a2a4e;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .collision-main {
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+            background: #111;
+        }
+
+        #collisionTilesetCanvas {
+            cursor: crosshair;
+            image-rendering: pixelated;
+            border: 2px solid #555;
+        }
+
+        .tool-buttons {
+            display: flex;
+            gap: 5px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+
+        .tool-buttons button.active {
+            background: #4af;
+            color: #000;
+        }
+
+        /* Retro Button Styles */
+        .retro-btn {
+            min-height: 28px;
+            min-width: 32px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: bold;
+            border: 2px solid;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            text-shadow: 1px 1px 0 rgba(0,0,0,0.5);
+            box-shadow: 0 3px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+        .retro-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+        .retro-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+        .retro-cyan { background: #3a8; border-color: #2a6; color: #fff; }
+        .retro-cyan.active { background: #5fc; border-color: #3da; color: #000; box-shadow: 0 0 12px #5fc, 0 3px 0 rgba(0,0,0,0.3); }
+        .retro-purple { background: #86c; border-color: #64a; color: #fff; }
+        .retro-purple.active { background: #a8f; border-color: #86c; color: #000; box-shadow: 0 0 12px #a8f, 0 3px 0 rgba(0,0,0,0.3); }
+        .retro-orange { background: #d84; border-color: #b62; color: #fff; }
+        .retro-orange.active { background: #fa6; border-color: #d84; color: #000; box-shadow: 0 0 12px #fa6, 0 3px 0 rgba(0,0,0,0.3); }
+        .retro-pink { background: #c6a; border-color: #a48; color: #fff; }
+        .retro-pink.active { background: #f8c; border-color: #c6a; color: #000; box-shadow: 0 0 12px #f8c, 0 3px 0 rgba(0,0,0,0.3); }
+        /* Flip - cyan/magenta shift */
+        .retro-blue { background: #38a; border-color: #268; color: #fff; }
+        .retro-blue.active { background: #f0f; border-color: #c0c; color: #fff; box-shadow: 0 0 20px #f0f, 0 0 40px #f0f, 0 3px 0 rgba(0,0,0,0.3); animation: flipPulse 0.5s infinite alternate; }
+        /* Erase - red/yellow danger flash */
+        .retro-red { background: #833; border-color: #611; color: #fff; }
+        .retro-red.active { background: #f00; border-color: #ff0; color: #ff0; box-shadow: 0 0 20px #f00, 0 0 40px #ff0, 0 3px 0 rgba(0,0,0,0.3); animation: erasePulse 0.3s infinite alternate; }
+        .retro-green { background: #3a5; border-color: #283; color: #fff; }
+        .retro-green.active { background: #5f8; border-color: #3a5; color: #000; box-shadow: 0 0 15px #5f8, 0 3px 0 rgba(0,0,0,0.3); animation: copyPulse 0.8s infinite alternate; }
+
+        @keyframes copyPulse {
+            from { background: #5f8; box-shadow: 0 0 10px #5f8, 0 3px 0 rgba(0,0,0,0.3); }
+            to { background: #8fc; box-shadow: 0 0 20px #8fc, 0 3px 0 rgba(0,0,0,0.3); }
+        }
+
+        @keyframes flipPulse {
+            from { background: #f0f; box-shadow: 0 0 15px #f0f, 0 3px 0 rgba(0,0,0,0.3); }
+            to { background: #0ff; box-shadow: 0 0 25px #0ff, 0 3px 0 rgba(0,0,0,0.3); }
+        }
+        @keyframes erasePulse {
+            from { background: #f00; border-color: #ff0; }
+            to { background: #ff0; border-color: #f00; color: #f00; }
+        }
+
+        /* Tileset Picker Styles */
+        .tileset-picker {
+            position: relative;
+            flex: 1;
+        }
+        .tileset-picker-btn {
+            width: 100%;
+            padding: 8px 12px;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-align: left;
+        }
+        .tileset-picker-btn:hover {
+            background: #444;
+            border-color: #666;
+        }
+        .tileset-picker-btn .thumb {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #555;
+            border-radius: 3px;
+            image-rendering: pixelated;
+            background: #222;
+            object-fit: cover;
+        }
+        .tileset-picker-btn .name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .tileset-picker-btn .arrow {
+            font-size: 10px;
+            color: #888;
+        }
+        .tileset-picker-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 300px;
+            overflow-y: auto;
+            background: #2a2a2a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            margin-top: 4px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .tileset-picker-dropdown.open {
+            display: block;
+        }
+        .tileset-picker-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        .tileset-picker-item:last-child {
+            border-bottom: none;
+        }
+        .tileset-picker-item:hover {
+            background: #3a3a3a;
+        }
+        .tileset-picker-item.selected {
+            background: #2a4a6a;
+        }
+        .tileset-picker-item .thumb {
+            width: 48px;
+            height: 48px;
+            border: 1px solid #555;
+            border-radius: 3px;
+            image-rendering: pixelated;
+            background: #222;
+            object-fit: cover;
+        }
+        .tileset-picker-item .info {
+            flex: 1;
+            min-width: 0;
+        }
+        .tileset-picker-item .name {
+            font-weight: bold;
+            color: #fff;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .tileset-picker-item .size {
+            font-size: 11px;
+            color: #888;
+            margin-top: 2px;
+        }
+
+        /* BUILD PHASE */
+        #buildPhase {
+            flex-direction: row;
+        }
+
+        .panel {
+            background: #1a1a1a;
+            padding: 15px;
+            overflow-y: scroll;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            border-right: 2px solid #333;
+        }
+
+        .left-panel {
+            width: 320px;
+            min-width: 100px;
+            max-width: 600px;
+        }
+
+        .map-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .toolbar {
+            padding: 8px 12px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: #0a0a0a;
+            border-bottom: 2px solid #333;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-modes {
+            display: flex;
+            gap: 3px;
+        }
+
+        .toolbar-modes button {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 7px;
+            padding: 14px 12px;
+            background: #1a1a1a;
+            color: #555;
+            border: 1px solid #333;
+            border-radius: 0;
+            transition: all 0.15s;
+        }
+
+        .toolbar-modes button:hover {
+            color: #fff;
+            border-color: #666;
+            background: #222;
+        }
+
+        /* Toolbar mode colors */
+        #tileMode2:hover, #tileMode2.active { border-color: #4a7; color: #4a7; background: #0a1a0a; }
+        #npcMode2:hover, #npcMode2.active { border-color: #f93; color: #f93; background: #1a0f0a; }
+        #animPropMode2:hover, #animPropMode2.active { border-color: #a6f; color: #a6f; background: #120a1a; }
+        #soundMode2:hover, #soundMode2.active { border-color: #fd0; color: #fd0; background: #1a1a0a; }
+        #lightingMode2:hover, #lightingMode2.active { border-color: #0ff; color: #0ff; background: #0a1a1a; }
+        #triggerMode2:hover, #triggerMode2.active { border-color: #f55; color: #f55; background: #1a0a0a; }
+        #cameraMode2:hover, #cameraMode2.active { border-color: #58f; color: #58f; background: #0a0a1a; }
+        #dialogMode2:hover, #dialogMode2.active { border-color: #f6a; color: #f6a; background: #1a0a12; }
+
+        .toolbar-separator {
+            width: 1px;
+            height: 24px;
+            background: #333;
+            margin: 0 5px;
+        }
+
+        .toolbar-spacer {
+            flex: 1;
+        }
+
+        .tools-dropdown {
+            position: relative;
+        }
+
+        .tools-toggle {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 7px;
+            padding: 14px 12px;
+            background: #1a1a1a;
+            color: #888;
+            border: 1px solid #444;
+        }
+
+        .tools-toggle:hover {
+            background: #222;
+            color: #fff;
+        }
+
+        .tools-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            padding: 8px;
+            z-index: 1000;
+            min-width: 150px;
+            margin-top: 4px;
+        }
+
+        .tools-menu.open {
+            display: block;
+        }
+
+        .tools-menu button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            margin: 2px 0;
+            font-size: 10px;
+            padding: 8px 10px;
+        }
+
+        .tools-menu-separator {
+            height: 1px;
+            background: #333;
+            margin: 8px 0;
+        }
+
+        .tools-menu-zoom {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px;
+            color: #888;
+            font-size: 10px;
+        }
+
+        .tools-menu-zoom button {
+            width: auto;
+            padding: 5px 10px;
+            margin: 0;
+        }
+
+        .coop-status-menu {
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 7px;
+            text-align: center;
+            border: 1px solid;
+            border-radius: 0;
+        }
+
+        .coop-status-menu.connected {
+            background: #0a1a0a;
+            color: #0f0;
+            border-color: #0f0;
+        }
+
+        .coop-status-menu.disconnected {
+            background: #1a0a0a;
+            color: #f55;
+            border-color: #f55;
+        }
+
+        .tools-menu-theme {
+            padding: 5px;
+            color: #888;
+            font-size: 10px;
+        }
+
+        .theme-swatches {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .theme-swatch {
+            width: 24px;
+            height: 24px;
+            border: 2px solid #444;
+            padding: 0;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .theme-swatch:hover {
+            border-color: #fff;
+            transform: scale(1.1);
+        }
+
+        .theme-swatch.active {
+            border-color: #4af;
+            box-shadow: 0 0 8px #4af;
+        }
+
+        .toolbar-grab {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 7px;
+            padding: 14px 12px;
+            background: #1a1a1a;
+            color: #888;
+            border: 1px solid #444;
+        }
+
+        .toolbar-grab:hover {
+            background: #222;
+            color: #fff;
+            border-color: #666;
+        }
+
+        .toolbar-grab.active {
+            background: #0a1a2a;
+            color: #4af;
+            border-color: #4af;
+        }
+
+        .spawn-btn {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 7px;
+            padding: 8px 12px;
+            background: #0a1a0a;
+            color: #4a4;
+            border: 2px solid #4a4;
+        }
+
+        .spawn-btn:hover {
+            background: #4a4;
+            color: #000;
+        }
+
+        .spawn-btn.active {
+            background: #4a4;
+            color: #000;
+            animation: spawn-pulse 1s infinite;
+        }
+
+        @keyframes spawn-pulse {
+            0%, 100% { box-shadow: 0 0 5px #4a4; }
+            50% { box-shadow: 0 0 15px #4a4; }
+        }
+
+        .test-map-btn {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 10px;
+            padding: 10px 20px;
+            background: #1a0a0a;
+            color: #f44;
+            border: 2px solid #f44;
+            animation: pulse-glow 2s infinite;
+        }
+
+        .test-map-btn:hover {
+            background: #f44;
+            color: #000;
+            box-shadow: 0 0 20px #f44;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 5px #f44; }
+            50% { box-shadow: 0 0 15px #f44; }
+        }
+
+        @keyframes glow-blink {
+            0%, 100% { opacity: 1; text-shadow: 0 0 10px #0ff, 0 0 20px #0ff; }
+            50% { opacity: 0.5; text-shadow: 0 0 5px #0ff; }
+        }
+
+        .toolbar-hint {
+            color: #444;
+            font-size: 9px;
+            font-family: monospace;
+        }
+
+        .map-viewport {
+            flex: 1;
+            overflow: scroll;
+            -webkit-overflow-scrolling: touch;
+            background: #111;
+            padding: 40px;
+            position: relative;
+        }
+
+        #mapCanvas {
+            border: 2px solid #555;
+            cursor: crosshair;
+            image-rendering: pixelated;
+        }
+
+        #mapCanvas.grabbing {
+            cursor: grab;
+        }
+
+        #mapCanvas.grabbing:active {
+            cursor: grabbing;
+        }
+
+        /* Expand buttons */
+        .expand-btn {
+            position: absolute;
+            background: #4a7c59;
+            color: white;
+            border: none;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            opacity: 0.6;
+            z-index: 10;
+            padding: 0;
+        }
+
+        .expand-btn:hover {
+            opacity: 1;
+            background: #5a9c69;
+        }
+
+        .expand-top {
+            top: 10px;
+            width: 60px;
+            height: 25px;
+        }
+
+        .expand-bottom {
+            width: 60px;
+            height: 25px;
+        }
+
+        .expand-left {
+            left: 10px;
+            width: 25px;
+            height: 60px;
+        }
+
+        .expand-right {
+            width: 25px;
+            height: 60px;
+        }
+
+        /* Common */
+        button {
+            background: #222;
+            color: #aaa;
+            border: 1px solid #444;
+            padding: 8px 14px;
+            border-radius: 0;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.15s;
+        }
+        button:hover { background: #333; color: #fff; border-color: #666; }
+        button.danger { background: #311; color: #f66; border-color: #a55; }
+        button.danger:hover { background: #422; color: #f88; }
+        button.primary { background: #124; color: #4af; border-color: #4af; }
+        button.primary:hover { background: #236; }
+
+        h2 {
+            color: #888;
+            font-size: 11px;
+            margin: 15px 0 8px;
+            font-family: 'Press Start 2P', monospace;
+            letter-spacing: 1px;
+        }
+        h3 {
+            color: #666;
+            font-size: 10px;
+            margin: 10px 0 5px;
+        }
+
+        input[type="file"] { display: none; }
+
+        select, input[type="text"] {
+            padding: 6px;
+            background: #111;
+            border: 1px solid #444;
+            color: #ccc;
+            border-radius: 0;
+            font-size: 12px;
+        }
+
+        .info {
+            color: #666;
+            font-size: 10px;
+            padding: 10px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 0;
+            margin: 10px 0;
+        }
+
+        .tileset-container {
+            background: #000;
+            padding: 5px;
+            border: 1px solid #333;
+            border-radius: 0;
+            overflow: scroll;
+            -webkit-overflow-scrolling: touch;
+            max-height: 300px;
+        }
+
+        #paintTilesetCanvas {
+            cursor: crosshair;
+            image-rendering: pixelated;
+            border: 1px solid #444;
+        }
+
+        .selected-preview {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+            margin: 10px 0;
+            min-height: 68px;
+            max-height: 68px;
+            overflow: hidden;
+        }
+
+        .selected-preview canvas {
+            border: 2px solid #0f0;
+            image-rendering: pixelated;
+            max-width: 48px;
+            max-height: 48px;
+            flex-shrink: 0;
+        }
+
+        .mode-tabs {
+            display: none; /* Hidden - now in toolbar */
+            gap: 4px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .mode-tabs button {
+            flex: 1;
+            min-width: 70px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 7px;
+            padding: 8px 4px;
+            background: #000;
+            color: #666;
+            border: 1px solid #444;
+            border-radius: 0;
+            transition: all 0.15s;
+        }
+
+        .mode-tabs button:hover {
+            color: #fff;
+            border-color: #888;
+        }
+
+        /* Each tab gets its own color theme */
+        #tileMode:hover, #tileMode.active { border-color: #4a7; color: #4a7; background: #0a1a0a; }
+        #npcMode:hover, #npcMode.active { border-color: #f93; color: #f93; background: #1a0f0a; }
+        #animPropMode:hover, #animPropMode.active { border-color: #a6f; color: #a6f; background: #120a1a; }
+        #soundMode:hover, #soundMode.active { border-color: #fd0; color: #fd0; background: #1a1a0a; }
+        #lightingMode:hover, #lightingMode.active { border-color: #0ff; color: #0ff; background: #0a1a1a; }
+        #triggerMode:hover, #triggerMode.active { border-color: #f55; color: #f55; background: #1a0a0a; }
+        #cameraMode:hover, #cameraMode.active { border-color: #58f; color: #58f; background: #0a0a1a; }
+        #dialogMode:hover, #dialogMode.active { border-color: #f6a; color: #f6a; background: #1a0a12; }
+        #questMode:hover, #questMode.active { border-color: #a8f; color: #a8f; background: #1a0a1f; }
+        #questMode2:hover, #questMode2.active { border-color: #a8f; color: #a8f; background: #1a0a1f; }
+        #shopMode:hover, #shopMode.active { border-color: #fa0; color: #fa0; background: #1f1a0a; }
+        #shopMode2:hover, #shopMode2.active { border-color: #fa0; color: #fa0; background: #1f1a0a; }
+
+        .prop-item {
+            background: #333;
+            padding: 8px;
+            border-radius: 5px;
+            margin: 5px 0;
+            font-size: 11px;
+        }
+
+        .prop-item .name { color: #4af; font-weight: bold; }
+
+        .state-picker {
+            position: fixed;
+            background: #2a2a4e;
+            border: 2px solid #4af;
+            border-radius: 8px;
+            padding: 15px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .state-picker.visible { display: block; }
+
+        .state-option {
+            padding: 8px 12px;
+            margin: 3px 0;
+            background: #333;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .state-option:hover { background: #444; }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .zoom-controls button { padding: 4px 10px; }
+        .zoom-controls span { color: #888; font-size: 12px; min-width: 30px; text-align: center; }
+
+        .toolbar span { color: #888; font-size: 11px; }
+
+        /* Animated Prop Editor Modal */
+        .anim-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 2000;
+        }
+        .anim-modal.visible { display: flex; }
+
+        .anim-modal-content {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        .anim-sidebar {
+            width: 280px;
+            background: #2a2a4e;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #4af;
+        }
+
+        .anim-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #1a1a2e;
+            overflow: hidden;
+            min-width: 0;
+        }
+
+        .anim-header {
+            padding: 15px 20px;
+            background: #2a2a4e;
+            border-bottom: 2px solid #4af;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .anim-header h2 { color: #4af; margin: 0; }
+
+        .anim-canvas-area {
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+            display: block;
+            min-height: 0;
+        }
+
+        .anim-canvas-area canvas {
+            border: 2px solid #555;
+            cursor: crosshair;
+            image-rendering: pixelated;
+        }
+
+        .anim-frames-bar {
+            background: #2a2a4e;
+            padding: 15px 20px;
+            border-top: 2px solid #4af;
+        }
+
+        .anim-frames-list {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            min-height: 50px;
+            background: #111;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .anim-frame-thumb {
+            border: 2px solid #4af;
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .anim-frame-thumb:hover { border-color: #fff; }
+
+        /* Dialog page button styles */
+        .dialog-page {
+            padding: 8px 12px;
+            background: #333;
+            border: 2px solid #555;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #aaa;
+        }
+        .dialog-page:hover { border-color: #888; }
+        .dialog-page.active {
+            background: #484;
+            border-color: #6a6;
+            color: #fff;
+        }
+
+        .anim-frame-thumb .frame-num {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            background: rgba(0,0,0,0.8);
+            color: #4af;
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 2px;
+        }
+
+        /* NPC System Styles */
+        .npc-item {
+            background: #333;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+            cursor: pointer;
+            border: 2px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .npc-item:hover { background: #444; }
+        .npc-item.selected { border-color: #4af; background: #3a3a5e; }
+        .npc-item .npc-preview {
+            width: 32px;
+            height: 32px;
+            background: #222;
+            border-radius: 4px;
+            image-rendering: pixelated;
+        }
+        .npc-item .npc-info { flex: 1; }
+        .npc-item .npc-name { color: #4af; font-weight: bold; font-size: 12px; }
+        .npc-item .npc-type { color: #888; font-size: 10px; }
+        .npc-item .npc-actions { display: flex; gap: 5px; }
+        .npc-item .npc-actions button { padding: 3px 8px; font-size: 10px; }
+
+        .npc-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 2000;
+        }
+        .npc-modal.visible { display: flex; justify-content: center; align-items: center; }
+
+        .npc-modal-content {
+            background: #2a2a4e;
+            border: 2px solid #4af;
+            border-radius: 10px;
+            padding: 25px;
+            width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .npc-modal h2 { color: #4af; margin-bottom: 20px; }
+        .npc-modal label { display: block; color: #aaa; font-size: 12px; margin: 10px 0 5px; }
+        .npc-modal input[type="text"], .npc-modal textarea, .npc-modal select {
+            width: 100%;
+            padding: 8px;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .npc-modal textarea { min-height: 80px; resize: vertical; }
+
+        .npc-sprite-preview {
+            background: #111;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .npc-sprite-preview canvas {
+            image-rendering: pixelated;
+            border: 1px solid #444;
+        }
+
+        .npc-modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: flex-end;
+        }
+
+        .placed-npc-item {
+            background: #2a2a3e;
+            padding: 6px 10px;
+            border-radius: 4px;
+            margin: 3px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .placed-npc-item button { padding: 2px 8px; font-size: 10px; background: #a55; }
+
+        /* Hamburger menu and resize handle */
+        .mode-tabs-header {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #2a2a3e;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .hamburger-btn {
+            background: #444;
+            border: none;
+            color: #fff;
+            font-size: 20px;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .hamburger-btn:hover { background: #555; }
+        #currentModeLabel {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .mode-tabs.collapsed {
+            display: none;
+        }
+        .resize-handle {
+            position: relative;
+            width: 24px;
+            height: 100%;
+            min-height: 200px;
+            background: #333;
+            border-left: 2px solid #555;
+            border-right: 2px solid #555;
+            cursor: ew-resize;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .resize-handle::before {
+            content: '‹›';
+            color: #888;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .resize-handle:hover, .resize-handle.active {
+            background: #4af;
+            border-color: #4af;
+        }
+        .resize-handle:hover::before, .resize-handle.active::before {
+            color: #000;
+        }
+
+        /* Mobile/Touch friendly styles */
+        @media (max-width: 1024px), (pointer: coarse) {
+            .toolbar button, .tool-buttons button, .zoom-controls button {
+                min-height: 44px;
+                min-width: 44px;
+                font-size: 14px;
+                padding: 8px 12px;
+            }
+            .sidebar { width: 280px; }
+            .mode-buttons button { padding: 10px 15px; font-size: 13px; }
+            #mapCanvas { touch-action: none; }
+            #paintTilesetCanvas { touch-action: manipulation; }
+            .tileset-container { touch-action: pan-x pan-y; }
+            .map-viewport { touch-action: pan-x pan-y; }
+            .panel { touch-action: pan-y; }
+            .mode-tabs-header { display: flex; }
+            .mode-tabs { display: none; }
+            .mode-tabs.expanded { display: flex; }
+        }
+
+        /* Test Game Console - visible log panel */
+        #testConsole {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            width: 320px;
+            max-height: 300px;
+            background: rgba(0,0,0,0.95);
+            border: 2px solid #4af;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+        }
+        #testConsole.visible { display: flex; }
+        #testConsoleHeader {
+            background: #234;
+            padding: 8px 12px;
+            border-radius: 6px 6px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #4af;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        #testConsoleHeader button {
+            background: #633;
+            border: none;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        #testConsoleHeader button:hover { background: #944; }
+        #testConsoleLogs {
+            flex: 1;
+            max-height: 240px;
+            overflow-y: auto;
+            padding: 8px;
+            color: #0f0;
+        }
+        #testConsoleLogs div {
+            margin: 3px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #222;
+        }
+        #testConsoleLogs .error { color: #f66; }
+        #testConsoleLogs .warn { color: #fa0; }
+        #testConsoleLogs .info { color: #4af; }
+        #testConsoleLogs .stream { color: #8f8; }
+        #testConsoleLogs .time { color: #666; margin-right: 6px; }
