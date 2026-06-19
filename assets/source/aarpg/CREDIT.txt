@@ -1,1 +1,0 @@
-AARPG assets (c) 2024 michaelmalaska — MIT. https://github.com/michaelmalaska/aarpg-tutorial
