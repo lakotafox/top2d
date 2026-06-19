@@ -3,7 +3,7 @@
 ## Version
 
 - **GAME_VERSION:** `0.1.0` (declared near top of `world-builder.html`; displayed on the main menu; stamped into every save as `gameVersion`).
-- **GAME_BUILD:** integer build number = **number of commits on `main`**, shown on the main menu as `v0.1.0 · build N`. **RULE: every time you commit/push to `main`, bump `GAME_BUILD` to match `git rev-list --count HEAD` for the commit being made** (i.e. current count + 1 if you're adding one commit). This keeps the homescreen number in lockstep with pushes to main. Declared right under `GAME_VERSION` in `world-builder.html`.
+- **GAME_BUILD:** integer build number = **number of commits on `main`**, shown on the main menu as `v0.1.<GAME_BUILD>` (semver where the patch IS the commit count, so it climbs every push). **RULE: every time you commit/push to `main`, bump `GAME_BUILD` to match `git rev-list --count HEAD` for the commit being made** (i.e. current count + 1 if you're adding one commit). This keeps the homescreen number in lockstep with pushes to main. Declared right under `GAME_VERSION` in `world-builder.html`. (Bump the `0.1` minor only on deliberate feature milestones; go to `1.0` at launch.)
 - **SAVE_SCHEMA_VERSION:** `1` (stamped into every save; `migrateProjectData(p)` is the migration ladder — add new `if (v < N)` hops as the schema evolves).
 
 ## 🚨 RULE: `world-builder.html` is TWO documents (read before editing ANY shared function)

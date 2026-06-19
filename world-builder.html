@@ -3991,14 +3991,14 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 164;
+        const GAME_BUILD = 165;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
         (function paintVersion() {
             const tryPaint = () => {
                 const el = document.getElementById('mainMenuVersion');
-                if (el) el.textContent = 'v' + GAME_VERSION + ' · build ' + GAME_BUILD;
+                if (el) el.textContent = 'v0.1.' + GAME_BUILD; // patch = commit count on main (climbs every push)
             };
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', tryPaint);
