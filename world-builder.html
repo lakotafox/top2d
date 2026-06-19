@@ -4018,7 +4018,7 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 168;
+        const GAME_BUILD = 169;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
@@ -5982,6 +5982,15 @@
                         btn.textContent = 'Edit Static Object Collision';
                     }
                 }
+            }
+            // Turn off fish-zone draw mode when leaving the Fishing tab so it can't keep
+            // intercepting map drags / forcing redraws in other tools.
+            if (m !== 'fish' && typeof settingFishZones !== 'undefined' && settingFishZones) {
+                settingFishZones = false;
+                fishZoneDragStart = null;
+                fishZoneDragEnd = null;
+                const fb = document.getElementById('setFishZonesBtn');
+                if (fb) { fb.textContent = 'Add Zone'; fb.style.background = '#484'; }
             }
             // Sidebar tabs
             document.getElementById('tileMode').classList.toggle('active', m === 'tile');
