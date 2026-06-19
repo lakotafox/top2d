@@ -2215,6 +2215,14 @@
                     </div>
                 </div>
 
+                <!-- Fishing Loot Table -->
+                <div style="background:#2a2a2a; padding:12px; border-radius:4px; margin-bottom:15px;">
+                    <h4 style="margin:0 0 6px 0; color:#6cf;">Loot Table</h4>
+                    <p style="font-size:10px; color:#888; margin:0 0 8px;">What a catch can pull. Higher weight = more common.</p>
+                    <div id="fishingLootList"></div>
+                    <button onclick="addFishingLootRow()" style="width:100%; margin-top:8px; padding:8px; background:#363; font-size:12px;">+ Add Catch</button>
+                </div>
+
                 <!-- Instructions -->
                 <div style="background:#222; padding:12px; border-radius:4px;">
                     <h4 style="margin:0 0 8px 0; color:#888;">How to use:</h4>
@@ -3248,6 +3256,21 @@
                             <button id="playerAnimReceiveItemLeft" onclick="playerSelectAnim('receiveItemLeft')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">←</button>
                             <button id="playerAnimReceiveItemRight" onclick="playerSelectAnim('receiveItemRight')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">→</button>
                         </div>
+                        <div class="player-anim-category special">🎣 Fishing</div>
+                        <div style="font-size:9px; color:#888; margin:2px 0;">Cast (one-shot)</div>
+                        <div style="display:flex; gap:2px;">
+                            <button id="playerAnimFishCastDown" onclick="playerSelectAnim('fishCastDown')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">↓</button>
+                            <button id="playerAnimFishCastUp" onclick="playerSelectAnim('fishCastUp')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">↑</button>
+                            <button id="playerAnimFishCastLeft" onclick="playerSelectAnim('fishCastLeft')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">←</button>
+                            <button id="playerAnimFishCastRight" onclick="playerSelectAnim('fishCastRight')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">→</button>
+                        </div>
+                        <div style="font-size:9px; color:#888; margin:4px 0 2px;">Wait for bite (loop)</div>
+                        <div style="display:flex; gap:2px;">
+                            <button id="playerAnimFishWaitDown" onclick="playerSelectAnim('fishWaitDown')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">↓</button>
+                            <button id="playerAnimFishWaitUp" onclick="playerSelectAnim('fishWaitUp')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">↑</button>
+                            <button id="playerAnimFishWaitLeft" onclick="playerSelectAnim('fishWaitLeft')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">←</button>
+                            <button id="playerAnimFishWaitRight" onclick="playerSelectAnim('fishWaitRight')" class="player-anim-btn special-btn" style="flex:1; padding:5px; font-size:10px;">→</button>
+                        </div>
                     </div>
                     <!-- Custom animations list -->
                     <div id="playerCustomAnimList" style="margin-top:8px;"></div>
@@ -3991,7 +4014,7 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 165;
+        const GAME_BUILD = 166;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
@@ -4123,7 +4146,7 @@
         let playerEditorFrameH = 64;
         let playerEditorZoom = 3;
         let playerEditorEditingIndex = -1; // -1 = new, >= 0 = editing existing
-        let playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [], receiveItemDown: [], receiveItemUp: [], receiveItemLeft: [], receiveItemRight: [] };
+        let playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [], receiveItemDown: [], receiveItemUp: [], receiveItemLeft: [], receiveItemRight: [], fishCastDown: [], fishCastUp: [], fishCastLeft: [], fishCastRight: [], fishWaitDown: [], fishWaitUp: [], fishWaitLeft: [], fishWaitRight: [] };
         let playerCurrentAnim = 'walkDown';
         let playerPreviewPlaying = false;
         let playerPreviewInterval = null;
@@ -4260,6 +4283,7 @@
 
         // Items System (interactive props like chests)
         let items = []; // Array of item definitions { name, spriteData, frameWidth, frameHeight, frames: [{x,y,w,h},...], fps, idleFrame }
+        let fishingLoot = []; // Fishing loot table: [{ itemIndex, weight }] — what casting in a fish zone can catch
         let currentItemIndex = -1;
         let itemSpriteSheet = null; // Current sprite sheet Image
         let itemSpriteData = null; // Current sprite data URL
@@ -6018,6 +6042,7 @@
             if (m === 'fish') {
                 updateMapDropdowns();
                 updateFishZonesInfo();
+                renderFishingLoot();
             }
             if (m === 'dialog') {
                 updateDialogList();
@@ -11951,7 +11976,7 @@
             playerCurrentSheetIndex = 0;
             playerEditorFrameW = 64;
             playerEditorFrameH = 64;
-            playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [], receiveItemDown: [], receiveItemUp: [], receiveItemLeft: [], receiveItemRight: [] };
+            playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [], receiveItemDown: [], receiveItemUp: [], receiveItemLeft: [], receiveItemRight: [], fishCastDown: [], fishCastUp: [], fishCastLeft: [], fishCastRight: [], fishWaitDown: [], fishWaitUp: [], fishWaitLeft: [], fishWaitRight: [] };
             playerAnimMirrors = {}; // Reset mirror flags
             playerHitboxRange = { up: 35, down: 35, left: 35, right: 30 }; // Reset hitbox shape (per-direction px)
             playerHitboxWidth = 60;
@@ -12221,7 +12246,7 @@
             const hInput = document.getElementById('playerFrameH');
             if (wInput) wInput.value = w;
             if (hInput) hInput.value = h;
-            playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [], receiveItemDown: [], receiveItemUp: [], receiveItemLeft: [], receiveItemRight: [] };
+            playerAnimations = { walkDown: [], walkUp: [], walkLeft: [], walkRight: [], idle: [], idleDown: [], idleUp: [], idleLeft: [], idleRight: [], attackDown: [], attackUp: [], attackLeft: [], attackRight: [], interact: [], death: [], receivedItem: [], receiveItemDown: [], receiveItemUp: [], receiveItemLeft: [], receiveItemRight: [], fishCastDown: [], fishCastUp: [], fishCastLeft: [], fishCastRight: [], fishWaitDown: [], fishWaitUp: [], fishWaitLeft: [], fishWaitRight: [] };
             playerAnimMirrors = {};
             playerUpdateGrid();
             playerDrawCanvas();
@@ -12390,6 +12415,22 @@
                 receiveItemRight: 'playerAnimReceiveItemRight'
             };
             for (const [anim, btnId] of Object.entries(receiveItemDirs)) {
+                const btn = document.getElementById(btnId);
+                if (btn) {
+                    btn.classList.toggle('active', playerCurrentAnim === anim);
+                    const count = playerAnimations[anim]?.length || 0;
+                    btn.classList.toggle('has-frames', count > 0);
+                    const arrow = anim.includes('Down') ? '↓' : anim.includes('Up') ? '↑' : anim.includes('Left') ? '←' : '→';
+                    btn.textContent = arrow + (count > 0 ? '(' + count + ')' : '');
+                }
+            }
+
+            // Fishing buttons (cast one-shot + wait loop, directional)
+            const fishingDirs = {
+                fishCastDown: 'playerAnimFishCastDown', fishCastUp: 'playerAnimFishCastUp', fishCastLeft: 'playerAnimFishCastLeft', fishCastRight: 'playerAnimFishCastRight',
+                fishWaitDown: 'playerAnimFishWaitDown', fishWaitUp: 'playerAnimFishWaitUp', fishWaitLeft: 'playerAnimFishWaitLeft', fishWaitRight: 'playerAnimFishWaitRight'
+            };
+            for (const [anim, btnId] of Object.entries(fishingDirs)) {
                 const btn = document.getElementById(btnId);
                 if (btn) {
                     btn.classList.toggle('active', playerCurrentAnim === anim);
@@ -19385,6 +19426,8 @@
                     return copy;
                 }),
                 placedItems,
+                // Fishing loot table (project-global): [{ itemIndex, weight }]
+                fishingLoot: fishingLoot.map(e => ({ ...e })),
                 // Static objects — spread-with-strip.
                 staticObjects: staticObjects.map(obj => {
                     const copy = { ...obj };
@@ -20164,6 +20207,7 @@
             // Items + placed items.
             items = [];
             placedItems = Array.isArray(project.placedItems) ? project.placedItems : [];
+            fishingLoot = Array.isArray(project.fishingLoot) ? project.fishingLoot.map(e => ({ ...e })) : [];
             if (typeof itemImages !== 'undefined') {
                 for (const k of Object.keys(itemImages)) delete itemImages[k];
             }
@@ -22177,6 +22221,7 @@
             // Load items
             items = [];
             placedItems = p.placedItems || [];
+            fishingLoot = (p.fishingLoot || []).map(e => ({ ...e }));
             currentItemIndex = -1;
             if (p.items && p.items.length > 0) {
                 p.items.forEach((itemData, i) => {
@@ -23664,6 +23709,32 @@
                 info.style.color = '#aaa';
             }
         }
+
+        // ===== FISHING LOOT TABLE (project-global) =====
+        function renderFishingLoot() {
+            const list = document.getElementById('fishingLootList');
+            if (!list) return;
+            if (!fishingLoot.length) {
+                list.innerHTML = '<p style="font-size:10px; color:#666; margin:0;">No catches yet — add items the player can fish up.</p>';
+                return;
+            }
+            const opts = items.map((it, i) => `<option value="${i}">${it.name || ('Item ' + i)}</option>`).join('');
+            list.innerHTML = fishingLoot.map((e, idx) =>
+                `<div style="display:flex; gap:4px; align-items:center; margin-bottom:4px;">
+                    <select onchange="setFishingLootItem(${idx}, this.value)" style="flex:1; font-size:11px; padding:3px;">
+                        <option value="-1">— item —</option>${opts}
+                    </select>
+                    <input type="number" min="1" value="${e.weight || 1}" title="weight (higher = more common)" onchange="setFishingLootWeight(${idx}, this.value)" style="width:48px; font-size:11px; padding:3px;">
+                    <button onclick="removeFishingLootRow(${idx})" style="background:#622; color:#fff; border:none; padding:3px 7px; cursor:pointer;">✕</button>
+                </div>`
+            ).join('');
+            const selects = list.querySelectorAll('select');
+            fishingLoot.forEach((e, idx) => { if (selects[idx]) selects[idx].value = (e.itemIndex != null ? e.itemIndex : -1); });
+        }
+        function addFishingLootRow() { fishingLoot.push({ itemIndex: items.length ? 0 : -1, weight: 1 }); renderFishingLoot(); }
+        function removeFishingLootRow(i) { fishingLoot.splice(i, 1); renderFishingLoot(); }
+        function setFishingLootItem(i, v) { if (fishingLoot[i]) fishingLoot[i].itemIndex = parseInt(v); }
+        function setFishingLootWeight(i, v) { if (fishingLoot[i]) fishingLoot[i].weight = Math.max(1, parseInt(v) || 1); }
 
         // ===== DIALOG SYSTEM =====
         const dialogStylePresets = {
@@ -27478,6 +27549,82 @@
                 startSwordAttack();
             } else if (a.def.behavior === 'boomerang') {
                 throwBoomerang(a.def, a.index);
+            } else if (a.def.behavior === 'fishingPole') {
+                if (player.fishing) player.fishing = null; // reel in / cancel
+                else startFishing();
+            }
+        }
+
+        // ===== FISHING =====
+        // Use a Fishing Pole while facing the edge of a fish zone -> cast -> wait for a
+        // bite -> weighted loot handed over via the existing receive-item animation.
+        function fishZoneInFront() {
+            const md = mapsData[currentGameMap];
+            const zones = (md && md.fishZones) || [];
+            if (!zones.length) return false;
+            const tileSize = gridSize * TILE_SCALE;
+            const ptx = Math.floor((player.x + player.width / 2) / tileSize);
+            const pty = Math.floor((player.y + player.height * 0.8) / tileSize);
+            const v = dirToVec(cardinalOf(player.direction));
+            const ftx = ptx + Math.round(v.x);
+            const fty = pty + Math.round(v.y);
+            const inZone = (tx, ty) => zones.some(z => tx >= z.x && tx < z.x + z.width && ty >= z.y && ty < z.y + z.height);
+            return inZone(ftx, fty) && !inZone(ptx, pty); // facing INTO water, standing on land
+        }
+
+        function startFishing() {
+            if (player.fishing) return;
+            if (player.attacking || isReceivingItem || inventoryOpen || activeDialog || shopOpen) return;
+            if (!fishZoneInFront()) { console.log('[FISHING] Not facing a fish zone edge'); return; }
+            player.moving = false;
+            player.fishing = {
+                phase: 'cast',
+                dir: cardinalOf(player.direction),
+                frame: 0,
+                frameTimer: 0,
+                waitTimer: 0,
+                biteDelay: 120 + Math.floor(Math.random() * 240) // 2-6s at ~60fps
+            };
+            console.log('[FISHING] Cast!');
+        }
+
+        function updateFishing() {
+            if (!player.fishing) return;
+            const f = player.fishing;
+            // Any movement input reels in / cancels the cast.
+            if (keys['ArrowUp'] || keys['ArrowDown'] || keys['ArrowLeft'] || keys['ArrowRight']) {
+                player.fishing = null;
+                return;
+            }
+            const suf = f.dir.charAt(0).toUpperCase() + f.dir.slice(1);
+            if (f.phase === 'cast') {
+                const castFrames = (playerAnimations['fishCast' + suf] || []).length || 1;
+                const fps = playerAnimFpsList['fishCast' + suf] || 8;
+                if (++f.frameTimer >= 60 / fps) { f.frameTimer = 0; f.frame++; }
+                if (f.frame >= castFrames) { f.phase = 'wait'; f.frame = 0; f.frameTimer = 0; f.waitTimer = 0; }
+            } else if (f.phase === 'wait') {
+                const waitFrames = (playerAnimations['fishWait' + suf] || []).length || 1;
+                const fps = playerAnimFpsList['fishWait' + suf] || 6;
+                if (++f.frameTimer >= 60 / fps) { f.frameTimer = 0; f.frame = (f.frame + 1) % waitFrames; }
+                if (++f.waitTimer >= f.biteDelay) catchFish();
+            }
+        }
+
+        function catchFish() {
+            player.fishing = null;
+            const loot = (typeof fishingLoot !== 'undefined' && fishingLoot) || [];
+            let pick = null;
+            if (loot.length) {
+                const total = loot.reduce((s, e) => s + (e.weight || 1), 0);
+                let r = Math.random() * total;
+                for (const e of loot) { r -= (e.weight || 1); if (r <= 0) { pick = e; break; } }
+                if (!pick) pick = loot[loot.length - 1];
+            }
+            if (pick && pick.itemIndex != null && itemsData[pick.itemIndex]) {
+                console.log('[FISHING] Caught:', itemsData[pick.itemIndex].name);
+                startReceivingItem(pick.itemIndex, itemsData[pick.itemIndex]);
+            } else {
+                console.log('[FISHING] Bite! ...but no loot table is set — nothing caught.');
             }
         }
 
@@ -27936,6 +28083,7 @@
 
         // === ITEMS SYSTEM (interactive objects like chests) ===
         itemsData = projectData.items || []; // assigns hoisted top-level var (see decl near playerInventory)
+        var fishingLoot = projectData.fishingLoot || []; // fishing loot table: [{ itemIndex, weight }]
         const placedItemsData = projectData.placedItems || [];
         const itemImages = {}; // Preloaded item sprite images
         const itemStates = {}; // Runtime state for each placed item: { used: false, animating: false, frame: 0 }
@@ -30609,8 +30757,11 @@ Item Receive Display:
             let dx = 0, dy = 0;
             player.moving = false;
 
+            // Advance any in-progress fishing cast/wait (cancels on movement input).
+            updateFishing();
+
             // Check if player can move (based on attack movement setting, receive item state, inventory, dialog, shop)
-            let canMove = !player.attacking && !isReceivingItem && !inventoryOpen && !activeDialog && !shopOpen;
+            let canMove = !player.attacking && !isReceivingItem && !inventoryOpen && !activeDialog && !shopOpen && !player.fishing;
             let moveMultiplier = 1;
 
             if (player.attacking && playerAttackMovement !== 'stop') {
@@ -34102,6 +34253,16 @@ Item Receive Display:
                             animKey = 'idle';
                         }
                     }
+                } else if (player.fishing) {
+                    // Fishing: cast (one-shot) then wait-for-bite (loop), directional
+                    const fsuf = player.fishing.dir.charAt(0).toUpperCase() + player.fishing.dir.slice(1);
+                    const fk = (player.fishing.phase === 'cast' ? 'fishCast' : 'fishWait') + fsuf;
+                    if (playerAnimations[fk] && playerAnimations[fk].length > 0) {
+                        animKey = fk;
+                    } else {
+                        const dirIdleKey = idleDirMap[cardinalOf(player.direction)];
+                        animKey = (playerAnimations[dirIdleKey] && playerAnimations[dirIdleKey].length) ? dirIdleKey : 'idle';
+                    }
                 } else if (player.moving) {
                     // Walk: resolve diagonal->mirror->cardinal (handles 8-dir and 4-dir sprites)
                     const _wr = resolveWalkKey(playerAnimations, player.direction);
@@ -34138,6 +34299,8 @@ Item Receive Display:
                         frameIndex = (player.attackFrame || 0) % frames.length;
                     } else if (isReceivingItem && receivingItemData) {
                         frameIndex = Math.min(receivingItemData.frame || 0, frames.length - 1);
+                    } else if (player.fishing) {
+                        frameIndex = (player.fishing.frame || 0) % frames.length;
                     } else {
                         frameIndex = player.frame % frames.length;
                     }
