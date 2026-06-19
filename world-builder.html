@@ -1480,6 +1480,7 @@
                 <button id="lightingMode" onclick="setMode('lighting')">Lights</button>
                 <button id="triggerMode" onclick="setMode('trigger')">Triggers</button>
                 <button id="cameraMode" onclick="setMode('camera')">Camera</button>
+                <button id="fishMode" onclick="setMode('fish')">Fishing</button>
                 <button id="dialogMode" onclick="setMode('dialog')">Dialogs</button>
                 <button id="itemMode" onclick="setMode('item')">Items</button>
                 <button id="questMode" onclick="setMode('quest')">Quests</button>
@@ -2179,6 +2180,53 @@
                 </div>
             </div>
 
+            <!-- FISHING MODE -->
+            <div id="fishModeContent" style="display:none;">
+                <h3>🎣 Fishing</h3>
+
+                <!-- Current Map -->
+                <div style="background:#1a2a3a; padding:10px; border-radius:4px; margin-bottom:15px;">
+                    <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Current Map:</label>
+                    <select id="fishMapSelect" style="width:100%; padding:6px;" onchange="switchToMap(this.value)">
+                        <option value="main">main</option>
+                    </select>
+                </div>
+
+                <!-- Explanation -->
+                <div style="background:#1a2e2a; padding:12px; border-radius:4px; margin-bottom:15px;">
+                    <p style="font-size:12px; color:#ccc; line-height:1.6; margin:0 0 10px 0;">
+                        <b>Fish Zones</b> mark water the player can fish in. Stand at the edge facing a
+                        zone with a <b style="color:#6cf;">Fishing Pole</b> equipped and press attack to cast.
+                    </p>
+                    <p style="font-size:11px; color:#aaa; line-height:1.5; margin:0;">
+                        Each map can have multiple zones. Make an item's Behavior "Fishing Pole" to use one.
+                    </p>
+                </div>
+
+                <!-- Fish Zone Tool -->
+                <div style="background:#2a2a2a; padding:12px; border-radius:4px; margin-bottom:15px;">
+                    <h4 style="margin:0 0 10px 0; color:#6cf;">Fish Zones</h4>
+                    <div id="fishZonesInfo" style="font-size:12px; color:#aaa; margin-bottom:10px; padding:8px; background:#1a1a1a; border-radius:4px;">
+                        No fish zones
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button id="setFishZonesBtn" onclick="toggleFishZonesMode()" style="flex:1; padding:8px; background:#484; font-size:13px;">Add Zone</button>
+                        <button onclick="clearFishZones()" style="padding:8px 12px; background:#644; font-size:13px;">Clear All</button>
+                    </div>
+                </div>
+
+                <!-- Instructions -->
+                <div style="background:#222; padding:12px; border-radius:4px;">
+                    <h4 style="margin:0 0 8px 0; color:#888;">How to use:</h4>
+                    <ol style="margin:0; padding-left:20px; font-size:11px; color:#aaa; line-height:1.8;">
+                        <li>Click <b style="color:#8f8;">Add Zone</b></li>
+                        <li>Drag on the map over water to make a zone</li>
+                        <li>Drag again to add more zones</li>
+                        <li>Click <b style="color:#8f8;">Done</b> when finished</li>
+                    </ol>
+                </div>
+            </div>
+
             <!-- DIALOG MODE -->
             <div id="dialogModeContent" style="display:none;">
                 <h3>Dialog System</h3>
@@ -2497,6 +2545,7 @@
                     <button id="lightingMode2" onclick="setMode('lighting')">Light</button>
                     <button id="triggerMode2" onclick="setMode('trigger')">Trig</button>
                     <button id="cameraMode2" onclick="setMode('camera')">Cam</button>
+                    <button id="fishMode2" onclick="setMode('fish')">Fish</button>
                     <button id="dialogMode2" onclick="setMode('dialog')">Dialog</button>
                     <button id="itemMode2" onclick="setMode('item')">Items</button>
                     <button id="questMode2" onclick="setMode('quest')">Quest</button>
@@ -3673,6 +3722,7 @@
                         <option value="none">None (just an item)</option>
                         <option value="sword">🗡 Sword (melee weapon)</option>
                         <option value="boomerang">🪃 Boomerang (throw &amp; return)</option>
+                        <option value="fishingPole">🎣 Fishing Pole (cast at water)</option>
                     </select>
                     <div id="itemBehaviorConfig" style="display:none;">
                         <div style="margin-bottom:6px;">
@@ -3938,14 +3988,17 @@
         let mapRows = 30;
 
         // Version tagging — bump GAME_VERSION on releases; SAVE_SCHEMA_VERSION on save-format changes.
+        // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
+        // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
+        const GAME_BUILD = 163;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
         (function paintVersion() {
             const tryPaint = () => {
                 const el = document.getElementById('mainMenuVersion');
-                if (el) el.textContent = 'v' + GAME_VERSION;
+                if (el) el.textContent = 'v' + GAME_VERSION + ' · build ' + GAME_BUILD;
             };
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', tryPaint);
@@ -5911,6 +5964,7 @@
             document.getElementById('lightingMode').classList.toggle('active', m === 'lighting');
             document.getElementById('triggerMode').classList.toggle('active', m === 'trigger');
             document.getElementById('cameraMode').classList.toggle('active', m === 'camera');
+            if (document.getElementById('fishMode')) document.getElementById('fishMode').classList.toggle('active', m === 'fish');
             document.getElementById('dialogMode').classList.toggle('active', m === 'dialog');
             document.getElementById('itemMode').classList.toggle('active', m === 'item');
             document.getElementById('questMode').classList.toggle('active', m === 'quest');
@@ -5924,6 +5978,7 @@
             document.getElementById('lightingMode2').classList.toggle('active', m === 'lighting');
             document.getElementById('triggerMode2').classList.toggle('active', m === 'trigger');
             document.getElementById('cameraMode2').classList.toggle('active', m === 'camera');
+            if (document.getElementById('fishMode2')) document.getElementById('fishMode2').classList.toggle('active', m === 'fish');
             document.getElementById('dialogMode2').classList.toggle('active', m === 'dialog');
             document.getElementById('itemMode2').classList.toggle('active', m === 'item');
             document.getElementById('questMode2').classList.toggle('active', m === 'quest');
@@ -5936,13 +5991,14 @@
             document.getElementById('lightingModeContent').style.display = m === 'lighting' ? 'block' : 'none';
             document.getElementById('triggerModeContent').style.display = m === 'trigger' ? 'block' : 'none';
             document.getElementById('cameraModeContent').style.display = m === 'camera' ? 'block' : 'none';
+            if (document.getElementById('fishModeContent')) document.getElementById('fishModeContent').style.display = m === 'fish' ? 'block' : 'none';
             document.getElementById('dialogModeContent').style.display = m === 'dialog' ? 'block' : 'none';
             document.getElementById('itemModeContent').style.display = m === 'item' ? 'block' : 'none';
             document.getElementById('questModeContent').style.display = m === 'quest' ? 'block' : 'none';
             document.getElementById('shopModeContent').style.display = m === 'shop' ? 'block' : 'none';
 
             // Update mode label for mobile
-            const labels = { tile: 'Tiles', player: 'Player', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers', camera: 'Camera', dialog: 'Dialogs', item: 'Items', quest: 'Quests', shop: 'Shops' };
+            const labels = { tile: 'Tiles', player: 'Player', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers', camera: 'Camera', fish: 'Fishing', dialog: 'Dialogs', item: 'Items', quest: 'Quests', shop: 'Shops' };
             document.getElementById('currentModeLabel').textContent = labels[m] || m;
 
             // Collapse menu on mobile after selection
@@ -5958,6 +6014,10 @@
             if (m === 'camera') {
                 updateMapDropdowns();
                 updateCameraBoundsInfo();
+            }
+            if (m === 'fish') {
+                updateMapDropdowns();
+                updateFishZonesInfo();
             }
             if (m === 'dialog') {
                 updateDialogList();
@@ -7490,6 +7550,16 @@
                 return;
             }
 
+            // Fishing mode - click and drag to add a fish zone
+            if (mode === 'fish') {
+                if (settingFishZones && e.button === 0) {
+                    fishZoneDragStart = { x, y };
+                    fishZoneDragEnd = { x, y };
+                    renderMap();
+                }
+                return;
+            }
+
             // Dialog mode - click NPC to attach dialog, or click tile to place sign
             if (mode === 'dialog') {
                 if (e.button === 0) {
@@ -7671,6 +7741,13 @@
                 return;
             }
 
+            // Handle fish zone dragging
+            if (fishZoneDragStart && settingFishZones) {
+                fishZoneDragEnd = { x, y };
+                renderMap();
+                return;
+            }
+
             // Handle waypoint dragging
             if (npcDraggingWaypoint >= 0 && selectedPlacedNpcIndex >= 0) {
                 const placed = placedNpcs[selectedPlacedNpcIndex];
@@ -7735,6 +7812,11 @@
             // Finish camera bounds drag
             if (cameraBoundsDragStart && cameraBoundsDragEnd && settingCameraBounds) {
                 setCameraBoundsFromDrag();
+            }
+
+            // Finish fish zone drag
+            if (fishZoneDragStart && fishZoneDragEnd && settingFishZones) {
+                setFishZoneFromDrag();
             }
 
             if (copyMode && copyStart && copyEnd) {
@@ -9178,6 +9260,45 @@
                     mapCtx.textAlign = 'center';
                     mapCtx.textBaseline = 'middle';
                     mapCtx.fillText((x2 - x1 + 1) + 'x' + (y2 - y1 + 1) + ' tiles', x1 * tileSize + w / 2, y1 * tileSize + h / 2);
+                }
+
+                // Draw fish zones (cyan) — only on the Fishing tab to avoid clutter
+                if (mode === 'fish') {
+                    fishZones.forEach((z, i) => {
+                        const zx = z.x * tileSize, zy = z.y * tileSize;
+                        const zw = z.width * tileSize, zh = z.height * tileSize;
+                        mapCtx.fillStyle = 'rgba(0, 170, 255, 0.22)';
+                        mapCtx.fillRect(zx, zy, zw, zh);
+                        mapCtx.strokeStyle = '#6cf';
+                        mapCtx.lineWidth = 3;
+                        mapCtx.setLineDash([8, 4]);
+                        mapCtx.strokeRect(zx, zy, zw, zh);
+                        mapCtx.setLineDash([]);
+                        mapCtx.fillStyle = '#6cf';
+                        mapCtx.font = 'bold 11px monospace';
+                        mapCtx.textAlign = 'left';
+                        mapCtx.textBaseline = 'top';
+                        mapCtx.fillText('🎣 FISH ' + (i + 1), zx + 5, zy + 5);
+                    });
+
+                    // Fish zone preview while dragging
+                    if (settingFishZones && fishZoneDragStart && fishZoneDragEnd) {
+                        const x1 = Math.min(fishZoneDragStart.x, fishZoneDragEnd.x);
+                        const y1 = Math.min(fishZoneDragStart.y, fishZoneDragEnd.y);
+                        const x2 = Math.max(fishZoneDragStart.x, fishZoneDragEnd.x);
+                        const y2 = Math.max(fishZoneDragStart.y, fishZoneDragEnd.y);
+                        const w = (x2 - x1 + 1) * tileSize, h = (y2 - y1 + 1) * tileSize;
+                        mapCtx.fillStyle = 'rgba(0, 170, 255, 0.25)';
+                        mapCtx.fillRect(x1 * tileSize, y1 * tileSize, w, h);
+                        mapCtx.strokeStyle = '#6cf';
+                        mapCtx.lineWidth = 3;
+                        mapCtx.strokeRect(x1 * tileSize, y1 * tileSize, w, h);
+                        mapCtx.fillStyle = '#fff';
+                        mapCtx.font = 'bold 12px monospace';
+                        mapCtx.textAlign = 'center';
+                        mapCtx.textBaseline = 'middle';
+                        mapCtx.fillText((x2 - x1 + 1) + 'x' + (y2 - y1 + 1) + ' tiles', x1 * tileSize + w / 2, y1 * tileSize + h / 2);
+                    }
                 }
             }
 
@@ -19436,6 +19557,13 @@
         let builderConnected = false;
         let builderPlayerName = 'Builder';
         let builderRoomCode = null;
+        // Resilient co-op sync: track the latest server edit seq we've applied so we can
+        // ask the server for exactly what we missed after a dropped/slept socket.
+        let builderLastSeq = 0;            // highest server _seq applied
+        let builderWantConnection = false; // true while user is in co-op mode (drives auto-reconnect)
+        let builderReconnectDelay = 1000;
+        let builderReconnectTimer = null;
+        let builderVisibilityHooked = false;
         let testGameWindow = null; // Reference to test game window for solo live sync
 
         // Track who's editing what modal (to prevent conflicts)
@@ -19504,6 +19632,8 @@
 
             builderPlayerName = name;
             builderRoomCode = roomCode;
+            builderWantConnection = true; // we intend to stay connected — drives auto-reconnect
+            hookBuilderVisibility();
             const wsUrl = 'wss://multiplayer.lakotafox.partykit.dev/parties/builder/' + roomCode;
             console.log('[BUILDER MP DEBUG] Connecting to:', wsUrl);
 
@@ -19514,6 +19644,7 @@
                 builderSocket.onopen = () => {
                     console.log('[BUILDER MP DEBUG] WebSocket OPEN!');
                     builderConnected = true;
+                    builderReconnectDelay = 1000; // reset backoff on a successful connect
                     const joinMsg = {
                         type: 'join',
                         name: builderPlayerName,
@@ -19538,7 +19669,6 @@
                 builderSocket.onclose = (event) => {
                     console.log('[BUILDER MP DEBUG] WebSocket CLOSED, code:', event.code, 'reason:', event.reason);
                     builderConnected = false;
-                    showBuilderStatus('Disconnected');
                     // Also close game socket and clear players
                     if (builderGameSocket) {
                         builderGameSocket.close();
@@ -19546,6 +19676,13 @@
                     }
                     gamePlayersInBuilder.clear();
                     renderMap();
+                    // Backgrounded tabs drop sockets — auto-reconnect and catch up on missed edits.
+                    if (builderWantConnection) {
+                        showBuilderStatus('Reconnecting…');
+                        scheduleBuilderReconnect();
+                    } else {
+                        showBuilderStatus('Disconnected');
+                    }
                 };
 
                 builderSocket.onerror = (err) => {
@@ -19679,6 +19816,39 @@
             }
         }
 
+        // Auto-reconnect the co-op socket with capped backoff. The server keeps an
+        // authoritative edit log, so on reconnect we ask for everything missed (requestSince).
+        function scheduleBuilderReconnect() {
+            if (!builderWantConnection || builderReconnectTimer) return;
+            builderReconnectTimer = setTimeout(() => {
+                builderReconnectTimer = null;
+                if (builderWantConnection && (!builderSocket || builderSocket.readyState > 1)) {
+                    console.log('[BUILDER MP] reconnecting (delay was ' + builderReconnectDelay + 'ms)…');
+                    builderReconnectDelay = Math.min(builderReconnectDelay * 1.5, 15000);
+                    connectBuilderMultiplayer(builderPlayerName, builderRoomCode);
+                }
+            }, builderReconnectDelay);
+        }
+
+        // When the tab comes back to the foreground: reconnect if the socket died, or
+        // (if still open) ask the server for any edits that landed while we were away.
+        function hookBuilderVisibility() {
+            if (builderVisibilityHooked) return;
+            builderVisibilityHooked = true;
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden || !builderWantConnection) return;
+                if (!builderSocket || builderSocket.readyState > 1) {
+                    builderReconnectDelay = 1000;
+                    scheduleBuilderReconnect();
+                } else if (builderSocket.readyState === 1) {
+                    try {
+                        builderSocket.send(JSON.stringify({ type: 'requestSince', since: builderLastSeq }));
+                        console.log('[BUILDER MP] tab visible — requesting catch-up since', builderLastSeq);
+                    } catch (e) {}
+                }
+            });
+        }
+
         function handleBuilderMessage(data) {
             console.log('[BUILDER MP DEBUG] handleBuilderMessage received:', data);
             console.log('[BUILDER MP DEBUG] data.type:', data.type);
@@ -19696,6 +19866,14 @@
                     isBuilderHost = (data.players.length === 0);
                     console.log('[BUILDER MP] Players in room:', builderPlayersInRoom.size, '| Host:', isBuilderHost, '| MyId:', builderMyId);
                 }
+                // Ask the server for every edit we missed (covers first join AND reconnect
+                // after a slept tab). builderLastSeq persists across reconnects.
+                if (typeof data.serverSeq === 'number' && data.serverSeq > builderLastSeq) {
+                    try {
+                        builderSocket.send(JSON.stringify({ type: 'requestSince', since: builderLastSeq }));
+                        console.log('[BUILDER MP] welcome: requesting catch-up since', builderLastSeq, '(server at', data.serverSeq + ')');
+                    } catch (e) {}
+                }
                 return;
             }
 
@@ -19703,11 +19881,9 @@
                 if (data.player) {
                     builderPlayersInRoom.set(data.player.id, { name: data.player.name, joinedAt: Date.now() });
                     console.log('[BUILDER MP] Player joined:', data.player.name, '- Total:', builderPlayersInRoom.size);
-                    // Host auto-resyncs late joiners with full project state
-                    if (isBuilderHost) {
-                        console.log('[BUILDER MP] Host: auto-resyncing to late joiner', data.player.id);
-                        setTimeout(() => sendFullProject(data.player.id), 250);
-                    }
+                    // NOTE: late joiners now catch up from the SERVER's authoritative edit log
+                    // (they send requestSince on welcome), so we no longer host-replay here —
+                    // doing both would double-apply edits (e.g. duplicate quests).
                 }
                 return;
             }
@@ -19732,6 +19908,8 @@
                     return;
                 }
                 console.log('[BUILDER MP DEBUG] >>> APPLYING REMOTE EDIT <<<', data.editType);
+                // Advance our catch-up cursor so reconnects only re-request the gap.
+                if (typeof data._seq === 'number' && data._seq > builderLastSeq) builderLastSeq = data._seq;
                 applyRemoteEdit(data);
             }
         }
@@ -20087,16 +20265,23 @@
                     break;
 
                 case 'sessionLogReplay':
-                    // Replay a batch of edits captured on another peer's sessionEditLog.
+                    // Catch-up batch from the server's authoritative log (or a peer's session log).
                     // Base saves are shared out-of-band; this catches us up on in-session changes.
                     if (Array.isArray(edit.edits)) {
                         console.log('[BUILDER MP] Replaying', edit.edits.length, 'session edits');
                         let applied = 0, failed = 0;
                         for (const e of edit.edits) {
-                            try { applyRemoteEdit(e); applied++; }
+                            try {
+                                applyRemoteEdit(e);
+                                if (typeof e._seq === 'number' && e._seq > builderLastSeq) builderLastSeq = e._seq;
+                                applied++;
+                            }
                             catch (err) { failed++; console.warn('[MP] replay failed for', e?.editType, err); }
                         }
-                        showBuilderStatus('Synced ' + applied + ' edits' + (failed ? ' (' + failed + ' failed)' : ''));
+                        // Advance the cursor to the server's reported head so we don't re-request
+                        // gaps (e.g. oversized edits the server didn't log).
+                        if (typeof edit.serverSeq === 'number' && edit.serverSeq > builderLastSeq) builderLastSeq = edit.serverSeq;
+                        if (applied) showBuilderStatus('Synced ' + applied + ' edits' + (failed ? ' (' + failed + ' failed)' : ''));
                     }
                     break;
 
@@ -20700,6 +20885,17 @@
                     }
                     break;
 
+                case 'fishZones':
+                    // Another builder added/cleared fish zones
+                    if (edit.mapName === currentMapName) {
+                        fishZones = (edit.zones || []).map(z => ({ ...z }));
+                        updateFishZonesInfo();
+                        renderMap();
+                    } else if (maps[edit.mapName]) {
+                        maps[edit.mapName].fishZones = (edit.zones || []).map(z => ({ ...z }));
+                    }
+                    break;
+
                 case 'selectAllCollision':
                     // Another builder filled all collision for a tileset
                     selectAllCollision(true, edit.tilesetIndex);
@@ -20851,9 +21047,11 @@
 
                 // ===== QUEST SYNC HANDLERS =====
                 case 'addQuest':
-                    // Another builder added a quest
+                    // Another builder added a quest. Dedup by id so catch-up replays are idempotent.
                     if (edit.quest) {
-                        quests.push(edit.quest);
+                        const existing = quests.findIndex(q => q.id === edit.quest.id);
+                        if (existing >= 0) quests[existing] = edit.quest;
+                        else quests.push(edit.quest);
                         renderQuestList();
                         console.log('[BUILDER MP] Remote quest added:', edit.quest.name);
                     }
@@ -22175,6 +22373,7 @@
         // Save the current map state to the maps object
         // Camera bounds for current map (null = no bounds)
         let cameraBounds = null;
+        let fishZones = []; // [{x,y,width,height}] in tiles — per-map water-fishing zones
 
         function saveCurrentMapState() {
             // Note: tileCollisions, collisionMasks, tileSplitLines are GLOBAL (per-tileset, not per-map)
@@ -22186,7 +22385,8 @@
                 currentLayer: currentLayer,
                 mapCols: mapCols,
                 mapRows: mapRows,
-                cameraBounds: cameraBounds ? { ...cameraBounds } : null
+                cameraBounds: cameraBounds ? { ...cameraBounds } : null,
+                fishZones: fishZones.map(z => ({ ...z }))
             };
             console.log('Saved map state for:', currentMapName);
         }
@@ -22211,6 +22411,7 @@
             mapCols = mapData.mapCols || mapCols;
             mapRows = mapData.mapRows || mapRows;
             cameraBounds = mapData.cameraBounds ? { ...mapData.cameraBounds } : null;
+            fishZones = (mapData.fishZones || []).map(z => ({ ...z }));
             map = layers[currentLayer];
         }
 
@@ -22519,7 +22720,8 @@
                 currentLayer: 0,
                 mapCols: mapCols,
                 mapRows: mapRows,
-                cameraBounds: null // {x, y, width, height} in tiles, null = no bounds
+                cameraBounds: null, // {x, y, width, height} in tiles, null = no bounds
+                fishZones: [] // [{x,y,width,height}] in tiles — water fishing zones
             };
             console.log('Created new map:', name);
         }
@@ -22607,6 +22809,13 @@
             const cameraSelect = document.getElementById('cameraMapSelect');
             if (cameraSelect) {
                 cameraSelect.innerHTML = mapNames.map(name =>
+                    `<option value="${name}" ${name === currentMapName ? 'selected' : ''}>${name}</option>`
+                ).join('');
+            }
+
+            const fishSelect = document.getElementById('fishMapSelect');
+            if (fishSelect) {
+                fishSelect.innerHTML = mapNames.map(name =>
                     `<option value="${name}" ${name === currentMapName ? 'selected' : ''}>${name}</option>`
                 ).join('');
             }
@@ -23376,6 +23585,75 @@
                 info.style.color = '#8f8';
             } else {
                 info.innerHTML = 'No bounds (camera follows player)';
+                info.style.color = '#aaa';
+            }
+        }
+
+        // ===== FISH ZONES TOOL (mirrors camera bounds, but a per-map ARRAY of zones) =====
+        let settingFishZones = false;
+        let fishZoneDragStart = null;
+        let fishZoneDragEnd = null;
+
+        function toggleFishZonesMode() {
+            settingFishZones = !settingFishZones;
+            const btn = document.getElementById('setFishZonesBtn');
+            if (settingFishZones) {
+                if (mode !== 'fish') setMode('fish'); // ensure the map-drag handlers are armed
+                btn.textContent = '✓ Done';
+                btn.style.background = '#8a4';
+            } else {
+                btn.textContent = 'Add Zone';
+                btn.style.background = '#484';
+                fishZoneDragStart = null;
+                fishZoneDragEnd = null;
+            }
+            updateFishZonesInfo();
+            renderMap();
+        }
+
+        function clearFishZones(fromNetwork = false) {
+            fishZones = [];
+            fishZoneDragStart = null;
+            fishZoneDragEnd = null;
+            settingFishZones = false;
+            const btn = document.getElementById('setFishZonesBtn');
+            if (btn) { btn.textContent = 'Add Zone'; btn.style.background = '#484'; }
+            if (!fromNetwork) {
+                broadcastEdit({ editType: 'fishZones', zones: [], mapName: currentMapName });
+            }
+            updateFishZonesInfo();
+            renderMap();
+        }
+
+        function setFishZoneFromDrag() {
+            if (!fishZoneDragStart || !fishZoneDragEnd) return;
+            const x1 = Math.min(fishZoneDragStart.x, fishZoneDragEnd.x);
+            const y1 = Math.min(fishZoneDragStart.y, fishZoneDragEnd.y);
+            const x2 = Math.max(fishZoneDragStart.x, fishZoneDragEnd.x);
+            const y2 = Math.max(fishZoneDragStart.y, fishZoneDragEnd.y);
+
+            // Each drag ADDS a new zone (unlike camera bounds which expands one).
+            fishZones.push({ x: x1, y: y1, width: x2 - x1 + 1, height: y2 - y1 + 1 });
+            broadcastEdit({ editType: 'fishZones', zones: fishZones, mapName: currentMapName });
+
+            fishZoneDragStart = null;
+            fishZoneDragEnd = null;
+            updateFishZonesInfo();
+            renderMap();
+        }
+
+        function updateFishZonesInfo() {
+            const info = document.getElementById('fishZonesInfo');
+            if (!info) return;
+            const n = fishZones.length;
+            if (settingFishZones) {
+                info.innerHTML = n ? `${n} zone${n > 1 ? 's' : ''} - drag to add another` : 'Drag on the map over water';
+                info.style.color = '#fa0';
+            } else if (n) {
+                info.innerHTML = `${n} fish zone${n > 1 ? 's' : ''}`;
+                info.style.color = '#8f8';
+            } else {
+                info.innerHTML = 'No fish zones';
                 info.style.color = '#aaa';
             }
         }

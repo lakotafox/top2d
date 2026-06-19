@@ -6,9 +6,19 @@ interface BuilderPlayer {
 }
 
 const MAX_BUILDERS = 4;
+const LOG_MAX = 5000;                       // cap the in-memory edit log
+const MAX_LOGGED_EDIT_BYTES = 256 * 1024;   // don't log huge asset edits (relay only)
+const CATCHUP_CHUNK = 40;                    // edits per catch-up message
 
 export default class BuilderServer implements Party.Server {
   players: Map<string, BuilderPlayer> = new Map();
+  // Authoritative, sequence-numbered edit log so clients that miss live edits
+  // (e.g. a backgrounded tab whose socket dropped) can catch up on reconnect.
+  // In-memory: survives individual client tab-sleeps because the room (Durable
+  // Object) stays alive while anyone is connected. Cleared only if the room is
+  // fully evicted, at which point peers reload from a shared save anyway.
+  editLog: Array<{ seq: number; payload: any }> = [];
+  seq = 0;
 
   constructor(readonly room: Party.Room) {}
 
@@ -28,6 +38,7 @@ export default class BuilderServer implements Party.Server {
       type: 'welcome',
       yourId: conn.id,
       players: Array.from(this.players.values()),
+      serverSeq: this.seq, // latest edit seq — client uses this to request catch-up
       message: `Welcome! You are builder ${this.players.size + 1}/${MAX_BUILDERS}`
     }));
   }
@@ -54,11 +65,43 @@ export default class BuilderServer implements Party.Server {
           break;
         }
 
+        case 'requestSince': {
+          // A (re)connecting client asks for every edit it missed since `since`.
+          const since = typeof data.since === 'number' ? data.since : 0;
+          const missed = this.editLog.filter(e => e.seq > since);
+          console.log(`Catch-up: ${sender.id.slice(0, 4)} since ${since} -> ${missed.length} edits (serverSeq ${this.seq})`);
+          for (let i = 0; i < missed.length; i += CATCHUP_CHUNK) {
+            const slice = missed.slice(i, i + CATCHUP_CHUNK);
+            sender.send(JSON.stringify({
+              type: 'builderEdit',
+              editType: 'sessionLogReplay',
+              edits: slice.map(e => e.payload),
+              serverSeq: this.seq
+            }));
+          }
+          if (missed.length === 0) {
+            // Nothing missed, but still hand back the cursor so the client can advance it.
+            sender.send(JSON.stringify({ type: 'builderEdit', editType: 'sessionLogReplay', edits: [], serverSeq: this.seq }));
+          }
+          break;
+        }
+
         case 'update':
         case 'builderEdit': {
           // Builder edit - passthrough all fields so future editTypes work
           // without server changes. Overwrite type/senderId for consistency.
-          const payload = { ...data, type: 'builderEdit', senderId: sender.id };
+          // Stamp a monotonic seq so clients can detect/replay gaps.
+          const seq = ++this.seq;
+          const payload = { ...data, type: 'builderEdit', senderId: sender.id, _seq: seq };
+
+          // Log it for catch-up (skip oversized asset edits — those are shared
+          // out-of-band via save files; logging them would bloat memory).
+          const bytes = message.length;
+          // Don't durably log the replay traffic itself, or catch-up would echo forever.
+          if (data.editType !== 'sessionLogReplay' && data.editType !== 'fullProject' && bytes <= MAX_LOGGED_EDIT_BYTES) {
+            this.editLog.push({ seq, payload });
+            if (this.editLog.length > LOG_MAX) this.editLog = this.editLog.slice(-LOG_MAX);
+          }
 
           if (data.targetId && typeof data.targetId === 'string') {
             // Directed message (e.g. host auto-resync to a specific late joiner)
@@ -69,7 +112,7 @@ export default class BuilderServer implements Party.Server {
           }
 
           const sizeKb = (JSON.stringify(payload).length / 1024).toFixed(1);
-          console.log(`Builder edit: ${data.editType}${data.edits ? ` (batch of ${data.edits.length})` : ''}${data.targetId ? ` -> ${data.targetId}` : ''} [${sizeKb}KB]`);
+          console.log(`Builder edit #${seq}: ${data.editType}${data.edits ? ` (batch of ${data.edits.length})` : ''}${data.targetId ? ` -> ${data.targetId}` : ''} [${sizeKb}KB]`);
           break;
         }
 
