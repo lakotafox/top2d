@@ -23,7 +23,7 @@ execSync('node ' + JSON.stringify(resolve(__dirname, 'build.mjs')), { stdio: 'in
 
 // 2) compare to the frozen pre-split original — INFORMATIONAL only (we intentionally
 //    diverge from it via real edits; the node --check gates below are pass/fail).
-const built = readFileSync(resolve(ROOT, 'world-builder.html'));
+const built = readFileSync(resolve(ROOT, 'thesoup.html'));
 const orig = readFileSync(resolve(__dirname, 'world-builder.original.html'));
 if (sha(built) === sha(orig)) ok('byte-identical to frozen original (' + sha(built) + ')');
 else console.log('  note  diverges from frozen original (expected after edits): built=' + sha(built).slice(0, 8) + ' orig=' + sha(orig).slice(0, 8));

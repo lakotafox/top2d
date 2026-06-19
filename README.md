@@ -1,11 +1,11 @@
-  Zelda-Style 2D World Builder
+  TOP down 2D World Builder
 
   A browser-based editor for creating top-down 2D games like Zelda, Pokemon, or Stardew Valley.
 
   Getting Started
 
   1. Download or clone this repo
-  2. Open world-builder.html in your browser
+  2. Open thesoup.html in your browser
   3. That's it! No install needed.
 
   How to Use
