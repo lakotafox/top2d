@@ -1,0 +1,10 @@
+# .NET / MonoGame build artifacts
+bin/
+obj/
+*.user
+.vs/
+# MonoGame content pipeline intermediate
+Content/obj/
+Content/bin/
+# Port-local generated content (derived from copies of originals)
+content-derived/

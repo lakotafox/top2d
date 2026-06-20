@@ -15,7 +15,7 @@
     <!-- PHASE 1: LOAD -->
     <div id="loadPhase" class="phase active">
         <video id="landingBgVideo" autoplay loop muted playsinline>
-            <source src="assets/ui/landing-bg.mp4" type="video/mp4">
+            <source src="assets/ui/landing-bg-pingpong.mp4" type="video/mp4">
         </video>
         <div class="load-box" id="mainMenu">
             <h1>ADVENTURE<br>CRAFTER</h1>
@@ -1376,34 +1376,33 @@
             <!-- UI MODE -->
             <div id="uiModeContent" style="display:none;">
                 <h3 style="color:#0cf;">UI Skins</h3>
-                <div style="background:#222; padding:12px; border-radius:4px; margin-bottom:15px;">
+                <div style="background:#222; padding:12px; border-radius:4px; margin-bottom:12px;">
                     <p style="font-size:11px; color:#aaa; line-height:1.6; margin:0;">
-                        Assign custom art for in-game UI. Each sheet is a <b style="color:#0cf;">16-frame horizontal strip</b> (4096×256, each frame 256×256). Leave empty to use the default look.
+                        Click <b style="color:#0cf;">Set Up</b> to open the full-screen editor and load custom art for an in-game UI element. A single square image = static; a horizontal strip of square frames = animated (auto-detected).
                     </p>
                 </div>
 
-                <!-- Quest Log Button -->
-                <div style="background:#1a2630; padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid #0cf;">
-                    <label style="font-size:12px; color:#0cf; font-weight:bold; display:block; margin-bottom:6px;">Quest Log Button</label>
-                    <canvas id="uiPreview_questLogButton" width="192" height="192" style="width:100%; max-width:192px; background:#111; border:1px solid #333; image-rendering:pixelated; display:block; margin:0 auto 8px;"></canvas>
-                    <input type="file" accept="image/png" onchange="onUiFileChosen('questLogButton', this)" style="width:100%; font-size:10px; margin-bottom:6px;">
-                    <div style="display:flex; gap:6px; align-items:center;">
-                        <label style="font-size:10px; color:#aaa;">FPS</label>
-                        <input type="number" id="uiFps_questLogButton" value="8" min="1" max="30" onchange="setUiFps('questLogButton', parseInt(this.value)||8)" style="width:50px; padding:3px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
-                        <button onclick="clearUiArt('questLogButton')" class="retro-btn" style="margin-left:auto; padding:4px 10px; font-size:10px; background:#844;">Clear</button>
-                    </div>
-                </div>
+                <button class="retro-btn" onclick="openUiLayout()" style="width:100%; padding:8px; background:linear-gradient(135deg,#7b5,#494); color:#000; font-weight:bold; margin-bottom:15px;">⚙ Arrange Layout (position &amp; size)</button>
 
-                <!-- Quest Log Panel -->
-                <div style="background:#1a2630; padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid #0cf;">
-                    <label style="font-size:12px; color:#0cf; font-weight:bold; display:block; margin-bottom:6px;">Quest Log Panel</label>
-                    <canvas id="uiPreview_questLogPanel" width="192" height="192" style="width:100%; max-width:192px; background:#111; border:1px solid #333; image-rendering:pixelated; display:block; margin:0 auto 6px; cursor:crosshair;"></canvas>
-                    <div style="font-size:9px; color:#888; text-align:center; margin-bottom:6px;">Drag on the preview to set where quest text appears</div>
-                    <input type="file" accept="image/png" onchange="onUiFileChosen('questLogPanel', this)" style="width:100%; font-size:10px; margin-bottom:6px;">
-                    <div style="display:flex; gap:6px; align-items:center;">
-                        <label style="font-size:10px; color:#aaa;">FPS</label>
-                        <input type="number" id="uiFps_questLogPanel" value="8" min="1" max="30" onchange="setUiFps('questLogPanel', parseInt(this.value)||8)" style="width:50px; padding:3px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
-                        <button onclick="clearUiArt('questLogPanel')" class="retro-btn" style="margin-left:auto; padding:4px 10px; font-size:10px; background:#844;">Clear</button>
+                <div id="uiSlotList">
+                    <!-- Quest Log Button -->
+                    <div style="background:#1a2630; padding:10px; border-radius:4px; margin-bottom:12px; border:1px solid #0cf; display:flex; align-items:center; gap:10px;">
+                        <canvas id="uiThumb_questLogButton" width="64" height="64" style="background:#111; border:1px solid #333; image-rendering:pixelated; flex:none;"></canvas>
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-size:12px; color:#0cf; font-weight:bold;">Quest Log Button</div>
+                            <div id="uiStatus_questLogButton" style="font-size:10px; color:#888; margin-top:2px;">No image — using default</div>
+                        </div>
+                        <button class="retro-btn" onclick="openUiEditor('questLogButton')" style="flex:none; padding:8px 12px; font-size:11px; background:linear-gradient(135deg,#0cf,#08a); color:#000; font-weight:bold;">Set Up</button>
+                    </div>
+
+                    <!-- Quest Log Panel -->
+                    <div style="background:#1a2630; padding:10px; border-radius:4px; margin-bottom:12px; border:1px solid #0cf; display:flex; align-items:center; gap:10px;">
+                        <canvas id="uiThumb_questLogPanel" width="64" height="64" style="background:#111; border:1px solid #333; image-rendering:pixelated; flex:none;"></canvas>
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-size:12px; color:#0cf; font-weight:bold;">Quest Log Panel</div>
+                            <div id="uiStatus_questLogPanel" style="font-size:10px; color:#888; margin-top:2px;">No image — using default</div>
+                        </div>
+                        <button class="retro-btn" onclick="openUiEditor('questLogPanel')" style="flex:none; padding:8px 12px; font-size:11px; background:linear-gradient(135deg,#0cf,#08a); color:#000; font-weight:bold;">Set Up</button>
                     </div>
                 </div>
 

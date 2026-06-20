@@ -563,6 +563,196 @@
         </div>
     </div>
 
+    <!-- UI Skin Editor Modal (full-page, mirrors the animated-prop editor) -->
+    <div class="anim-modal" id="uiEditorModal">
+        <div class="anim-modal-content">
+            <!-- Sidebar -->
+            <div class="anim-sidebar">
+                <h2 id="uiEditorTitle" style="margin-top:0;">UI Skin</h2>
+
+                <div style="margin-bottom:20px;">
+                    <h3>1. Image</h3>
+                    <input type="file" id="uiEditorFileInput" accept="image/png" style="display:none;" onchange="uiEditorLoadSheet(event)">
+                    <button onclick="document.getElementById('uiEditorFileInput').click()" style="width:100%;">Load Image</button>
+                    <div id="uiEditorFileName" style="font-size:11px; color:#4af; margin-top:5px;"></div>
+                    <div id="uiEditorFrameInfo" style="font-size:11px; color:#888; margin-top:6px;">No image loaded — uses default UI.</div>
+                </div>
+
+                <div id="uiEditorPlaybackSection" style="margin-bottom:20px; display:none;">
+                    <h3>2. Playback</h3>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:8px;">
+                        <input type="checkbox" id="uiEditorAnimated" onchange="uiEditorToggleAnimated(this.checked)">
+                        <span style="font-size:12px;">Animated</span>
+                    </label>
+                    <div id="uiEditorTriggerRow" style="display:none; margin-left:4px;">
+                        <label style="font-size:10px; color:#888;">Play:</label>
+                        <select id="uiEditorTrigger" onchange="uiEditorSetTrigger(this.value)" style="width:100%; margin-top:4px;">
+                            <option value="constant">Always</option>
+                            <option value="hover">On hover</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-top:auto;">
+                    <button onclick="uiEditorSave()" style="width:100%; background:#4af; color:#000; margin-bottom:10px;">Save</button>
+                    <button onclick="uiEditorClear()" style="width:100%; background:#a55; margin-bottom:10px;">Clear / Use default</button>
+                    <button onclick="uiEditorCancel()" style="width:100%; background:#555;">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Main Area -->
+            <div class="anim-main">
+                <div class="anim-header">
+                    <h2>Sprite Sheet</h2>
+                    <span style="color:#888; font-size:12px;">Click a frame on the sheet to add it to the loop</span>
+                    <div style="display:flex; align-items:center; gap:5px; margin-left:auto;">
+                        <span style="color:#888; font-size:11px;">Zoom:</span>
+                        <button onclick="uiEditorZoomOut()" style="padding:2px 8px; font-size:14px;">-</button>
+                        <span id="uiEditorZoomLevel" style="color:#4af; font-size:11px; min-width:42px; text-align:center;">1x</span>
+                        <button onclick="uiEditorZoomIn()" style="padding:2px 8px; font-size:14px;">+</button>
+                    </div>
+                </div>
+
+                <div class="anim-canvas-area">
+                    <canvas id="uiEditorSheetCanvas"></canvas>
+                </div>
+
+                <!-- Bottom Bar: selected frames (timeline) + live preview + speed -->
+                <div class="anim-frames-bar">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <span>Frames in loop: <strong id="uiEditorFrameCount" style="color:#4af;">0</strong></span>
+                        <div style="display:flex; align-items:center; gap:15px;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <canvas id="uiEditorLivePreview" width="48" height="48" style="border:2px solid #4af; border-radius:4px; background:#111; image-rendering:pixelated;"></canvas>
+                                <div style="display:flex; align-items:center; gap:5px; font-size:11px;">
+                                    <span style="color:#888;">Speed:</span>
+                                    <input type="range" id="uiEditorSpeedSlider" min="1" max="30" value="8" style="width:90px;" oninput="uiEditorUpdateSpeed()">
+                                    <span id="uiEditorSpeedLabel" style="color:#4af; min-width:40px;">8 fps</span>
+                                </div>
+                            </div>
+                            <button onclick="uiEditorSelectAll()" style="background:#484; padding:5px 10px; font-size:11px;">Select All</button>
+                            <button onclick="uiEditorClearFrames()" style="background:#a55; padding:5px 10px; font-size:11px;">Clear</button>
+                        </div>
+                    </div>
+                    <div class="anim-frames-list" id="uiEditorFramesList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Layout Modal (position + size of in-game UI over a game screenshot) -->
+    <div class="anim-modal" id="uiLayoutModal">
+        <div class="anim-modal-content">
+            <div class="anim-sidebar">
+                <h2 style="margin-top:0;">UI Layout</h2>
+                <div style="margin-bottom:15px;">
+                    <input type="file" id="uiLayoutScreenshotInput" accept="image/*" style="display:none;" onchange="uiLayoutLoadScreenshot(event)">
+                    <button onclick="document.getElementById('uiLayoutScreenshotInput').click()" style="width:100%;">Load game screenshot</button>
+                    <div style="font-size:10px; color:#888; margin-top:4px;">Reference backdrop only — not saved. Take a screenshot of your game in Test Map.</div>
+                </div>
+
+                <!-- Quest Log Button -->
+                <div id="uiLayoutCtl_questLogButton" style="background:#1a2630; padding:10px; border-radius:4px; margin-bottom:12px; border:1px solid #0cf;">
+                    <label style="font-size:12px; color:#0cf; font-weight:bold;">Quest Log Button</label>
+                    <div id="uiLayoutNote_questLogButton" style="font-size:10px; color:#a85; display:none;">Set up its art first to position it.</div>
+                    <div style="margin-top:6px;">
+                        <label style="font-size:10px; color:#888;">Anchor</label>
+                        <select id="uiLayoutAnchor_questLogButton" onchange="uiLayoutSetAnchor('questLogButton', this.value)" style="width:100%;">
+                            <option value="top-left">Top-Left</option><option value="top-center">Top-Center</option><option value="top-right">Top-Right</option>
+                            <option value="center-left">Center-Left</option><option value="center">Center</option><option value="center-right">Center-Right</option>
+                            <option value="bottom-left">Bottom-Left</option><option value="bottom-center">Bottom-Center</option><option value="bottom-right">Bottom-Right</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <div style="flex:1;"><label style="font-size:10px; color:#888;">Offset X (%)</label><input type="number" id="uiLayoutOffX_questLogButton" onchange="uiLayoutSetOffset('questLogButton','x',parseInt(this.value)||0)" style="width:100%;"></div>
+                        <div style="flex:1;"><label style="font-size:10px; color:#888;">Offset Y (%)</label><input type="number" id="uiLayoutOffY_questLogButton" onchange="uiLayoutSetOffset('questLogButton','y',parseInt(this.value)||0)" style="width:100%;"></div>
+                    </div>
+                    <div style="margin-top:6px;">
+                        <label style="font-size:10px; color:#888;">Size: <span id="uiLayoutSizeLbl_questLogButton">150</span>% of screen height</label>
+                        <input type="range" min="1" max="100" id="uiLayoutSize_questLogButton" oninput="uiLayoutSetSize('questLogButton', parseInt(this.value))" style="width:100%;">
+                    </div>
+                </div>
+
+                <!-- Quest Log Panel -->
+                <div id="uiLayoutCtl_questLogPanel" style="background:#1a2630; padding:10px; border-radius:4px; margin-bottom:12px; border:1px solid #0cf;">
+                    <label style="font-size:12px; color:#0cf; font-weight:bold;">Quest Log Panel</label>
+                    <div id="uiLayoutNote_questLogPanel" style="font-size:10px; color:#a85; display:none;">Set up its art first to position it.</div>
+                    <div style="margin-top:6px;">
+                        <label style="font-size:10px; color:#888;">Anchor</label>
+                        <select id="uiLayoutAnchor_questLogPanel" onchange="uiLayoutSetAnchor('questLogPanel', this.value)" style="width:100%;">
+                            <option value="top-left">Top-Left</option><option value="top-center">Top-Center</option><option value="top-right">Top-Right</option>
+                            <option value="center-left">Center-Left</option><option value="center">Center</option><option value="center-right">Center-Right</option>
+                            <option value="bottom-left">Bottom-Left</option><option value="bottom-center">Bottom-Center</option><option value="bottom-right">Bottom-Right</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; gap:6px; margin-top:6px;">
+                        <div style="flex:1;"><label style="font-size:10px; color:#888;">Offset X (%)</label><input type="number" id="uiLayoutOffX_questLogPanel" onchange="uiLayoutSetOffset('questLogPanel','x',parseInt(this.value)||0)" style="width:100%;"></div>
+                        <div style="flex:1;"><label style="font-size:10px; color:#888;">Offset Y (%)</label><input type="number" id="uiLayoutOffY_questLogPanel" onchange="uiLayoutSetOffset('questLogPanel','y',parseInt(this.value)||0)" style="width:100%;"></div>
+                    </div>
+                    <div style="margin-top:6px;">
+                        <label style="font-size:10px; color:#888;">Size: <span id="uiLayoutSizeLbl_questLogPanel">420</span>% of screen height</label>
+                        <input type="range" min="1" max="100" id="uiLayoutSize_questLogPanel" oninput="uiLayoutSetSize('questLogPanel', parseInt(this.value))" style="width:100%;">
+                    </div>
+                </div>
+
+                <button onclick="uiLayoutLockIn()" style="width:100%; background:#4af; color:#000; margin-top:10px;">Lock In</button>
+            </div>
+
+            <div class="anim-main">
+                <div class="anim-header">
+                    <h2>Layout</h2>
+                    <span style="color:#888; font-size:12px;">Preview over your screenshot — the game uses the real screen size.</span>
+                </div>
+                <div class="anim-canvas-area" style="display:flex; align-items:flex-start; justify-content:center;">
+                    <canvas id="uiLayoutCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quest Text Zone Modal (where "ACTIVE QUESTS" + entries render inside the panel) -->
+    <div class="anim-modal" id="uiZoneModal">
+        <div class="anim-modal-content">
+            <div class="anim-sidebar">
+                <h2 style="margin-top:0;">Quest Text Zone</h2>
+                <p style="font-size:11px; color:#aaa; line-height:1.6;">Drag the <b style="color:#0cf;">cyan</b> (active) and <b style="color:#4f4;">green</b> (completed) boxes to set where quest text appears. The preview is exactly what ships.</p>
+
+                <div style="margin:12px 0; border-top:1px solid #444; padding-top:10px;">
+                    <label style="font-size:12px; color:#0cf; font-weight:bold;">Text Style</label>
+                    <div style="margin-top:6px;">
+                        <label style="font-size:10px; color:#888;">Font</label>
+                        <select id="uiZoneFont" onchange="uiZoneSetTextStyle('font', this.value)" style="width:100%;">
+                            <option value="'Press Start 2P', monospace">Pixel (Press Start 2P)</option>
+                            <option value="monospace">Monospace</option>
+                            <option value="Arial, sans-serif">Sans-serif</option>
+                            <option value="Georgia, serif">Serif</option>
+                        </select>
+                    </div>
+                    <div style="margin-top:6px;">
+                        <label style="font-size:10px; color:#888;">Size: <span id="uiZoneSizeLbl">10</span>px</label>
+                        <input type="range" min="6" max="24" id="uiZoneSize" oninput="uiZoneSetTextStyle('size', parseInt(this.value))" style="width:100%;">
+                    </div>
+                    <div style="display:flex; gap:8px; margin-top:6px;">
+                        <div style="flex:1;"><label style="font-size:10px; color:#888; display:block;">Text</label><input type="color" id="uiZoneColor" onchange="uiZoneSetTextStyle('color', this.value)" style="width:100%; height:28px;"></div>
+                        <div style="flex:1;"><label style="font-size:10px; color:#888; display:block;">Title</label><input type="color" id="uiZoneTitleColor" onchange="uiZoneSetTextStyle('titleColor', this.value)" style="width:100%; height:28px;"></div>
+                    </div>
+                </div>
+
+                <button onclick="uiZoneReset()" style="width:100%; background:#555; margin-bottom:10px;">Reset to default</button>
+                <button onclick="uiZoneClose()" style="width:100%; background:#4af; color:#000;">Lock In</button>
+            </div>
+            <div class="anim-main">
+                <div class="anim-header">
+                    <h2>Panel Preview</h2>
+                    <span style="color:#888; font-size:12px;">Drag the box to move it, its corner to resize.</span>
+                </div>
+                <div class="anim-canvas-area" style="display:flex; align-items:flex-start; justify-content:center;">
+                    <canvas id="uiZoneCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Item Editor Modal -->
     <div class="anim-modal" id="itemModal">
         <div class="anim-modal-content">

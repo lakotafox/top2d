@@ -12,8 +12,6 @@
             questLogButton: { frame: 0, timer: 0 },
             questLogPanel:  { frame: 0, timer: 0 }
         };
-        const UI_FRAME_GAME = 256;   // frame size in the sheet
-        const UI_FRAMES_GAME = 16;   // frames per sheet
         let playerInventory = {};  // { [itemId]: quantity }
         // Hoisted to top-level (was declared inside initGame) so the quest-condition functions
         // defined above initGame (hasInventoryItem/isConditionMet) can read the real inventory.

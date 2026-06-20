@@ -308,16 +308,72 @@
         let questLogVisible = false;
 
         // ===== Custom UI skin helpers (game doc) =====
-        // A slot is skinned only when its sheet Image is fully loaded; otherwise the default
-        // inline-styled DOM look is left untouched. No live updates — uiConfigData is a snapshot.
-        const UI_BUTTON_SKIN_PX = 150;   // displayed square size of the skinned tracker button
-        const UI_PANEL_SKIN_PX = 420;    // displayed square size of the skinned quest-log panel
+        // A slot is skinned only when its sheet Image is loaded; otherwise the default inline-styled
+        // DOM look is left untouched. No live updates — uiConfigData is a snapshot taken at Play.
+        // Per slot: frames (auto-detected), animated (bool), trigger ('constant'|'hover'), fps.
+        const uiHover = { questLogButton: false, questLogPanel: false };
+
+        // Per-slot LAYOUT defaults — resolution-INDEPENDENT (fractions of the screen) so the builder
+        // preview (fraction × screenshot) and the game (fraction × window) match on any res/DPI.
+        // sizePct = fraction of screen HEIGHT (square element); offsetXPct = fraction of width,
+        // offsetYPct = fraction of height (from the anchor). Defaults ≈ the old hardcoded look.
+        const UI_LAYOUT_DEFAULTS = {
+            questLogButton: { anchor: 'top-right',    offsetXPct: 0.008, offsetYPct: 0.012, sizePct: 0.16 },
+            questLogPanel:  { anchor: 'center',        offsetXPct: 0,     offsetYPct: 0,     sizePct: 0.58 },
+            hotbar:         { anchor: 'bottom-center', offsetXPct: 0,     offsetYPct: 0.013, sizePct: 0.34 },
+            inventory:      { anchor: 'center',        offsetXPct: 0,     offsetYPct: 0,     sizePct: 0.55 }
+        };
+        function uiLayoutFor(slot) {
+            const d = UI_LAYOUT_DEFAULTS[slot] || { anchor: 'center', offsetXPct: 0, offsetYPct: 0, sizePct: 0.3 };
+            const c = uiConfigData[slot] || {};
+            return {
+                anchor:     c.anchor || d.anchor,
+                offsetXPct: (c.offsetXPct != null ? c.offsetXPct : d.offsetXPct),
+                offsetYPct: (c.offsetYPct != null ? c.offsetYPct : d.offsetYPct),
+                sizePct:    (c.sizePct    != null ? c.sizePct    : d.sizePct)
+            };
+        }
+        function uiSize(slot) { return Math.max(8, Math.round(uiLayoutFor(slot).sizePct * window.innerHeight)); }
+
+        // Position + size a skinned element on screen from its layout config (fractions -> px).
+        function applyUiLayout(el, slot) {
+            const L = uiLayoutFor(slot);
+            const offX = Math.round(L.offsetXPct * window.innerWidth);
+            const offY = Math.round(L.offsetYPct * window.innerHeight);
+            el.style.position = 'fixed';
+            el.style.top = el.style.bottom = el.style.left = el.style.right = 'auto';
+            let tx = '0', ty = '0', useT = false, a = L.anchor;
+            if (a.startsWith('top')) el.style.top = offY + 'px';
+            else if (a.startsWith('bottom')) el.style.bottom = offY + 'px';
+            else { el.style.top = '50%'; ty = 'calc(-50% + ' + offY + 'px)'; useT = true; }
+            if (a.endsWith('left')) el.style.left = offX + 'px';
+            else if (a.endsWith('right')) el.style.right = offX + 'px';
+            else { el.style.left = '50%'; tx = 'calc(-50% + ' + offX + 'px)'; useT = true; }
+            el.style.transform = useT ? ('translate(' + tx + ',' + ty + ')') : 'none';
+        }
+
+        // Rescale/reposition the skinned HUD when the window/canvas size changes (debounced).
+        let _uiResizeTimer = null;
+        window.addEventListener('resize', function () {
+            clearTimeout(_uiResizeTimer);
+            _uiResizeTimer = setTimeout(function () { if (typeof applyUiSkins === 'function') applyUiSkins(); }, 120);
+        });
 
         function uiSkinReady(slot) {
             return !!(uiImages[slot] && uiImages[slot].complete && uiImages[slot].naturalWidth);
         }
+        function uiFrames(slot) { return (uiConfigData[slot] && uiConfigData[slot].frames) || 1; }
+        // The ordered list of sheet-frame indices to play (creator-selected subset, or all frames).
+        function uiSeq(slot) {
+            const cfg = uiConfigData[slot];
+            if (cfg && cfg.frameSeq && cfg.frameSeq.length) return cfg.frameSeq;
+            const n = uiFrames(slot); const a = [];
+            for (let i = 0; i < n; i++) a.push(i);
+            return a;
+        }
 
-        // Set a slot's static skin (background image + sizing) on a DOM element, once.
+        // Set a slot's background image + sizing on a DOM element. backgroundSize scales the whole
+        // sheet so each frame == sizePx wide; backgroundPosition (set by stepUiSpriteAnim) picks one.
         function applySheetBackground(el, slot, sizePx) {
             el.style.background = 'transparent';
             el.style.border = 'none';
@@ -326,77 +382,111 @@
             el.style.height = sizePx + 'px';
             el.style.backgroundImage = 'url(' + uiConfigData[slot].spriteData + ')';
             el.style.backgroundRepeat = 'no-repeat';
-            el.style.backgroundSize = (UI_FRAMES_GAME * sizePx) + 'px ' + sizePx + 'px';
+            el.style.backgroundSize = (uiFrames(slot) * sizePx) + 'px ' + sizePx + 'px';
         }
-
-        // Per-frame: scroll the sheet to the current frame for a skinned element.
         function stepUiSpriteAnim(elId, slot, sizePx) {
             const el = document.getElementById(elId);
             if (!el || !uiSkinReady(slot)) return;
-            el.style.backgroundPosition = '-' + (uiAnimTimers[slot].frame * sizePx) + 'px 0';
+            const seq = uiSeq(slot);                                   // uiAnimTimers[slot].frame = index INTO seq
+            const actual = seq[uiAnimTimers[slot].frame % seq.length] || 0;
+            el.style.backgroundPosition = '-' + (actual * sizePx) + 'px 0';
+        }
+
+        // Hover tracking (for trigger==='hover'); attach once per element.
+        function attachUiHover(elId, slot) {
+            const el = document.getElementById(elId);
+            if (!el || el.dataset.uiHoverBound) return;
+            el.dataset.uiHoverBound = '1';
+            el.addEventListener('mouseenter', () => { uiHover[slot] = true; });
+            el.addEventListener('mouseleave', () => { uiHover[slot] = false; });
         }
 
         // Apply both skins to their DOM elements (idempotent; safe to call repeatedly).
         function applyUiSkins() {
             const tracker = document.getElementById('questTracker');
             if (tracker && uiSkinReady('questLogButton')) {
-                applySheetBackground(tracker, 'questLogButton', UI_BUTTON_SKIN_PX);
+                applySheetBackground(tracker, 'questLogButton', uiSize('questLogButton'));
+                applyUiLayout(tracker, 'questLogButton');
                 const t = document.getElementById('questTrackerTitle');
                 const o = document.getElementById('questTrackerObjectives');
                 if (t) t.style.display = 'none';
                 if (o) o.style.display = 'none';
-                stepUiSpriteAnim('questTracker', 'questLogButton', UI_BUTTON_SKIN_PX);
+                attachUiHover('questTracker', 'questLogButton');
+                stepUiSpriteAnim('questTracker', 'questLogButton', uiSize('questLogButton'));
             }
             const popup = document.getElementById('questLogPopup');
             if (popup && uiSkinReady('questLogPanel')) {
-                applySheetBackground(popup, 'questLogPanel', UI_PANEL_SKIN_PX);
+                const panelPx = uiSize('questLogPanel');
+                applySheetBackground(popup, 'questLogPanel', panelPx);
+                applyUiLayout(popup, 'questLogPanel');
                 popup.style.maxHeight = 'none';
                 popup.style.overflow = 'visible';
-                // Position the text-content box per the creator-defined rect (256-space -> px).
-                const tb = uiConfigData.questLogPanel.textBox || { x: 24, y: 24, w: 208, h: 208 };
-                const sc = UI_PANEL_SKIN_PX / UI_FRAME_GAME;
-                const content = document.getElementById('questLogContent');
-                if (content) {
-                    content.style.position = 'absolute';
-                    content.style.left = Math.round(tb.x * sc) + 'px';
-                    content.style.top = Math.round(tb.y * sc) + 'px';
-                    content.style.width = Math.round(tb.w * sc) + 'px';
-                    content.style.height = Math.round(tb.h * sc) + 'px';
-                    content.style.overflowY = 'auto';
-                }
+                // Position BOTH quest-text zones (active + completed) per the creator-defined rects
+                // (frame-space -> px). Each scrolls independently inside its own box.
+                const fw = (uiConfigData.questLogPanel && uiConfigData.questLogPanel.frameW) || 256;
+                const sc = panelPx / fw;
+                const pcfg = uiConfigData.questLogPanel || {};
+                const placeZone = function (elId, box, defBox) {
+                    const el = document.getElementById(elId); if (!el) return;
+                    const b = box || defBox;
+                    el.style.position = 'absolute';
+                    el.style.left = Math.round(b.x * sc) + 'px';
+                    el.style.top = Math.round(b.y * sc) + 'px';
+                    el.style.width = Math.round(b.w * sc) + 'px';
+                    el.style.height = Math.round(b.h * sc) + 'px';
+                    el.style.overflowY = 'auto';
+                };
+                placeZone('questLogContent', pcfg.textBox, { x: 50, y: 40, w: 156, h: 80 });
+                placeZone('questLogCompleted', pcfg.completedBox, { x: 50, y: 128, w: 156, h: 80 });
                 // Trim the default header to just a close button in the top-right corner.
                 const header = document.getElementById('questLogHeader');
                 const title = document.getElementById('questLogTitle');
                 if (title) title.style.display = 'none';
                 if (header) {
                     header.style.position = 'absolute';
-                    header.style.top = '6px';
-                    header.style.right = '6px';
-                    header.style.margin = '0';
-                    header.style.border = 'none';
-                    header.style.padding = '0';
+                    header.style.top = '6px'; header.style.right = '6px';
+                    header.style.margin = '0'; header.style.border = 'none'; header.style.padding = '0';
                 }
-                stepUiSpriteAnim('questLogPopup', 'questLogPanel', UI_PANEL_SKIN_PX);
+                attachUiHover('questLogPopup', 'questLogPanel');
+                stepUiSpriteAnim('questLogPopup', 'questLogPanel', panelPx);
             }
+        }
+
+        // Should a skinned slot animate right now? (>1 selected frame + animated + trigger satisfied)
+        function uiShouldAnimate(slot) {
+            const cfg = uiConfigData[slot];
+            if (!cfg || !cfg.animated || uiSeq(slot).length <= 1) return false;
+            if (cfg.trigger === 'hover') return !!uiHover[slot];
+            return true; // 'constant'
         }
 
         // Advance the UI skin loops each frame (button while tracker visible, panel while log open).
         function advanceUiAnims() {
             const tracker = document.getElementById('questTracker');
             if (uiSkinReady('questLogButton') && tracker && tracker.style.display !== 'none') {
-                stepUiAnimTimer('questLogButton');
-                stepUiSpriteAnim('questTracker', 'questLogButton', UI_BUTTON_SKIN_PX);
+                if (uiShouldAnimate('questLogButton')) {
+                    stepUiAnimTimer('questLogButton');
+                    stepUiSpriteAnim('questTracker', 'questLogButton', uiSize('questLogButton'));
+                } else if (uiAnimTimers.questLogButton.frame !== 0) {
+                    uiAnimTimers.questLogButton.frame = 0;
+                    stepUiSpriteAnim('questTracker', 'questLogButton', uiSize('questLogButton'));
+                }
             }
             if (uiSkinReady('questLogPanel') && questLogVisible) {
-                stepUiAnimTimer('questLogPanel');
-                stepUiSpriteAnim('questLogPopup', 'questLogPanel', UI_PANEL_SKIN_PX);
+                if (uiShouldAnimate('questLogPanel')) {
+                    stepUiAnimTimer('questLogPanel');
+                    stepUiSpriteAnim('questLogPopup', 'questLogPanel', uiSize('questLogPanel'));
+                } else if (uiAnimTimers.questLogPanel.frame !== 0) {
+                    uiAnimTimers.questLogPanel.frame = 0;
+                    stepUiSpriteAnim('questLogPopup', 'questLogPanel', uiSize('questLogPanel'));
+                }
             }
         }
         function stepUiAnimTimer(slot) {
             const fps = (uiConfigData[slot] && uiConfigData[slot].fps) || 8;
             const t = uiAnimTimers[slot];
             t.timer++;
-            if (t.timer >= Math.max(1, Math.round(60 / fps))) { t.timer = 0; t.frame = (t.frame + 1) % UI_FRAMES_GAME; }
+            if (t.timer >= Math.max(1, Math.round(60 / fps))) { t.timer = 0; t.frame = (t.frame + 1) % uiSeq(slot).length; }
         }
 
         function updateQuestTracker() {
@@ -406,7 +496,9 @@
             if (!tracker || !titleEl) return;
 
             const activeQuest = getActiveQuest();
-            if (!activeQuest) {
+            // A custom-skinned button is a persistent control to OPEN the log — keep it visible
+            // even with no active quest. The default (unskinned) tracker still hides when idle.
+            if (!activeQuest && !uiSkinReady('questLogButton')) {
                 tracker.style.display = 'none';
                 return;
             }
@@ -453,42 +545,42 @@
             }
         }
 
+        // === SHARED: keep in sync with the builder copy in src/builder/130-ui-tab.js ===
+        // Plain styled quest text (NO boxes — the panel art is the container). One zone (active or
+        // completed). style = uiConfig.questLogPanel.textStyle: { font, size, color, titleColor }.
+        function buildQuestTextHtml(list, isCompleted, style) {
+            const s = style || {};
+            const font = s.font || "'Press Start 2P', monospace";
+            const size = s.size || 10;
+            const color = s.color || '#ffffff';
+            const titleColor = s.titleColor || '#0ff';
+            let html = '<div style="font-family:' + font + '; font-size:' + size + 'px; color:' + color + '; line-height:1.6;">';
+            html += '<div style="color:' + titleColor + '; font-weight:bold; margin-bottom:8px;">' + (isCompleted ? 'COMPLETED' : 'ACTIVE QUESTS') + '</div>';
+            if (!list || list.length === 0) {
+                html += '<div style="opacity:0.55;">' + (isCompleted ? 'None yet' : 'None active') + '</div>';
+            } else if (isCompleted) {
+                list.forEach(function (q) { html += '<div style="color:' + titleColor + '; margin-bottom:6px;">✓ ' + q.name + '</div>'; });
+            } else {
+                list.forEach(function (q) {
+                    html += '<div style="margin-bottom:10px;">';
+                    html += '<div style="color:' + titleColor + '; font-weight:bold;">' + q.name + '</div>';
+                    if (q.description) html += '<div style="margin-top:2px;">' + q.description + '</div>';
+                    html += '</div>';
+                });
+            }
+            html += '</div>';
+            return html;
+        }
+
         function renderQuestLog() {
-            const content = document.getElementById('questLogContent');
-            if (!content || !quests) return;
-
-            let html = '';
-
-            // Active quests - just show name, no objectives
+            if (!quests) return;
+            const activeEl = document.getElementById('questLogContent');     // ACTIVE zone
+            const completedEl = document.getElementById('questLogCompleted'); // COMPLETED zone
             const active = quests.filter(q => gameProgress.questStates[q.id]?.status === QUEST_STATUS.ACTIVE);
-            if (active.length > 0) {
-                html += '<div style="color:#0ff; font-weight:bold; margin-bottom:8px;">ACTIVE QUESTS</div>';
-                active.forEach(q => {
-                    html += '<div style="background:#1a1a2e; border:1px solid #0ff; border-radius:6px; padding:10px; margin-bottom:8px;">';
-                    html += '<div style="color:#FFD700; font-weight:bold;">' + q.name + '</div>';
-                    if (q.description) {
-                        html += '<div style="color:#888; font-size:11px; margin-top:4px;">' + q.description + '</div>';
-                    }
-                    html += '</div>';
-                });
-            }
-
-            // Completed quests
             const completed = quests.filter(q => gameProgress.questStates[q.id]?.status === QUEST_STATUS.COMPLETED);
-            if (completed.length > 0) {
-                html += '<div style="color:#4f4; font-weight:bold; margin:12px 0 8px;">COMPLETED</div>';
-                completed.forEach(q => {
-                    html += '<div style="background:#1a2a1a; border:1px solid #4f4; border-radius:6px; padding:8px; margin-bottom:8px; opacity:0.7;">';
-                    html += '<div style="color:#4f4;">✓ ' + q.name + '</div>';
-                    html += '</div>';
-                });
-            }
-
-            if (!html) {
-                html = '<div style="color:#666; text-align:center; padding:20px;">No active quests</div>';
-            }
-
-            content.innerHTML = html;
+            const style = (uiConfigData.questLogPanel && uiConfigData.questLogPanel.textStyle) || {};
+            if (activeEl) activeEl.innerHTML = buildQuestTextHtml(active, false, style);
+            if (completedEl) completedEl.innerHTML = buildQuestTextHtml(completed, true, style);
         }
 
         // Build registry of animated tile locations (called once on load and when map changes)

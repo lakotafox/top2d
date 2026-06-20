@@ -9,7 +9,7 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 187;
+        const GAME_BUILD = 188;
         const SAVE_SCHEMA_VERSION = 1;
 
         // Render version on main menu once DOM is ready.
