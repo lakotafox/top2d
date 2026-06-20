@@ -7,3 +7,6 @@ assets/fishing/
 .claude/worktrees/
 multiplayer/.partykit/
 multiplayer/public/dist/
+
+# C# MonoGame port lives in its own worktree (../ac-monogame), never on web/main
+/port/
