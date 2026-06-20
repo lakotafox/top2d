@@ -193,6 +193,20 @@
         let polyLightDrawing = false;  // True when drawing a polygon light
         let polyLightPoints = [];      // Current polygon being drawn
 
+        // Custom UI skins (builder doc). null slot = use the built-in default UI.
+        // Each non-null slot: { spriteData:<base64 4096x256 16-frame strip>, frames, frameW, frameH, fps, _img:Image }
+        // questLogPanel also carries textBox:{x,y,w,h} (256-space) = where quest text renders over the art.
+        // _img is runtime-only and MUST be stripped on serialize (see serializeUiConfig).
+        let uiConfig = defaultUiConfig();
+        function defaultUiConfig() {
+            return {
+                questLogButton: null,
+                questLogPanel:  null,
+                hotbar:         null,   // scaffolded — renders default until sprites added
+                inventory:      null    // scaffolded — renders default until sprites added
+            };
+        }
+
         let map = [];
 
         // Canvas refs

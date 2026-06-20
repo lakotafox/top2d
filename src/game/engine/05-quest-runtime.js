@@ -1,6 +1,19 @@
         // ===== QUEST SYSTEM RUNTIME =====
         let quests = [];  // Loaded from projectData
         let questSoundsData = [];  // Quest sounds library
+
+        // ===== CUSTOM UI SKINS (game doc) =====
+        // Snapshot of projectData.uiConfig, captured at initGame (NO live updates — by design).
+        // uiImages: slot -> loaded Image (the 16-frame sheet). uiAnimTimers: slot -> {frame,timer}.
+        // A slot is "skinned" only when uiImages[slot] && uiImages[slot].complete.
+        let uiConfigData = {};
+        const uiImages = {};
+        const uiAnimTimers = {
+            questLogButton: { frame: 0, timer: 0 },
+            questLogPanel:  { frame: 0, timer: 0 }
+        };
+        const UI_FRAME_GAME = 256;   // frame size in the sheet
+        const UI_FRAMES_GAME = 16;   // frames per sheet
         let playerInventory = {};  // { [itemId]: quantity }
         // Hoisted to top-level (was declared inside initGame) so the quest-condition functions
         // defined above initGame (hasInventoryItem/isConditionMet) can read the real inventory.

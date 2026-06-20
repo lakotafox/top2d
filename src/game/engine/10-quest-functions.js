@@ -307,6 +307,98 @@
         // Quest Tracker HUD
         let questLogVisible = false;
 
+        // ===== Custom UI skin helpers (game doc) =====
+        // A slot is skinned only when its sheet Image is fully loaded; otherwise the default
+        // inline-styled DOM look is left untouched. No live updates — uiConfigData is a snapshot.
+        const UI_BUTTON_SKIN_PX = 150;   // displayed square size of the skinned tracker button
+        const UI_PANEL_SKIN_PX = 420;    // displayed square size of the skinned quest-log panel
+
+        function uiSkinReady(slot) {
+            return !!(uiImages[slot] && uiImages[slot].complete && uiImages[slot].naturalWidth);
+        }
+
+        // Set a slot's static skin (background image + sizing) on a DOM element, once.
+        function applySheetBackground(el, slot, sizePx) {
+            el.style.background = 'transparent';
+            el.style.border = 'none';
+            el.style.padding = '0';
+            el.style.width = el.style.minWidth = el.style.maxWidth = sizePx + 'px';
+            el.style.height = sizePx + 'px';
+            el.style.backgroundImage = 'url(' + uiConfigData[slot].spriteData + ')';
+            el.style.backgroundRepeat = 'no-repeat';
+            el.style.backgroundSize = (UI_FRAMES_GAME * sizePx) + 'px ' + sizePx + 'px';
+        }
+
+        // Per-frame: scroll the sheet to the current frame for a skinned element.
+        function stepUiSpriteAnim(elId, slot, sizePx) {
+            const el = document.getElementById(elId);
+            if (!el || !uiSkinReady(slot)) return;
+            el.style.backgroundPosition = '-' + (uiAnimTimers[slot].frame * sizePx) + 'px 0';
+        }
+
+        // Apply both skins to their DOM elements (idempotent; safe to call repeatedly).
+        function applyUiSkins() {
+            const tracker = document.getElementById('questTracker');
+            if (tracker && uiSkinReady('questLogButton')) {
+                applySheetBackground(tracker, 'questLogButton', UI_BUTTON_SKIN_PX);
+                const t = document.getElementById('questTrackerTitle');
+                const o = document.getElementById('questTrackerObjectives');
+                if (t) t.style.display = 'none';
+                if (o) o.style.display = 'none';
+                stepUiSpriteAnim('questTracker', 'questLogButton', UI_BUTTON_SKIN_PX);
+            }
+            const popup = document.getElementById('questLogPopup');
+            if (popup && uiSkinReady('questLogPanel')) {
+                applySheetBackground(popup, 'questLogPanel', UI_PANEL_SKIN_PX);
+                popup.style.maxHeight = 'none';
+                popup.style.overflow = 'visible';
+                // Position the text-content box per the creator-defined rect (256-space -> px).
+                const tb = uiConfigData.questLogPanel.textBox || { x: 24, y: 24, w: 208, h: 208 };
+                const sc = UI_PANEL_SKIN_PX / UI_FRAME_GAME;
+                const content = document.getElementById('questLogContent');
+                if (content) {
+                    content.style.position = 'absolute';
+                    content.style.left = Math.round(tb.x * sc) + 'px';
+                    content.style.top = Math.round(tb.y * sc) + 'px';
+                    content.style.width = Math.round(tb.w * sc) + 'px';
+                    content.style.height = Math.round(tb.h * sc) + 'px';
+                    content.style.overflowY = 'auto';
+                }
+                // Trim the default header to just a close button in the top-right corner.
+                const header = document.getElementById('questLogHeader');
+                const title = document.getElementById('questLogTitle');
+                if (title) title.style.display = 'none';
+                if (header) {
+                    header.style.position = 'absolute';
+                    header.style.top = '6px';
+                    header.style.right = '6px';
+                    header.style.margin = '0';
+                    header.style.border = 'none';
+                    header.style.padding = '0';
+                }
+                stepUiSpriteAnim('questLogPopup', 'questLogPanel', UI_PANEL_SKIN_PX);
+            }
+        }
+
+        // Advance the UI skin loops each frame (button while tracker visible, panel while log open).
+        function advanceUiAnims() {
+            const tracker = document.getElementById('questTracker');
+            if (uiSkinReady('questLogButton') && tracker && tracker.style.display !== 'none') {
+                stepUiAnimTimer('questLogButton');
+                stepUiSpriteAnim('questTracker', 'questLogButton', UI_BUTTON_SKIN_PX);
+            }
+            if (uiSkinReady('questLogPanel') && questLogVisible) {
+                stepUiAnimTimer('questLogPanel');
+                stepUiSpriteAnim('questLogPopup', 'questLogPanel', UI_PANEL_SKIN_PX);
+            }
+        }
+        function stepUiAnimTimer(slot) {
+            const fps = (uiConfigData[slot] && uiConfigData[slot].fps) || 8;
+            const t = uiAnimTimers[slot];
+            t.timer++;
+            if (t.timer >= Math.max(1, Math.round(60 / fps))) { t.timer = 0; t.frame = (t.frame + 1) % UI_FRAMES_GAME; }
+        }
+
         function updateQuestTracker() {
             const tracker = document.getElementById('questTracker');
             const titleEl = document.getElementById('questTrackerTitle');
@@ -324,6 +416,9 @@
 
             // Hide objectives - just show quest name
             if (objectivesEl) objectivesEl.innerHTML = '';
+
+            // Apply custom button skin if assigned (hides the default text, shows the art).
+            applyUiSkins();
         }
 
         function isConditionMet(condition) {
@@ -351,7 +446,10 @@
             const popup = document.getElementById('questLogPopup');
             if (popup) {
                 popup.style.display = questLogVisible ? 'block' : 'none';
-                if (questLogVisible) renderQuestLog();
+                if (questLogVisible) {
+                    applyUiSkins();   // apply panel skin + position content box before filling text
+                    renderQuestLog();
+                }
             }
         }
 

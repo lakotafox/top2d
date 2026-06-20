@@ -43,6 +43,40 @@
             URL.revokeObjectURL(url);
         }
 
+        // Serialize uiConfig: per-slot shallow copy with the runtime _img Image stripped
+        // (JSON.stringify would emit {} for an Image). null slots stay null. Only spriteData
+        // base64 + plain fields persist; _img is rebuilt from spriteData on load.
+        function serializeUiConfig() {
+            const out = {};
+            for (const slot in uiConfig) {
+                const v = uiConfig[slot];
+                if (!v) { out[slot] = null; continue; }
+                const copy = { ...v };
+                delete copy._img;
+                out[slot] = copy;
+            }
+            return out;
+        }
+
+        // Load uiConfig from a saved object — used by BOTH loadProject (.json) and
+        // loadFullProject (co-op). Spread-per-slot so future fields survive; rebuild each
+        // non-null slot's runtime _img from its spriteData base64. Missing slots default to null.
+        function applyUiConfigFromSave(saved) {
+            uiConfig = { ...defaultUiConfig(), ...(saved || {}) };
+            for (const slot in uiConfig) {
+                const v = uiConfig[slot];
+                if (v && v.spriteData) {
+                    const img = new Image();
+                    img.onload = () => {
+                        if (uiConfig[slot]) uiConfig[slot]._img = img;
+                        if (typeof updateUiTab === 'function') updateUiTab();
+                    };
+                    img.src = v.spriteData;
+                }
+            }
+            if (typeof updateUiTab === 'function') updateUiTab();
+        }
+
         function getProjectData() {
             // Save current map state to maps object before saving
             saveCurrentMapState();
@@ -172,6 +206,8 @@
                 shops,
                 placedShops,
                 startingGold,
+                // Custom UI skins — per-slot copy with runtime _img stripped (null slots stay null)
+                uiConfig: serializeUiConfig(),
                 // Version tagging (Wave 1)
                 version: SAVE_SCHEMA_VERSION,
                 gameVersion: GAME_VERSION,
@@ -886,6 +922,9 @@
                 if (radiusEl) radiusEl.value = lightingSettings.playerLightRadius;
                 if (radiusVal) radiusVal.textContent = lightingSettings.playerLightRadius;
             }
+
+            // Custom UI skins (co-op full-sync path — the historical silent-drop site).
+            applyUiConfigFromSave(project.uiConfig);
 
             // Sounds library (with Audio decode) — was silently dropped before.
             sounds = [];
@@ -2099,6 +2138,30 @@
                         console.log('[BUILDER MP] NPC definition deleted:', edit.index);
                     }
                     break;
+
+                case 'setUiConfig':
+                    // Co-op peer assigned/cleared a custom UI skin. edit.slot in uiConfig keys,
+                    // edit.config = stripped slot object (or null to revert to default).
+                    if (edit.slot && (edit.slot in uiConfig)) {
+                        if (edit.config) {
+                            const c = { ...edit.config };
+                            if (c.spriteData) {
+                                const img = new Image();
+                                img.onload = () => {
+                                    if (uiConfig[edit.slot]) uiConfig[edit.slot]._img = img;
+                                    if (typeof updateUiTab === 'function') updateUiTab();
+                                };
+                                img.src = c.spriteData;
+                                c._img = img;
+                            }
+                            uiConfig[edit.slot] = c;
+                        } else {
+                            uiConfig[edit.slot] = null;
+                        }
+                        if (typeof updateUiTab === 'function') updateUiTab();
+                        console.log('[BUILDER MP] UI skin updated:', edit.slot, edit.config ? '(art)' : '(cleared)');
+                    }
+                    break;
                 // ===== end Wave 3 additions =====
             }
         }
@@ -2552,6 +2615,7 @@
             shops = [];
             placedShops = [];
             startingGold = 100;
+            uiConfig = defaultUiConfig();   // New Game starts with default UI (no custom art leak)
             tileSplitLineFlipped = {};
 
             // Initialize empty layer grid
@@ -2909,6 +2973,9 @@
             polyLights = p.polyLights || [];
             updatePlacedLightsList();
             updatePolyLightsList();
+
+            // Custom UI skins (.json load path) — spread-per-slot + rebuild _img.
+            applyUiConfigFromSave(p.uiConfig);
 
             // Load multi-map data
             if (p.maps && Object.keys(p.maps).length > 0) {

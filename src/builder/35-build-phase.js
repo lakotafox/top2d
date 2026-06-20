@@ -251,6 +251,7 @@
             document.getElementById('itemMode').classList.toggle('active', m === 'item');
             document.getElementById('questMode').classList.toggle('active', m === 'quest');
             document.getElementById('shopMode').classList.toggle('active', m === 'shop');
+            if (document.getElementById('uiMode')) document.getElementById('uiMode').classList.toggle('active', m === 'ui');
             // Toolbar tabs
             document.getElementById('tileMode2').classList.toggle('active', m === 'tile');
             if (document.getElementById('playerMode2')) document.getElementById('playerMode2').classList.toggle('active', m === 'player');
@@ -265,6 +266,7 @@
             document.getElementById('itemMode2').classList.toggle('active', m === 'item');
             document.getElementById('questMode2').classList.toggle('active', m === 'quest');
             document.getElementById('shopMode2').classList.toggle('active', m === 'shop');
+            if (document.getElementById('uiMode2')) document.getElementById('uiMode2').classList.toggle('active', m === 'ui');
             document.getElementById('tileModeContent').style.display = m === 'tile' ? 'block' : 'none';
             document.getElementById('playerModeContent').style.display = m === 'player' ? 'block' : 'none';
             document.getElementById('npcModeContent').style.display = m === 'npc' ? 'block' : 'none';
@@ -278,9 +280,10 @@
             document.getElementById('itemModeContent').style.display = m === 'item' ? 'block' : 'none';
             document.getElementById('questModeContent').style.display = m === 'quest' ? 'block' : 'none';
             document.getElementById('shopModeContent').style.display = m === 'shop' ? 'block' : 'none';
+            if (document.getElementById('uiModeContent')) document.getElementById('uiModeContent').style.display = m === 'ui' ? 'block' : 'none';
 
             // Update mode label for mobile
-            const labels = { tile: 'Tiles', player: 'Player', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers', camera: 'Camera', fish: 'Fishing', dialog: 'Dialogs', item: 'Items', quest: 'Quests', shop: 'Shops' };
+            const labels = { tile: 'Tiles', player: 'Player', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers', camera: 'Camera', fish: 'Fishing', dialog: 'Dialogs', item: 'Items', quest: 'Quests', shop: 'Shops', ui: 'UI' };
             document.getElementById('currentModeLabel').textContent = labels[m] || m;
 
             // Collapse menu on mobile after selection
@@ -318,6 +321,7 @@
                 updateShopList();
                 updateNpcShopList();
             }
+            if (m === 'ui' && typeof updateUiTab === 'function') updateUiTab();
 
             // Redraw map to show appropriate overlays
             renderMap();

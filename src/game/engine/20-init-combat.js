@@ -85,6 +85,10 @@
         quests = projectData.quests || [];
         questSoundsData = projectData.questSounds || [];
         initializeQuestStates();
+
+        // Custom UI skins — snapshot at Play (no live updates by design).
+        uiConfigData = projectData.uiConfig || {};
+
         // Update quest tracker after a short delay to ensure UI elements exist
         setTimeout(updateQuestTracker, 100);
 
@@ -302,6 +306,8 @@
         if (projectData.propImageData && propsData.length === 0) imagesToLoad += 1; // Legacy single prop
         imagesToLoad += (projectData.npcs || []).filter(n => n && n.spriteData).length; // NPC sprites
         imagesToLoad += 1; // Player sprite
+        imagesToLoad += ['questLogButton','questLogPanel','hotbar','inventory']
+            .filter(s => uiConfigData[s] && uiConfigData[s].spriteData).length; // Custom UI skins
 
         // Detect mobile for staggered loading
         const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -417,6 +423,27 @@
                 };
                 img.src = propData.spriteData;
                 animPropImages[i] = img;
+            }
+        });
+
+        // Load custom UI skin sheets (onload AND onerror both advance the loader so a bad sheet
+        // can never hang boot at the loading screen). On ready, apply skins to the DOM elements.
+        ['questLogButton','questLogPanel','hotbar','inventory'].forEach(slot => {
+            const cfg = uiConfigData[slot];
+            if (cfg && cfg.spriteData) {
+                const img = new Image();
+                img.onload = () => {
+                    uiImages[slot] = img;
+                    imagesLoaded++;
+                    if (typeof applyUiSkins === 'function') applyUiSkins();
+                    checkAllImagesLoaded();
+                };
+                img.onerror = () => {
+                    console.error('Failed to load UI skin', slot);
+                    imagesLoaded++;
+                    checkAllImagesLoaded();
+                };
+                img.src = cfg.spriteData;
             }
         });
 

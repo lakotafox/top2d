@@ -73,6 +73,9 @@
                 // Update dialog typewriter effect
                 updateDialogTyping();
 
+                // Advance custom UI skin animations (self-gates on visibility; no-op if unskinned)
+                advanceUiAnims();
+
                 if (!isTransitioning || transitionPhase === 'fadeIn' || transitionPhase === 'forceWalk') {
                     // Allow player to be visible during forced walk but don't allow input
                     // Don't update if player is dying or game over

@@ -1489,6 +1489,7 @@
                 <button id="itemMode" onclick="setMode('item')">Items</button>
                 <button id="questMode" onclick="setMode('quest')">Quests</button>
                 <button id="shopMode" onclick="setMode('shop')">Shops</button>
+                <button id="uiMode" onclick="setMode('ui')">UI</button>
             </div>
 
             <!-- TILE MODE -->
@@ -2541,6 +2542,51 @@
                     </div>
                 </div>
             </div>
+
+            <!-- UI MODE -->
+            <div id="uiModeContent" style="display:none;">
+                <h3 style="color:#0cf;">UI Skins</h3>
+                <div style="background:#222; padding:12px; border-radius:4px; margin-bottom:15px;">
+                    <p style="font-size:11px; color:#aaa; line-height:1.6; margin:0;">
+                        Assign custom art for in-game UI. Each sheet is a <b style="color:#0cf;">16-frame horizontal strip</b> (4096×256, each frame 256×256). Leave empty to use the default look.
+                    </p>
+                </div>
+
+                <!-- Quest Log Button -->
+                <div style="background:#1a2630; padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid #0cf;">
+                    <label style="font-size:12px; color:#0cf; font-weight:bold; display:block; margin-bottom:6px;">Quest Log Button</label>
+                    <canvas id="uiPreview_questLogButton" width="192" height="192" style="width:100%; max-width:192px; background:#111; border:1px solid #333; image-rendering:pixelated; display:block; margin:0 auto 8px;"></canvas>
+                    <input type="file" accept="image/png" onchange="onUiFileChosen('questLogButton', this)" style="width:100%; font-size:10px; margin-bottom:6px;">
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <label style="font-size:10px; color:#aaa;">FPS</label>
+                        <input type="number" id="uiFps_questLogButton" value="8" min="1" max="30" onchange="setUiFps('questLogButton', parseInt(this.value)||8)" style="width:50px; padding:3px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                        <button onclick="clearUiArt('questLogButton')" class="retro-btn" style="margin-left:auto; padding:4px 10px; font-size:10px; background:#844;">Clear</button>
+                    </div>
+                </div>
+
+                <!-- Quest Log Panel -->
+                <div style="background:#1a2630; padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid #0cf;">
+                    <label style="font-size:12px; color:#0cf; font-weight:bold; display:block; margin-bottom:6px;">Quest Log Panel</label>
+                    <canvas id="uiPreview_questLogPanel" width="192" height="192" style="width:100%; max-width:192px; background:#111; border:1px solid #333; image-rendering:pixelated; display:block; margin:0 auto 6px; cursor:crosshair;"></canvas>
+                    <div style="font-size:9px; color:#888; text-align:center; margin-bottom:6px;">Drag on the preview to set where quest text appears</div>
+                    <input type="file" accept="image/png" onchange="onUiFileChosen('questLogPanel', this)" style="width:100%; font-size:10px; margin-bottom:6px;">
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <label style="font-size:10px; color:#aaa;">FPS</label>
+                        <input type="number" id="uiFps_questLogPanel" value="8" min="1" max="30" onchange="setUiFps('questLogPanel', parseInt(this.value)||8)" style="width:50px; padding:3px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                        <button onclick="clearUiArt('questLogPanel')" class="retro-btn" style="margin-left:auto; padding:4px 10px; font-size:10px; background:#844;">Clear</button>
+                    </div>
+                </div>
+
+                <!-- Scaffolded (default-only for now) -->
+                <div style="background:#181818; padding:10px; border-radius:4px; margin-bottom:10px; border:1px solid #333; opacity:0.55;">
+                    <label style="font-size:12px; color:#888; font-weight:bold; display:block;">Hotbar</label>
+                    <div style="font-size:10px; color:#666;">Uses default (no sprites yet)</div>
+                </div>
+                <div style="background:#181818; padding:10px; border-radius:4px; border:1px solid #333; opacity:0.55;">
+                    <label style="font-size:12px; color:#888; font-weight:bold; display:block;">Inventory</label>
+                    <div style="font-size:10px; color:#666;">Uses default (no sprites yet)</div>
+                </div>
+            </div>
         </div>
 
         <div class="resize-handle" id="sidebarResize"></div>
@@ -2562,6 +2608,7 @@
                     <button id="itemMode2" onclick="setMode('item')">Items</button>
                     <button id="questMode2" onclick="setMode('quest')">Quest</button>
                     <button id="shopMode2" onclick="setMode('shop')">Shop</button>
+                    <button id="uiMode2" onclick="setMode('ui')">UI</button>
                 </div>
 
                 <!-- Map Selector in Toolbar -->
@@ -4419,6 +4466,20 @@
         let polyLightDrawing = false;  // True when drawing a polygon light
         let polyLightPoints = [];      // Current polygon being drawn
 
+        // Custom UI skins (builder doc). null slot = use the built-in default UI.
+        // Each non-null slot: { spriteData:<base64 4096x256 16-frame strip>, frames, frameW, frameH, fps, _img:Image }
+        // questLogPanel also carries textBox:{x,y,w,h} (256-space) = where quest text renders over the art.
+        // _img is runtime-only and MUST be stripped on serialize (see serializeUiConfig).
+        let uiConfig = defaultUiConfig();
+        function defaultUiConfig() {
+            return {
+                questLogButton: null,
+                questLogPanel:  null,
+                hotbar:         null,   // scaffolded — renders default until sprites added
+                inventory:      null    // scaffolded — renders default until sprites added
+            };
+        }
+
         let map = [];
 
         // Canvas refs
@@ -6034,6 +6095,7 @@
             document.getElementById('itemMode').classList.toggle('active', m === 'item');
             document.getElementById('questMode').classList.toggle('active', m === 'quest');
             document.getElementById('shopMode').classList.toggle('active', m === 'shop');
+            if (document.getElementById('uiMode')) document.getElementById('uiMode').classList.toggle('active', m === 'ui');
             // Toolbar tabs
             document.getElementById('tileMode2').classList.toggle('active', m === 'tile');
             if (document.getElementById('playerMode2')) document.getElementById('playerMode2').classList.toggle('active', m === 'player');
@@ -6048,6 +6110,7 @@
             document.getElementById('itemMode2').classList.toggle('active', m === 'item');
             document.getElementById('questMode2').classList.toggle('active', m === 'quest');
             document.getElementById('shopMode2').classList.toggle('active', m === 'shop');
+            if (document.getElementById('uiMode2')) document.getElementById('uiMode2').classList.toggle('active', m === 'ui');
             document.getElementById('tileModeContent').style.display = m === 'tile' ? 'block' : 'none';
             document.getElementById('playerModeContent').style.display = m === 'player' ? 'block' : 'none';
             document.getElementById('npcModeContent').style.display = m === 'npc' ? 'block' : 'none';
@@ -6061,9 +6124,10 @@
             document.getElementById('itemModeContent').style.display = m === 'item' ? 'block' : 'none';
             document.getElementById('questModeContent').style.display = m === 'quest' ? 'block' : 'none';
             document.getElementById('shopModeContent').style.display = m === 'shop' ? 'block' : 'none';
+            if (document.getElementById('uiModeContent')) document.getElementById('uiModeContent').style.display = m === 'ui' ? 'block' : 'none';
 
             // Update mode label for mobile
-            const labels = { tile: 'Tiles', player: 'Player', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers', camera: 'Camera', fish: 'Fishing', dialog: 'Dialogs', item: 'Items', quest: 'Quests', shop: 'Shops' };
+            const labels = { tile: 'Tiles', player: 'Player', npc: 'NPCs', animProp: 'Animated', sound: 'Sounds', lighting: 'Lights', trigger: 'Triggers', camera: 'Camera', fish: 'Fishing', dialog: 'Dialogs', item: 'Items', quest: 'Quests', shop: 'Shops', ui: 'UI' };
             document.getElementById('currentModeLabel').textContent = labels[m] || m;
 
             // Collapse menu on mobile after selection
@@ -6101,6 +6165,7 @@
                 updateShopList();
                 updateNpcShopList();
             }
+            if (m === 'ui' && typeof updateUiTab === 'function') updateUiTab();
 
             // Redraw map to show appropriate overlays
             renderMap();
@@ -19427,6 +19492,40 @@
             URL.revokeObjectURL(url);
         }
 
+        // Serialize uiConfig: per-slot shallow copy with the runtime _img Image stripped
+        // (JSON.stringify would emit {} for an Image). null slots stay null. Only spriteData
+        // base64 + plain fields persist; _img is rebuilt from spriteData on load.
+        function serializeUiConfig() {
+            const out = {};
+            for (const slot in uiConfig) {
+                const v = uiConfig[slot];
+                if (!v) { out[slot] = null; continue; }
+                const copy = { ...v };
+                delete copy._img;
+                out[slot] = copy;
+            }
+            return out;
+        }
+
+        // Load uiConfig from a saved object — used by BOTH loadProject (.json) and
+        // loadFullProject (co-op). Spread-per-slot so future fields survive; rebuild each
+        // non-null slot's runtime _img from its spriteData base64. Missing slots default to null.
+        function applyUiConfigFromSave(saved) {
+            uiConfig = { ...defaultUiConfig(), ...(saved || {}) };
+            for (const slot in uiConfig) {
+                const v = uiConfig[slot];
+                if (v && v.spriteData) {
+                    const img = new Image();
+                    img.onload = () => {
+                        if (uiConfig[slot]) uiConfig[slot]._img = img;
+                        if (typeof updateUiTab === 'function') updateUiTab();
+                    };
+                    img.src = v.spriteData;
+                }
+            }
+            if (typeof updateUiTab === 'function') updateUiTab();
+        }
+
         function getProjectData() {
             // Save current map state to maps object before saving
             saveCurrentMapState();
@@ -19556,6 +19655,8 @@
                 shops,
                 placedShops,
                 startingGold,
+                // Custom UI skins — per-slot copy with runtime _img stripped (null slots stay null)
+                uiConfig: serializeUiConfig(),
                 // Version tagging (Wave 1)
                 version: SAVE_SCHEMA_VERSION,
                 gameVersion: GAME_VERSION,
@@ -20270,6 +20371,9 @@
                 if (radiusEl) radiusEl.value = lightingSettings.playerLightRadius;
                 if (radiusVal) radiusVal.textContent = lightingSettings.playerLightRadius;
             }
+
+            // Custom UI skins (co-op full-sync path — the historical silent-drop site).
+            applyUiConfigFromSave(project.uiConfig);
 
             // Sounds library (with Audio decode) — was silently dropped before.
             sounds = [];
@@ -21483,6 +21587,30 @@
                         console.log('[BUILDER MP] NPC definition deleted:', edit.index);
                     }
                     break;
+
+                case 'setUiConfig':
+                    // Co-op peer assigned/cleared a custom UI skin. edit.slot in uiConfig keys,
+                    // edit.config = stripped slot object (or null to revert to default).
+                    if (edit.slot && (edit.slot in uiConfig)) {
+                        if (edit.config) {
+                            const c = { ...edit.config };
+                            if (c.spriteData) {
+                                const img = new Image();
+                                img.onload = () => {
+                                    if (uiConfig[edit.slot]) uiConfig[edit.slot]._img = img;
+                                    if (typeof updateUiTab === 'function') updateUiTab();
+                                };
+                                img.src = c.spriteData;
+                                c._img = img;
+                            }
+                            uiConfig[edit.slot] = c;
+                        } else {
+                            uiConfig[edit.slot] = null;
+                        }
+                        if (typeof updateUiTab === 'function') updateUiTab();
+                        console.log('[BUILDER MP] UI skin updated:', edit.slot, edit.config ? '(art)' : '(cleared)');
+                    }
+                    break;
                 // ===== end Wave 3 additions =====
             }
         }
@@ -21936,6 +22064,7 @@
             shops = [];
             placedShops = [];
             startingGold = 100;
+            uiConfig = defaultUiConfig();   // New Game starts with default UI (no custom art leak)
             tileSplitLineFlipped = {};
 
             // Initialize empty layer grid
@@ -22293,6 +22422,9 @@
             polyLights = p.polyLights || [];
             updatePlacedLightsList();
             updatePolyLightsList();
+
+            // Custom UI skins (.json load path) — spread-per-slot + rebuild _img.
+            applyUiConfigFromSave(p.uiConfig);
 
             // Load multi-map data
             if (p.maps && Object.keys(p.maps).length > 0) {
@@ -24580,6 +24712,140 @@
             logTestEvent('Opening test window...');
 
             // Create minimal loader HTML
+        // ============ UI TAB — custom UI skins (builder doc) ============
+        // Assign/clear custom art for in-game UI slots (quest log button + panel), preview it,
+        // drag the panel's text-content box, and broadcast changes to co-op peers / the test window.
+        // Hotbar + inventory are scaffolded in uiConfig but have no UI here yet (default-only).
+
+        const UI_FRAME = 256;        // each frame is 256x256 in the sheet
+        const UI_FRAMES = 16;        // 16-frame horizontal strip (sheet = 4096x256)
+        const DEFAULT_PANEL_TEXTBOX = { x: 58, y: 44, w: 153, h: 154 }; // gold-center default (256-space)
+
+        // Chosen PNG file -> dataURL -> assign to slot.
+        function onUiFileChosen(slot, input) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => assignUiArt(slot, e.target.result);
+            reader.readAsDataURL(file);
+        }
+
+        // Build uiConfig[slot] from a base64 dataURL, load its image, repaint, broadcast.
+        function assignUiArt(slot, dataURL) {
+            if (!(slot in uiConfig)) return;
+            const cfg = {
+                spriteData: dataURL,
+                frames: UI_FRAMES,
+                frameW: UI_FRAME,
+                frameH: UI_FRAME,
+                fps: (uiConfig[slot] && uiConfig[slot].fps) || 8,
+                _img: new Image()
+            };
+            if (slot === 'questLogPanel') {
+                cfg.textBox = (uiConfig[slot] && uiConfig[slot].textBox) || { ...DEFAULT_PANEL_TEXTBOX };
+            }
+            cfg._img.onload = () => drawUiPreview(slot);
+            cfg._img.src = dataURL;
+            uiConfig[slot] = cfg;
+            drawUiPreview(slot);
+            broadcastUiSlot(slot);
+        }
+
+        // Revert a slot to the built-in default (null = use default UI).
+        function clearUiArt(slot) {
+            if (!(slot in uiConfig)) return;
+            uiConfig[slot] = null;
+            drawUiPreview(slot);
+            const fpsEl = document.getElementById('uiFps_' + slot);
+            if (fpsEl) fpsEl.value = 8;
+            broadcastUiSlot(slot);
+        }
+
+        function setUiFps(slot, fps) {
+            if (!uiConfig[slot]) return;
+            uiConfig[slot].fps = Math.max(1, Math.min(30, fps || 8));
+            broadcastUiSlot(slot);
+        }
+
+        // Broadcast a slot's current config (stripped of runtime _img) to peers / test window.
+        function broadcastUiSlot(slot) {
+            let config = null;
+            if (uiConfig[slot]) {
+                config = { ...uiConfig[slot] };
+                delete config._img;
+            }
+            broadcastEdit({ editType: 'setUiConfig', slot, config });
+        }
+
+        // Draw frame 0 of a slot's sheet into its preview canvas (+ textBox overlay on the panel).
+        function drawUiPreview(slot) {
+            const canvas = document.getElementById('uiPreview_' + slot);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const cfg = uiConfig[slot];
+            if (cfg && cfg._img && cfg._img.complete && cfg._img.naturalWidth) {
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(cfg._img, 0, 0, UI_FRAME, UI_FRAME, 0, 0, canvas.width, canvas.height);
+                if (slot === 'questLogPanel' && cfg.textBox) {
+                    const s = canvas.width / UI_FRAME;
+                    ctx.strokeStyle = '#0cf';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 3]);
+                    ctx.strokeRect(cfg.textBox.x * s, cfg.textBox.y * s, cfg.textBox.w * s, cfg.textBox.h * s);
+                    ctx.setLineDash([]);
+                }
+            } else {
+                ctx.fillStyle = '#222';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#555';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('(default)', canvas.width / 2, canvas.height / 2);
+            }
+        }
+
+        // Repaint all previews + sync fps inputs from uiConfig (on tab open / after load / remote edit).
+        function updateUiTab() {
+            ['questLogButton', 'questLogPanel'].forEach(slot => {
+                drawUiPreview(slot);
+                const fpsEl = document.getElementById('uiFps_' + slot);
+                if (fpsEl) fpsEl.value = (uiConfig[slot] && uiConfig[slot].fps) || 8;
+            });
+        }
+
+        // Drag a text-content box on the panel preview (defines where quest text renders, in 256-space).
+        (function initUiTextBoxDrag() {
+            const canvas = document.getElementById('uiPreview_questLogPanel');
+            if (!canvas) return;
+            let dragging = false, startX = 0, startY = 0;
+            const toModel = (ev) => {
+                const r = canvas.getBoundingClientRect();
+                const s = UI_FRAME / r.width; // displayed px -> 256-space
+                return { x: (ev.clientX - r.left) * s, y: (ev.clientY - r.top) * s };
+            };
+            canvas.addEventListener('mousedown', (ev) => {
+                if (!uiConfig.questLogPanel) return;
+                dragging = true;
+                const p = toModel(ev); startX = p.x; startY = p.y;
+            });
+            window.addEventListener('mousemove', (ev) => {
+                if (!dragging || !uiConfig.questLogPanel) return;
+                const p = toModel(ev);
+                const x = Math.max(0, Math.min(startX, p.x));
+                const y = Math.max(0, Math.min(startY, p.y));
+                const w = Math.min(UI_FRAME, Math.abs(p.x - startX));
+                const h = Math.min(UI_FRAME, Math.abs(p.y - startY));
+                uiConfig.questLogPanel.textBox = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+                drawUiPreview('questLogPanel');
+            });
+            window.addEventListener('mouseup', () => {
+                if (!dragging) return;
+                dragging = false;
+                if (uiConfig.questLogPanel) broadcastUiSlot('questLogPanel');
+            });
+        })();
+
             const loaderHTML = `
 <!DOCTYPE html>
 <html>
@@ -24909,9 +25175,9 @@
     </div>
     <!-- Quest Log Popup (Retro Style) -->
     <div id="questLogPopup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#000; border:4px solid #fff; padding:16px; min-width:280px; max-width:360px; max-height:70vh; overflow-y:auto; z-index:200; font-family:'Press Start 2P', monospace; image-rendering:pixelated;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:2px solid #fff; padding-bottom:8px;">
-            <span style="color:#fff; font-weight:bold; font-size:10px;">QUEST LOG</span>
-            <button onclick="toggleQuestLog()" style="background:none; border:2px solid #fff; color:#fff; font-size:12px; cursor:pointer; padding:2px 6px;">X</button>
+        <div id="questLogHeader" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:2px solid #fff; padding-bottom:8px;">
+            <span id="questLogTitle" style="color:#fff; font-weight:bold; font-size:10px;">QUEST LOG</span>
+            <button id="questLogClose" onclick="toggleQuestLog()" style="background:none; border:2px solid #fff; color:#fff; font-size:12px; cursor:pointer; padding:2px 6px;">X</button>
         </div>
         <div id="questLogContent" style="font-size:8px; line-height:1.5;"></div>
     </div>
@@ -25130,6 +25396,19 @@
         // ===== QUEST SYSTEM RUNTIME =====
         let quests = [];  // Loaded from projectData
         let questSoundsData = [];  // Quest sounds library
+
+        // ===== CUSTOM UI SKINS (game doc) =====
+        // Snapshot of projectData.uiConfig, captured at initGame (NO live updates — by design).
+        // uiImages: slot -> loaded Image (the 16-frame sheet). uiAnimTimers: slot -> {frame,timer}.
+        // A slot is "skinned" only when uiImages[slot] && uiImages[slot].complete.
+        let uiConfigData = {};
+        const uiImages = {};
+        const uiAnimTimers = {
+            questLogButton: { frame: 0, timer: 0 },
+            questLogPanel:  { frame: 0, timer: 0 }
+        };
+        const UI_FRAME_GAME = 256;   // frame size in the sheet
+        const UI_FRAMES_GAME = 16;   // frames per sheet
         let playerInventory = {};  // { [itemId]: quantity }
         // Hoisted to top-level (was declared inside initGame) so the quest-condition functions
         // defined above initGame (hasInventoryItem/isConditionMet) can read the real inventory.
@@ -26450,6 +26729,98 @@
         // Quest Tracker HUD
         let questLogVisible = false;
 
+        // ===== Custom UI skin helpers (game doc) =====
+        // A slot is skinned only when its sheet Image is fully loaded; otherwise the default
+        // inline-styled DOM look is left untouched. No live updates — uiConfigData is a snapshot.
+        const UI_BUTTON_SKIN_PX = 150;   // displayed square size of the skinned tracker button
+        const UI_PANEL_SKIN_PX = 420;    // displayed square size of the skinned quest-log panel
+
+        function uiSkinReady(slot) {
+            return !!(uiImages[slot] && uiImages[slot].complete && uiImages[slot].naturalWidth);
+        }
+
+        // Set a slot's static skin (background image + sizing) on a DOM element, once.
+        function applySheetBackground(el, slot, sizePx) {
+            el.style.background = 'transparent';
+            el.style.border = 'none';
+            el.style.padding = '0';
+            el.style.width = el.style.minWidth = el.style.maxWidth = sizePx + 'px';
+            el.style.height = sizePx + 'px';
+            el.style.backgroundImage = 'url(' + uiConfigData[slot].spriteData + ')';
+            el.style.backgroundRepeat = 'no-repeat';
+            el.style.backgroundSize = (UI_FRAMES_GAME * sizePx) + 'px ' + sizePx + 'px';
+        }
+
+        // Per-frame: scroll the sheet to the current frame for a skinned element.
+        function stepUiSpriteAnim(elId, slot, sizePx) {
+            const el = document.getElementById(elId);
+            if (!el || !uiSkinReady(slot)) return;
+            el.style.backgroundPosition = '-' + (uiAnimTimers[slot].frame * sizePx) + 'px 0';
+        }
+
+        // Apply both skins to their DOM elements (idempotent; safe to call repeatedly).
+        function applyUiSkins() {
+            const tracker = document.getElementById('questTracker');
+            if (tracker && uiSkinReady('questLogButton')) {
+                applySheetBackground(tracker, 'questLogButton', UI_BUTTON_SKIN_PX);
+                const t = document.getElementById('questTrackerTitle');
+                const o = document.getElementById('questTrackerObjectives');
+                if (t) t.style.display = 'none';
+                if (o) o.style.display = 'none';
+                stepUiSpriteAnim('questTracker', 'questLogButton', UI_BUTTON_SKIN_PX);
+            }
+            const popup = document.getElementById('questLogPopup');
+            if (popup && uiSkinReady('questLogPanel')) {
+                applySheetBackground(popup, 'questLogPanel', UI_PANEL_SKIN_PX);
+                popup.style.maxHeight = 'none';
+                popup.style.overflow = 'visible';
+                // Position the text-content box per the creator-defined rect (256-space -> px).
+                const tb = uiConfigData.questLogPanel.textBox || { x: 24, y: 24, w: 208, h: 208 };
+                const sc = UI_PANEL_SKIN_PX / UI_FRAME_GAME;
+                const content = document.getElementById('questLogContent');
+                if (content) {
+                    content.style.position = 'absolute';
+                    content.style.left = Math.round(tb.x * sc) + 'px';
+                    content.style.top = Math.round(tb.y * sc) + 'px';
+                    content.style.width = Math.round(tb.w * sc) + 'px';
+                    content.style.height = Math.round(tb.h * sc) + 'px';
+                    content.style.overflowY = 'auto';
+                }
+                // Trim the default header to just a close button in the top-right corner.
+                const header = document.getElementById('questLogHeader');
+                const title = document.getElementById('questLogTitle');
+                if (title) title.style.display = 'none';
+                if (header) {
+                    header.style.position = 'absolute';
+                    header.style.top = '6px';
+                    header.style.right = '6px';
+                    header.style.margin = '0';
+                    header.style.border = 'none';
+                    header.style.padding = '0';
+                }
+                stepUiSpriteAnim('questLogPopup', 'questLogPanel', UI_PANEL_SKIN_PX);
+            }
+        }
+
+        // Advance the UI skin loops each frame (button while tracker visible, panel while log open).
+        function advanceUiAnims() {
+            const tracker = document.getElementById('questTracker');
+            if (uiSkinReady('questLogButton') && tracker && tracker.style.display !== 'none') {
+                stepUiAnimTimer('questLogButton');
+                stepUiSpriteAnim('questTracker', 'questLogButton', UI_BUTTON_SKIN_PX);
+            }
+            if (uiSkinReady('questLogPanel') && questLogVisible) {
+                stepUiAnimTimer('questLogPanel');
+                stepUiSpriteAnim('questLogPopup', 'questLogPanel', UI_PANEL_SKIN_PX);
+            }
+        }
+        function stepUiAnimTimer(slot) {
+            const fps = (uiConfigData[slot] && uiConfigData[slot].fps) || 8;
+            const t = uiAnimTimers[slot];
+            t.timer++;
+            if (t.timer >= Math.max(1, Math.round(60 / fps))) { t.timer = 0; t.frame = (t.frame + 1) % UI_FRAMES_GAME; }
+        }
+
         function updateQuestTracker() {
             const tracker = document.getElementById('questTracker');
             const titleEl = document.getElementById('questTrackerTitle');
@@ -26467,6 +26838,9 @@
 
             // Hide objectives - just show quest name
             if (objectivesEl) objectivesEl.innerHTML = '';
+
+            // Apply custom button skin if assigned (hides the default text, shows the art).
+            applyUiSkins();
         }
 
         function isConditionMet(condition) {
@@ -26494,7 +26868,10 @@
             const popup = document.getElementById('questLogPopup');
             if (popup) {
                 popup.style.display = questLogVisible ? 'block' : 'none';
-                if (questLogVisible) renderQuestLog();
+                if (questLogVisible) {
+                    applyUiSkins();   // apply panel skin + position content box before filling text
+                    renderQuestLog();
+                }
             }
         }
 
@@ -26702,6 +27079,10 @@
         quests = projectData.quests || [];
         questSoundsData = projectData.questSounds || [];
         initializeQuestStates();
+
+        // Custom UI skins — snapshot at Play (no live updates by design).
+        uiConfigData = projectData.uiConfig || {};
+
         // Update quest tracker after a short delay to ensure UI elements exist
         setTimeout(updateQuestTracker, 100);
 
@@ -26919,6 +27300,8 @@
         if (projectData.propImageData && propsData.length === 0) imagesToLoad += 1; // Legacy single prop
         imagesToLoad += (projectData.npcs || []).filter(n => n && n.spriteData).length; // NPC sprites
         imagesToLoad += 1; // Player sprite
+        imagesToLoad += ['questLogButton','questLogPanel','hotbar','inventory']
+            .filter(s => uiConfigData[s] && uiConfigData[s].spriteData).length; // Custom UI skins
 
         // Detect mobile for staggered loading
         const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -27034,6 +27417,27 @@
                 };
                 img.src = propData.spriteData;
                 animPropImages[i] = img;
+            }
+        });
+
+        // Load custom UI skin sheets (onload AND onerror both advance the loader so a bad sheet
+        // can never hang boot at the loading screen). On ready, apply skins to the DOM elements.
+        ['questLogButton','questLogPanel','hotbar','inventory'].forEach(slot => {
+            const cfg = uiConfigData[slot];
+            if (cfg && cfg.spriteData) {
+                const img = new Image();
+                img.onload = () => {
+                    uiImages[slot] = img;
+                    imagesLoaded++;
+                    if (typeof applyUiSkins === 'function') applyUiSkins();
+                    checkAllImagesLoaded();
+                };
+                img.onerror = () => {
+                    console.error('Failed to load UI skin', slot);
+                    imagesLoaded++;
+                    checkAllImagesLoaded();
+                };
+                img.src = cfg.spriteData;
             }
         });
 
@@ -35243,6 +35647,9 @@ Item Receive Display:
 
                 // Update dialog typewriter effect
                 updateDialogTyping();
+
+                // Advance custom UI skin animations (self-gates on visibility; no-op if unskinned)
+                advanceUiAnims();
 
                 if (!isTransitioning || transitionPhase === 'fadeIn' || transitionPhase === 'forceWalk') {
                     // Allow player to be visible during forced walk but don't allow input

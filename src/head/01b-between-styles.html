@@ -319,6 +319,7 @@
                 <button id="itemMode" onclick="setMode('item')">Items</button>
                 <button id="questMode" onclick="setMode('quest')">Quests</button>
                 <button id="shopMode" onclick="setMode('shop')">Shops</button>
+                <button id="uiMode" onclick="setMode('ui')">UI</button>
             </div>
 
             <!-- TILE MODE -->
@@ -1371,6 +1372,51 @@
                     </div>
                 </div>
             </div>
+
+            <!-- UI MODE -->
+            <div id="uiModeContent" style="display:none;">
+                <h3 style="color:#0cf;">UI Skins</h3>
+                <div style="background:#222; padding:12px; border-radius:4px; margin-bottom:15px;">
+                    <p style="font-size:11px; color:#aaa; line-height:1.6; margin:0;">
+                        Assign custom art for in-game UI. Each sheet is a <b style="color:#0cf;">16-frame horizontal strip</b> (4096×256, each frame 256×256). Leave empty to use the default look.
+                    </p>
+                </div>
+
+                <!-- Quest Log Button -->
+                <div style="background:#1a2630; padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid #0cf;">
+                    <label style="font-size:12px; color:#0cf; font-weight:bold; display:block; margin-bottom:6px;">Quest Log Button</label>
+                    <canvas id="uiPreview_questLogButton" width="192" height="192" style="width:100%; max-width:192px; background:#111; border:1px solid #333; image-rendering:pixelated; display:block; margin:0 auto 8px;"></canvas>
+                    <input type="file" accept="image/png" onchange="onUiFileChosen('questLogButton', this)" style="width:100%; font-size:10px; margin-bottom:6px;">
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <label style="font-size:10px; color:#aaa;">FPS</label>
+                        <input type="number" id="uiFps_questLogButton" value="8" min="1" max="30" onchange="setUiFps('questLogButton', parseInt(this.value)||8)" style="width:50px; padding:3px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                        <button onclick="clearUiArt('questLogButton')" class="retro-btn" style="margin-left:auto; padding:4px 10px; font-size:10px; background:#844;">Clear</button>
+                    </div>
+                </div>
+
+                <!-- Quest Log Panel -->
+                <div style="background:#1a2630; padding:10px; border-radius:4px; margin-bottom:15px; border:1px solid #0cf;">
+                    <label style="font-size:12px; color:#0cf; font-weight:bold; display:block; margin-bottom:6px;">Quest Log Panel</label>
+                    <canvas id="uiPreview_questLogPanel" width="192" height="192" style="width:100%; max-width:192px; background:#111; border:1px solid #333; image-rendering:pixelated; display:block; margin:0 auto 6px; cursor:crosshair;"></canvas>
+                    <div style="font-size:9px; color:#888; text-align:center; margin-bottom:6px;">Drag on the preview to set where quest text appears</div>
+                    <input type="file" accept="image/png" onchange="onUiFileChosen('questLogPanel', this)" style="width:100%; font-size:10px; margin-bottom:6px;">
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <label style="font-size:10px; color:#aaa;">FPS</label>
+                        <input type="number" id="uiFps_questLogPanel" value="8" min="1" max="30" onchange="setUiFps('questLogPanel', parseInt(this.value)||8)" style="width:50px; padding:3px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;">
+                        <button onclick="clearUiArt('questLogPanel')" class="retro-btn" style="margin-left:auto; padding:4px 10px; font-size:10px; background:#844;">Clear</button>
+                    </div>
+                </div>
+
+                <!-- Scaffolded (default-only for now) -->
+                <div style="background:#181818; padding:10px; border-radius:4px; margin-bottom:10px; border:1px solid #333; opacity:0.55;">
+                    <label style="font-size:12px; color:#888; font-weight:bold; display:block;">Hotbar</label>
+                    <div style="font-size:10px; color:#666;">Uses default (no sprites yet)</div>
+                </div>
+                <div style="background:#181818; padding:10px; border-radius:4px; border:1px solid #333; opacity:0.55;">
+                    <label style="font-size:12px; color:#888; font-weight:bold; display:block;">Inventory</label>
+                    <div style="font-size:10px; color:#666;">Uses default (no sprites yet)</div>
+                </div>
+            </div>
         </div>
 
         <div class="resize-handle" id="sidebarResize"></div>
@@ -1392,6 +1438,7 @@
                     <button id="itemMode2" onclick="setMode('item')">Items</button>
                     <button id="questMode2" onclick="setMode('quest')">Quest</button>
                     <button id="shopMode2" onclick="setMode('shop')">Shop</button>
+                    <button id="uiMode2" onclick="setMode('ui')">UI</button>
                 </div>
 
                 <!-- Map Selector in Toolbar -->
