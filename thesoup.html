@@ -1184,6 +1184,7 @@
     </div>
     <!-- PHASE 1: LOAD -->
     <div id="loadPhase" class="phase active">
+        <!-- PORT-WEBONLY(monogame): landing-page ping-pong background video; not part of the engine. docs/PORTING.md §E. -->
         <video id="landingBgVideo" autoplay loop muted playsinline>
             <source src="assets/ui/landing-bg-pingpong.mp4" type="video/mp4">
         </video>
@@ -3682,12 +3683,23 @@
                                 <input type="checkbox" id="animPropFlatLine" checked>
                                 <span>Flat Line</span>
                             </label>
+                            <label style="font-size:10px; display:flex; align-items:center; gap:4px; cursor:pointer;" title="Flip: bottom covers player (for rocks, ledges)">
+                                <input type="checkbox" id="animPropSplitFlip" onchange="toggleAnimPropSplitFlip()">
+                                <span>Flip</span>
+                            </label>
                             <span style="font-size:10px;">Y:</span>
                             <input type="number" id="animPropSplitY" value="8" min="0" max="16" style="width:40px; padding:2px; font-size:10px;">
                             <button onclick="setAnimPropSplitY()" style="padding:2px 6px; font-size:9px; background:#0aa;">Set Y</button>
-                            <button onclick="clearAnimPropSplit()" style="padding:2px 6px; font-size:9px; background:#a55;">Clear</button>
+                            <button id="animPropSplitEraseBtn" onclick="toggleAnimPropSplitErase()" title="Toggle erase: click/drag tiles to remove their split" style="padding:2px 6px; font-size:9px; background:#555;">Erase</button>
                         </div>
-                        <div style="font-size:9px; color:#888; margin-top:4px;">C = Canopy (top) | T = Trunk (Y-sorted)</div>
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:6px;">
+                            <span style="font-size:10px; color:#aaa;">Copy from:</span>
+                            <select id="animPropSplitFrameSelect" onchange="setAnimPropSplitFrame(this.value)" style="padding:2px; font-size:9px;">
+                                <option value="0">Frame 1</option>
+                            </select>
+                            <button onclick="copySplitToAllFrames()" style="padding:2px 6px; font-size:9px; background:#0aa;">Copy to All Frames</button>
+                        </div>
+                        <div style="font-size:9px; color:#888; margin-top:4px;">C = Canopy (covers player) | T = Trunk (Y-sorted). Flip swaps them.</div>
                     </div>
 
                     <p style="font-size:10px; color:#666;">Paint on any frame. Collision/split data applies to all frames.</p>
@@ -4092,11 +4104,14 @@
                     <input type="text" id="shopEditorName" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; margin-top:4px; box-sizing:border-box;" placeholder="General Store">
                 </div>
 
-                <!-- Greeting Message -->
+                <!-- Greeting Dialog -->
                 <div style="margin-bottom:12px;">
-                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Greeting Message (optional):</label>
-                    <textarea id="shopEditorGreeting" rows="2" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; margin-top:4px; box-sizing:border-box; resize:vertical; font-family:inherit;" placeholder="Welcome to my shop! Take a look around..."></textarea>
-                    <div style="font-size:9px; color:#666; margin-top:2px;">Shown when player opens shop</div>
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Greeting Dialog:</label>
+                    <div style="display:flex; gap:6px; margin-top:4px;">
+                        <select id="shopEditorDialog" style="flex:1; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;"></select>
+                        <button onclick="editShopDialog()" style="padding:8px 10px; background:#448; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">Edit</button>
+                    </div>
+                    <div style="font-size:9px; color:#666; margin-top:2px;">Dialog shown when talking to this shop's NPC. It needs an "Open Shop" choice — auto-added on save if missing.</div>
                 </div>
 
                 <!-- Default Sell Rate -->
@@ -4282,8 +4297,8 @@
         // GAME_BUILD = number of commits on main (`git rev-list --count HEAD` for the commit being
         // made). Bump it on every push to main — see CLAUDE.md "Version" rule.
         const GAME_VERSION = '0.1.0';
-        const GAME_BUILD = 188;
-        const SAVE_SCHEMA_VERSION = 1;
+        const GAME_BUILD = 190;
+        const SAVE_SCHEMA_VERSION = 2;
 
         // Render version on main menu once DOM is ready.
         (function paintVersion() {
@@ -14711,6 +14726,7 @@
         }
 
         // ===== ANIMATED PROPS FUNCTIONS =====
+        // PORT-SKIP(monogame): builder/editor (split tool, Flip, copy-to-all, erase-split). Editor is cut; not ported. docs/PORTING.md §D.
         let animPropEditorImage = null;
         let animPropEditorData = null;
         let animPropEditorFrameW = 16;
@@ -14720,7 +14736,11 @@
         let animPropTool = 'none'; // 'none', 'collision', 'erase', 'split'
         let animPropCollisionMasks = {}; // Per-frame collision: { frameIndex: 2D array }
         let animPropCollisionFrame = 0; // Which frame we're editing collision for
-        let animPropSplitLine = null; // Array of Y values per column (like tileSplitLines)
+        let animPropSplitLine = null; // { "frameIndex:tileX,tileY": [Y per column] } per-frame split lines
+        let animPropSplitFlipped = {}; // { "tileX,tileY": true } - flip which half covers player (frame-agnostic, like tileSplitLineFlipped)
+        let animPropSplitTarget = null; // { frameIndex, tileX, tileY, frame } - tile locked during a split drag (like selectedSplitTile)
+        let animPropSplitFrame = 0; // Source frame for "Copy split to all frames"
+        let animPropSplitErase = false; // Split sub-mode: erase a tile's split (square by square)
         let animPropPainting = false;
 
         function animPropZoomIn() {
@@ -14789,6 +14809,9 @@
                 }
                 animPropCollisionFrame = 0;
                 animPropSplitLine = prop.splitLine ? JSON.parse(JSON.stringify(prop.splitLine)) : null;
+                animPropSplitFlipped = prop.splitFlipped ? JSON.parse(JSON.stringify(prop.splitFlipped)) : {};
+                animPropSplitFrame = 0;
+                animPropSplitTarget = null;
 
                 // Load giveItem settings
                 document.getElementById('animPropGiveItem').checked = prop.giveItem || false;
@@ -14839,6 +14862,9 @@
                 animPropCollisionMasks = {};
                 animPropCollisionFrame = 0;
                 animPropSplitLine = null;
+                animPropSplitFlipped = {};
+                animPropSplitFrame = 0;
+                animPropSplitTarget = null;
                 animPropFrames = []; // Ensure frames list is cleared
                 document.getElementById('animPropNameInput').value = '';
                 document.getElementById('animPropType').value = 'loop';
@@ -15088,22 +15114,28 @@
                             const tileStartX = frame.x + tx * gridSize;
                             const tileStartY = frame.y + ty * gridSize;
 
-                            // Fill canopy region (above split line) with semi-transparent cyan
-                            ctx.fillStyle = 'rgba(0, 255, 255, 0.25)';
+                            // Flipped tiles cover the player with the BOTTOM half (trunk on top).
+                            // Color/label them orange like the tiles tab; cyan when normal.
+                            const isFlipped = !!animPropSplitFlipped[tx + ',' + ty];
+                            const lineColor = isFlipped ? '#fa0' : '#0ff';
+
+                            // Fill the canopy region (the half that covers the player)
+                            ctx.fillStyle = isFlipped ? 'rgba(255, 170, 0, 0.25)' : 'rgba(0, 255, 255, 0.25)';
                             ctx.beginPath();
-                            ctx.moveTo(tileStartX * scale, tileStartY * scale);
+                            const edgeY = isFlipped ? (tileStartY + gridSize) : tileStartY; // canopy base edge
+                            ctx.moveTo(tileStartX * scale, edgeY * scale);
                             for (let col = 0; col < gridSize; col++) {
                                 const splitY = Array.isArray(splitYArray) ? splitYArray[col] : splitYArray;
                                 const lineX = (tileStartX + col + 0.5) * scale;
                                 const lineY = (tileStartY + splitY) * scale;
                                 ctx.lineTo(lineX, lineY);
                             }
-                            ctx.lineTo((tileStartX + gridSize) * scale, tileStartY * scale);
+                            ctx.lineTo((tileStartX + gridSize) * scale, edgeY * scale);
                             ctx.closePath();
                             ctx.fill();
 
-                            // Draw freeform split line in cyan
-                            ctx.strokeStyle = '#0ff';
+                            // Draw freeform split line
+                            ctx.strokeStyle = lineColor;
                             ctx.lineWidth = 2;
                             ctx.beginPath();
                             for (let col = 0; col < gridSize; col++) {
@@ -15123,14 +15155,16 @@
                                 ? splitYArray.reduce((a, b) => a + b, 0) / splitYArray.length
                                 : splitYArray;
 
-                            // Draw C (canopy - above line) and T (trunk - below line) labels
-                            ctx.fillStyle = '#0ff';
+                            // C = canopy (covers player), T = trunk (Y-sorted). Flip swaps which half is which.
+                            const topLabel = isFlipped ? 'T' : 'C';
+                            const botLabel = isFlipped ? 'C' : 'T';
+                            ctx.fillStyle = lineColor;
                             ctx.textAlign = 'center';
                             if (avgSplitY > 4) {
-                                ctx.fillText('C', (tileStartX + gridSize / 2) * scale, (tileStartY + avgSplitY / 2) * scale + 4);
+                                ctx.fillText(topLabel, (tileStartX + gridSize / 2) * scale, (tileStartY + avgSplitY / 2) * scale + 4);
                             }
                             if (avgSplitY < gridSize - 4) {
-                                ctx.fillText('T', (tileStartX + gridSize / 2) * scale, (tileStartY + avgSplitY + (gridSize - avgSplitY) / 2) * scale + 4);
+                                ctx.fillText(botLabel, (tileStartX + gridSize / 2) * scale, (tileStartY + avgSplitY + (gridSize - avgSplitY) / 2) * scale + 4);
                             }
                         }
                     }
@@ -15144,8 +15178,6 @@
         let animPropBrushRectW = 8;
         let animPropBrushRectH = 4;
         let animPropBrushPreviewPos = null; // { x, y } for brush preview
-        let animPropFlatLineY = null; // Y position locked when flat line mode + dragging
-
         // Tool switching for animated prop editor
         function setAnimPropTool(tool) {
             animPropTool = tool;
@@ -15153,6 +15185,11 @@
                 const btn = document.getElementById('animPropTool' + t);
                 if (btn) btn.classList.toggle('active', t.toLowerCase() === tool);
             });
+
+            // Reset the split erase sub-mode whenever the tool changes
+            animPropSplitErase = false;
+            const splitEraseBtn = document.getElementById('animPropSplitEraseBtn');
+            if (splitEraseBtn) splitEraseBtn.style.background = '#555';
 
             // Show/hide brush section for collision/erase tools
             const brushSection = document.getElementById('animPropBrushSection');
@@ -15232,6 +15269,57 @@
             console.log('[ANIM PROP] Copied collision from frame', animPropCollisionFrame + 1, 'to all frames');
         }
 
+        function setAnimPropSplitFrame(frameIdx) {
+            animPropSplitFrame = parseInt(frameIdx) || 0;
+        }
+
+        function updateAnimPropSplitFrameDropdown() {
+            const select = document.getElementById('animPropSplitFrameSelect');
+            if (!select) return;
+            select.innerHTML = '';
+            animPropFrames.forEach((frame, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = 'Frame ' + (i + 1);
+                if (i === animPropSplitFrame) opt.selected = true;
+                select.appendChild(opt);
+            });
+            if (animPropSplitFrame >= animPropFrames.length) {
+                animPropSplitFrame = Math.max(0, animPropFrames.length - 1);
+            }
+        }
+
+        // Make every other frame EXACTLY mirror the source frame's split lines — including
+        // erased tiles (set where the source has a split, delete where it doesn't). Additive-only
+        // copying left stale splits on targets after you erased a tile on the source.
+        function copySplitToAllFrames() {
+            if (animPropFrames.length === 0) return;
+            if (!animPropSplitLine || typeof animPropSplitLine !== 'object' || Array.isArray(animPropSplitLine)) {
+                animPropSplitLine = {};
+            }
+            const src = animPropSplitFrame;
+            const srcFrame = animPropFrames[src];
+            if (!srcFrame) return;
+            const tilesW = Math.ceil(srcFrame.w / gridSize);
+            const tilesH = Math.ceil(srcFrame.h / gridSize);
+            for (let i = 0; i < animPropFrames.length; i++) {
+                if (i === src) continue;
+                for (let ty = 0; ty < tilesH; ty++) {
+                    for (let tx = 0; tx < tilesW; tx++) {
+                        const key = i + ':' + tx + ',' + ty;
+                        const srcLine = animPropSplitLine[src + ':' + tx + ',' + ty];
+                        if (srcLine) {
+                            animPropSplitLine[key] = JSON.parse(JSON.stringify(srcLine));
+                        } else {
+                            delete animPropSplitLine[key]; // mirror the source's erased tiles
+                        }
+                    }
+                }
+            }
+            animPropDrawCanvas();
+            console.log('[ANIM PROP] Mirrored split from frame', src + 1, 'to all frames');
+        }
+
         function setAnimPropSplitY() {
             const yVal = parseInt(document.getElementById('animPropSplitY').value) || 8;
             if (animPropFrames.length === 0) return;
@@ -15259,9 +15347,36 @@
             animPropDrawCanvas();
         }
 
-        function clearAnimPropSplit() {
-            animPropSplitLine = null;
-            animPropDrawCanvas();
+        // Toggle the split "erase" sub-mode: when on, clicking/dragging deletes a tile's split.
+        function toggleAnimPropSplitErase() {
+            animPropSplitErase = !animPropSplitErase;
+            const btn = document.getElementById('animPropSplitEraseBtn');
+            if (btn) btn.style.background = animPropSplitErase ? '#d33' : '#555';
+            const canvas = document.getElementById('animPropEditorCanvas');
+            if (canvas) canvas.style.cursor = animPropSplitErase ? 'not-allowed' : 'crosshair';
+        }
+
+        // Erase the split line for whichever tile is under the cursor (square by square).
+        function animPropEraseSplitAt(px, py) {
+            for (let i = 0; i < animPropFrames.length; i++) {
+                const f = animPropFrames[i];
+                if (px >= f.x && px < f.x + f.w && py >= f.y && py < f.y + f.h) {
+                    const tileX = Math.floor((px - f.x) / gridSize);
+                    const tileY = Math.floor((py - f.y) / gridSize);
+                    const tk = tileX + ',' + tileY;
+                    if (animPropSplitLine && typeof animPropSplitLine === 'object') {
+                        delete animPropSplitLine[i + ':' + tk]; // per-frame key
+                        delete animPropSplitLine[tk];           // legacy shared key
+                    }
+                    // Drop the tile's flip once no frame keeps a split for it
+                    let stillSplit = false;
+                    for (let j = 0; j < animPropFrames.length; j++) {
+                        if (animPropSplitLine && animPropSplitLine[j + ':' + tk]) { stillSplit = true; break; }
+                    }
+                    if (!stillSplit && animPropSplitFlipped) delete animPropSplitFlipped[tk];
+                    return;
+                }
+            }
         }
 
         // Collision/split painting helpers
@@ -15344,69 +15459,81 @@
             }
         }
 
+        // Split painting — behaves like the tiles-tab tool (handleSplitClick/handleSplitDrag):
+        // on mousedown we lock onto the clicked frame+tile; the drag stays on that tile and the
+        // line follows the mouse live (no bottom-snap, no frozen flat-line Y).
         function animPropPaintSplit(px, py, isStart = false) {
             if (animPropFrames.length === 0) return;
 
-            // Find which frame was clicked
-            let clickedFrameIndex = -1;
-            let clickedFrame = null;
-            for (let i = 0; i < animPropFrames.length; i++) {
-                const frame = animPropFrames[i];
-                if (px >= frame.x && px < frame.x + frame.w &&
-                    py >= frame.y && py < frame.y + frame.h) {
-                    clickedFrameIndex = i;
-                    clickedFrame = frame;
-                    break;
-                }
+            // Erase sub-mode: delete the split for whichever tile is under the cursor (no tile-lock,
+            // so a drag wipes each square it crosses).
+            if (animPropSplitErase) {
+                animPropEraseSplitAt(px, py);
+                return;
             }
-            if (!clickedFrame) return;
 
-            // Calculate which tile within the frame was clicked
-            const localX = px - clickedFrame.x;
-            const localY = py - clickedFrame.y;
+            let frameIndex, frame, tileX, tileY;
+            if (isStart) {
+                // Detect which frame + tile was clicked, then lock onto it for the drag
+                let clickedFrameIndex = -1, clickedFrame = null;
+                for (let i = 0; i < animPropFrames.length; i++) {
+                    const f = animPropFrames[i];
+                    if (px >= f.x && px < f.x + f.w && py >= f.y && py < f.y + f.h) {
+                        clickedFrameIndex = i; clickedFrame = f; break;
+                    }
+                }
+                if (!clickedFrame) return;
+                frame = clickedFrame;
+                frameIndex = clickedFrameIndex;
+                tileX = Math.floor((px - frame.x) / gridSize);
+                tileY = Math.floor((py - frame.y) / gridSize);
+                animPropSplitTarget = { frameIndex, tileX, tileY, frame };
+                // Sync the Flip checkbox to this tile's current state
+                const flipCb = document.getElementById('animPropSplitFlip');
+                if (flipCb) flipCb.checked = !!animPropSplitFlipped[tileX + ',' + tileY];
+            } else {
+                if (!animPropSplitTarget) return;
+                ({ frameIndex, tileX, tileY, frame } = animPropSplitTarget);
+            }
 
-            const tileX = Math.floor(localX / gridSize);
-            const tileY = Math.floor(localY / gridSize);
-
-            // Position within the tile
-            const tileLocalX = localX - (tileX * gridSize);
-            const tileLocalY = localY - (tileY * gridSize);
-
-            // Clamp Y value
-            let clampedY = Math.round(tileLocalY);
-            if (tileLocalY >= gridSize - 2) clampedY = gridSize;
-            clampedY = Math.max(0, Math.min(gridSize, clampedY));
-
-            // Clamp X for column index
+            // Position within the LOCKED tile, clamped (mirror handleSplitDrag)
+            const tileLocalX = px - (frame.x + tileX * gridSize);
+            const tileLocalY = py - (frame.y + tileY * gridSize);
+            const clampedY = Math.max(0, Math.min(gridSize, Math.floor(tileLocalY)));
             const clampedX = Math.max(0, Math.min(gridSize - 1, Math.floor(tileLocalX)));
 
-            // Check flat line mode
             const flatLineCheckbox = document.getElementById('animPropFlatLine');
             const flatLineMode = flatLineCheckbox && flatLineCheckbox.checked;
 
-            // Initialize split lines object if needed
             if (!animPropSplitLine || typeof animPropSplitLine !== 'object' || Array.isArray(animPropSplitLine)) {
                 animPropSplitLine = {};
             }
-
-            // Key format: "frameIndex:tileX,tileY" for per-frame splits
-            const key = clickedFrameIndex + ':' + tileX + ',' + tileY;
+            const key = frameIndex + ':' + tileX + ',' + tileY;
 
             if (flatLineMode) {
-                // Flat line mode: set entire tile to same Y value
-                if (isStart) {
-                    animPropFlatLineY = clampedY;
-                }
-                const yVal = (animPropFlatLineY !== null) ? animPropFlatLineY : clampedY;
-                animPropSplitLine[key] = new Array(gridSize).fill(yVal);
+                // Flat line follows the mouse live (every column = current Y)
+                animPropSplitLine[key] = new Array(gridSize).fill(clampedY);
             } else {
-                // Freeform mode: initialize array if needed, then set this column
-                if (!animPropSplitLine[key] || !Array.isArray(animPropSplitLine[key])) {
-                    const defaultY = Math.floor(gridSize / 2);
-                    animPropSplitLine[key] = new Array(gridSize).fill(defaultY);
+                // Freeform: set only the hovered column
+                if (!Array.isArray(animPropSplitLine[key])) {
+                    animPropSplitLine[key] = new Array(gridSize).fill(Math.floor(gridSize / 2));
                 }
                 animPropSplitLine[key][clampedX] = clampedY;
             }
+        }
+
+        // Flip which half of the selected split tile covers the player (mirror toggleSplitFlip).
+        // Flip is keyed by prop-local tile (frame-agnostic) — a tile's orientation is constant.
+        function toggleAnimPropSplitFlip() {
+            if (!animPropSplitTarget) return;
+            const tileKey = animPropSplitTarget.tileX + ',' + animPropSplitTarget.tileY;
+            const cb = document.getElementById('animPropSplitFlip');
+            if (cb && cb.checked) {
+                animPropSplitFlipped[tileKey] = true;
+            } else {
+                delete animPropSplitFlipped[tileKey];
+            }
+            animPropDrawCanvas();
         }
 
         // Canvas drag handlers for animated prop editor (multi-tile selection)
@@ -15494,7 +15621,7 @@
 
             if (animPropPainting) {
                 animPropPainting = false;
-                animPropFlatLineY = null; // Reset flat line Y lock
+                animPropSplitTarget = null; // End split drag (unlock tile)
                 return;
             }
 
@@ -15529,7 +15656,7 @@
 
         document.getElementById('animPropEditorCanvas').addEventListener('mouseleave', function(e) {
             animPropPainting = false;
-            animPropFlatLineY = null; // Reset flat line Y lock
+            animPropSplitTarget = null; // End split drag (unlock tile)
             animPropBrushPreviewPos = null; // Clear brush preview
             if (animPropIsDragging) {
                 animPropIsDragging = false;
@@ -15544,8 +15671,9 @@
             container.innerHTML = '';
             document.getElementById('animPropFrameCount').textContent = animPropFrames.length;
 
-            // Update collision frame dropdown when frames change
+            // Update collision + split frame dropdowns when frames change
             updateAnimPropCollisionFrameDropdown();
+            updateAnimPropSplitFrameDropdown();
 
             if (animPropFrames.length === 0) {
                 container.innerHTML = '<div style="color:#666; font-size:11px;">Click or drag on sprite sheet to select frames</div>';
@@ -15769,6 +15897,7 @@
                 fps: parseInt(document.getElementById('animPropSpeedSlider').value) || 8,
                 collisionMasks: Object.keys(animPropCollisionMasks).length > 0 ? JSON.parse(JSON.stringify(animPropCollisionMasks)) : null,
                 splitLine: animPropSplitLine ? JSON.parse(JSON.stringify(animPropSplitLine)) : null,
+                splitFlipped: (animPropSplitFlipped && Object.keys(animPropSplitFlipped).length) ? JSON.parse(JSON.stringify(animPropSplitFlipped)) : null,
                 giveItem: giveItem,
                 giveItemIndex: giveItemIndex,
                 lockItemIndex: lockItemIndex,
@@ -18698,7 +18827,7 @@
                 inventory: [],      // Items for sale: { itemIndex, buyPrice, stock }
                 buyList: [],        // Items shop buys: { itemIndex, sellPrice }
                 defaultSellRate: 50,
-                greetingDialogId: '',
+                dialogId: -1,
                 musicIndex: -1,
                 uiStyle: {
                     borderColor: '#ffaa00',
@@ -18755,7 +18884,7 @@
                     inventory: [],
                     buyList: [],
                     defaultSellRate: 50,
-                    greetingDialogId: '',
+                    dialogId: -1,
                     musicIndex: -1,
                     uiStyle: {
                         borderColor: '#ffaa00',
@@ -18781,7 +18910,18 @@
             const sellRate = shop.defaultSellRate || 50;
             document.getElementById('shopEditorSellRate').value = sellRate;
             document.getElementById('sellRateDisplay').textContent = sellRate;
-            document.getElementById('shopEditorGreeting').value = shop.greeting || shop.greetingDialogId || '';
+
+            // Populate the greeting-dialog dropdown (+ "create new" option) and select shop.dialogId
+            const dlgSelect = document.getElementById('shopEditorDialog');
+            if (dlgSelect) {
+                let opts = '<option value="-1">➕ (Create new shop dialog)</option>';
+                dialogs.forEach((d, di) => {
+                    opts += '<option value="' + di + '">' + (d.name || ('Dialog ' + di)) + '</option>';
+                });
+                dlgSelect.innerHTML = opts;
+                const did = (shop.dialogId !== undefined && shop.dialogId !== null && shop.dialogId !== '') ? parseInt(shop.dialogId) : -1;
+                dlgSelect.value = (!isNaN(did) && did >= 0 && did < dialogs.length) ? String(did) : '-1';
+            }
 
             // Populate music dropdown
             const musicSelect = document.getElementById('shopEditorMusic');
@@ -18813,13 +18953,83 @@
 
             shop.name = document.getElementById('shopEditorName').value || 'Unnamed Shop';
             shop.defaultSellRate = parseInt(document.getElementById('shopEditorSellRate').value) || 50;
-            shop.greetingDialogId = document.getElementById('shopEditorGreeting').value || '';
             shop.musicIndex = parseInt(document.getElementById('shopEditorMusic').value);
+
+            // Assign the greeting dialog (shop.dialogId) + ensure it can open the shop.
+            ensureShopDialog(shop);
 
             broadcastEdit({ editType: 'updateShop', index: editingShopIndex, shop: shop });
             closeShopEditor();
             updateShopList();
             updateSelectedShopInfo();
+            if (typeof updateDialogList === 'function') updateDialogList();
+        }
+
+        // Build a minimal shop dialog (matches the dialog editor's save shape) with the two
+        // required choices: Yes -> open shop, no -> close.
+        function makeShopDialog(name, text) {
+            return {
+                name: name,
+                style: 1,
+                width: 280,
+                height: 80,
+                typeSpeed: 30,
+                colors: { background: '#1a1a2e', border: '#fa0', text: '#ffffff', accent: '#fa0' },
+                pages: [{
+                    speaker: name,
+                    text: text,
+                    choices: [
+                        { text: 'Yes', action: 'shop' },
+                        { text: 'no', action: 'close' }
+                    ]
+                }]
+            };
+        }
+
+        // Resolve the shop's greeting dialog from the dropdown; create one if none, and
+        // auto-inject the Open Shop / Leave choices so the shop is always openable.
+        function ensureShopDialog(shop) {
+            const select = document.getElementById('shopEditorDialog');
+            let did = select ? parseInt(select.value) : -1;
+
+            if (isNaN(did) || did < 0 || did >= dialogs.length) {
+                // Create a fresh shop dialog (placeholder text the creator can edit later)
+                const dlg = makeShopDialog((shop.name || 'Shop') + ' Shop', "(please set up this shop's dialog)");
+                dialogs.push(dlg);
+                did = dialogs.length - 1;
+                broadcastEdit({ editType: 'addDialog', dialog: dlg });
+            } else {
+                // Existing dialog: ensure an 'shop' choice + a 'close' choice exist somewhere.
+                const dlg = dialogs[did];
+                if (!dlg.pages || dlg.pages.length === 0) {
+                    dlg.pages = [{ speaker: shop.name || 'Shop', text: 'do you want to open shop?' }];
+                }
+                const hasShop = dlg.pages.some(p => (p.choices || []).some(c => c.action === 'shop'));
+                const hasClose = dlg.pages.some(p => (p.choices || []).some(c => c.action === 'close'));
+                if (!hasShop || !hasClose) {
+                    const lastPage = dlg.pages[dlg.pages.length - 1];
+                    if (!lastPage.choices) lastPage.choices = [];
+                    if (!lastPage.text && !hasShop) lastPage.text = 'do you want to open shop?';
+                    if (!hasShop) lastPage.choices.push({ text: 'Yes', action: 'shop' });
+                    if (!hasClose) lastPage.choices.push({ text: 'no', action: 'close' });
+                    broadcastEdit({ editType: 'updateDialog', index: did, dialog: dlg });
+                }
+            }
+            shop.dialogId = did;
+            // Drop legacy ad-hoc greeting fields
+            delete shop.greeting;
+            delete shop.greetingDialogId;
+        }
+
+        // "Edit" button next to the dropdown — open the dialog editor for the assigned dialog.
+        function editShopDialog() {
+            const select = document.getElementById('shopEditorDialog');
+            const did = select ? parseInt(select.value) : -1;
+            if (!isNaN(did) && did >= 0 && did < dialogs.length && typeof openDialogEditor === 'function') {
+                openDialogEditor(did);
+            } else {
+                alert('Pick an existing dialog to edit, or just Save to auto-create one.');
+            }
         }
 
         function deleteShopFromEditor() {
@@ -19735,6 +19945,7 @@
             }));
 
             // Save all animated props — spread-with-strip so new fields round-trip without drift.
+            // PORT-TODO(monogame): save-schema added since the split — uiConfig + animatedProps[].splitFlipped must load in C#. docs/PORTING.md §A.
             const animPropsData = animatedProps.map(prop => {
                 const copy = { ...prop };
                 delete copy._spriteImg;
@@ -21230,7 +21441,7 @@
                     if (edit.index >= 0 && edit.index < dialogs.length) {
                         dialogs.splice(edit.index, 1);
                         // Wave 5: full cascade — placedDialogTiles, placedNpcs.dialogIndex,
-                        // quest hook IDs, shops[].greetingDialogId.
+                        // quest hook IDs, shops[].dialogId.
                         reindexDialogReferences(edit.index);
                         updateDialogList();
                         if (typeof renderQuestList === 'function') renderQuestList();
@@ -22418,6 +22629,7 @@
                         fps: propData.fps || 8,
                         collisionMasks: propData.collisionMasks || legacyMask,
                         splitLine: propData.splitLine || null,
+                        splitFlipped: propData.splitFlipped || null,
                         giveItem: propData.giveItem || false,
                         giveItemIndex: propData.giveItemIndex ?? -1,
                         lockItemIndex: propData.lockItemIndex ?? -1,
@@ -23076,8 +23288,8 @@
             if (typeof shops !== 'undefined' && Array.isArray(shops)) {
                 for (const s of shops) {
                     if (!s) continue;
-                    if (s.greetingDialogId !== undefined && s.greetingDialogId !== null && s.greetingDialogId !== '') {
-                        s.greetingDialogId = shift(s.greetingDialogId);
+                    if (s.dialogId !== undefined && s.dialogId !== null && s.dialogId !== '' && s.dialogId >= 0) {
+                        s.dialogId = shift(s.dialogId);
                     }
                 }
             }
@@ -23177,7 +23389,53 @@
         function migrateProjectData(p) {
             if (!p || typeof p !== 'object') return p;
             const v = (typeof p.version === 'number') ? p.version : 1;
-            // Future: if (v < 2) { ...migrate v1 -> v2... p.version = 2; }
+
+            // v1 -> v2: shops dropped the ad-hoc greeting/greetingDialogId and now reference a real
+            // dialog via shop.dialogId (a normal authored dialog with an 'Open Shop' choice).
+            if (v < 2) {
+                if (Array.isArray(p.shops)) {
+                    p.dialogs = Array.isArray(p.dialogs) ? p.dialogs : [];
+                    const mkShopDialog = (name, text) => ({
+                        name: name, style: 1, width: 280, height: 80, typeSpeed: 30,
+                        colors: { background: '#1a1a2e', border: '#fa0', text: '#ffffff', accent: '#fa0' },
+                        pages: [{ speaker: name, text: text, choices: [ { text: 'Yes', action: 'shop' }, { text: 'no', action: 'close' } ] }]
+                    });
+                    const ensureChoices = (dlg, shopName) => {
+                        if (!dlg) return;
+                        if (!dlg.pages || dlg.pages.length === 0) dlg.pages = [{ speaker: shopName, text: 'do you want to open shop?' }];
+                        const hasShop = dlg.pages.some(pg => (pg.choices || []).some(c => c.action === 'shop'));
+                        const hasClose = dlg.pages.some(pg => (pg.choices || []).some(c => c.action === 'close'));
+                        if (!hasShop || !hasClose) {
+                            const lp = dlg.pages[dlg.pages.length - 1];
+                            if (!lp.choices) lp.choices = [];
+                            if (!lp.text && !hasShop) lp.text = 'do you want to open shop?';
+                            if (!hasShop) lp.choices.push({ text: 'Yes', action: 'shop' });
+                            if (!hasClose) lp.choices.push({ text: 'no', action: 'close' });
+                        }
+                    };
+                    p.shops.forEach((shop, i) => {
+                        if (!shop) return;
+                        if (!(shop.dialogId !== undefined && shop.dialogId !== null && shop.dialogId !== '' && shop.dialogId >= 0)) {
+                            const g = shop.greetingDialogId;
+                            const gNum = parseInt(g);
+                            if (!isNaN(gNum) && p.dialogs[gNum]) {
+                                shop.dialogId = gNum; // greetingDialogId was a numeric dialog index
+                            } else {
+                                const text = (typeof g === 'string' && g.trim()) ? g.trim()
+                                    : (typeof shop.greeting === 'string' && shop.greeting.trim()) ? shop.greeting.trim()
+                                    : "(please set up this shop's dialog)";
+                                p.dialogs.push(mkShopDialog((shop.name || ('Shop ' + (i + 1))) + ' Shop', text));
+                                shop.dialogId = p.dialogs.length - 1;
+                            }
+                        }
+                        ensureChoices(p.dialogs[shop.dialogId], shop.name || 'Shop'); // make sure it can open the shop
+                        delete shop.greeting;
+                        delete shop.greetingDialogId;
+                    });
+                }
+                p.version = 2;
+            }
+
             return p;
         }
         // ===== end Wave 0 helpers =====
@@ -24534,11 +24792,19 @@
                 return;
             }
 
+            // Check if any shop uses this dialog (shop.dialogId)
+            const usedByShops = (typeof shops !== 'undefined' && Array.isArray(shops))
+                ? shops.filter(s => s && parseInt(s.dialogId) === index) : [];
+            if (usedByShops.length > 0) {
+                alert('Cannot delete: This dialog is assigned to ' + usedByShops.length + ' shop(s). Reassign the shop first.');
+                return;
+            }
+
             dialogs.splice(index, 1);
 
             // Wave 5: cascade reindex — placedDialogTiles, placedNpcs.dialogIndex,
             // quest hook IDs (startDialogId/activeDialogId/completeDialogId/declineDialogId),
-            // shops[].greetingDialogId.
+            // shops[].dialogId.
             reindexDialogReferences(index);
 
             broadcastEdit({ editType: 'deleteDialog', index: index });
@@ -24580,7 +24846,8 @@
                     }
                 });
 
-                // Check which quests use this dialog
+                // Check which quests use this dialog (all FOUR slots — declineDialogId was missing,
+                // which mislabeled decline-only dialogs as "regular").
                 quests.forEach(quest => {
                     if (parseInt(quest.startDialogId) === i) {
                         questUsage.push({ quest: quest.name || quest.id, type: 'Start' });
@@ -24591,7 +24858,20 @@
                     if (parseInt(quest.completeDialogId) === i) {
                         questUsage.push({ quest: quest.name || quest.id, type: 'Complete' });
                     }
+                    if (parseInt(quest.declineDialogId) === i) {
+                        questUsage.push({ quest: quest.name || quest.id, type: 'Decline' });
+                    }
                 });
+
+                // Check which shops use this dialog (shop.dialogId)
+                const shopUsage = [];
+                if (typeof shops !== 'undefined' && Array.isArray(shops)) {
+                    shops.forEach((shop, sIdx) => {
+                        if (shop && parseInt(shop.dialogId) === i) {
+                            shopUsage.push({ shop: shop.name || 'Shop ' + (sIdx + 1) });
+                        }
+                    });
+                }
 
                 return {
                     dialog: d,
@@ -24599,15 +24879,24 @@
                     pageCount,
                     attachedTo,
                     questUsage,
+                    shopUsage,
+                    isShopDialog: shopUsage.length > 0,
                     isQuestDialog: questUsage.length > 0
                 };
             });
 
-            // Separate into quest dialogs and regular dialogs
-            const questDialogs = dialogInfo.filter(d => d.isQuestDialog);
-            const regularDialogs = dialogInfo.filter(d => !d.isQuestDialog);
+            // Separate into shop / quest / regular dialogs (precedence: shop > quest > regular)
+            const shopDialogs = dialogInfo.filter(d => d.isShopDialog);
+            const questDialogs = dialogInfo.filter(d => d.isQuestDialog && !d.isShopDialog);
+            const regularDialogs = dialogInfo.filter(d => !d.isQuestDialog && !d.isShopDialog);
 
             let html = '';
+
+            // Shop Dialogs section
+            if (shopDialogs.length > 0) {
+                html += '<div style="font-size:11px; color:#8f8; font-weight:bold; margin:8px 0 4px 0; border-bottom:1px solid #8f8; padding-bottom:2px;">SHOP DIALOGS</div>';
+                html += shopDialogs.map(info => renderDialogItem(info)).join('');
+            }
 
             // Quest Dialogs section
             if (questDialogs.length > 0) {
@@ -24630,14 +24919,16 @@
         }
 
         function renderDialogItem(info) {
-            const { dialog, index, pageCount, attachedTo, questUsage, isQuestDialog } = info;
+            const { dialog, index, pageCount, attachedTo, questUsage, shopUsage } = info;
             const isSelected = currentDialogTileIndex === index;
             const bgColor = isSelected ? '#4a7c59' : '#333';
             const borderStyle = isSelected ? '2px solid #8f8' : '2px solid transparent';
 
             // Build usage text
             let usageText = '';
-            if (questUsage.length > 0) {
+            if (shopUsage && shopUsage.length > 0) {
+                usageText = '🛒 ' + shopUsage.map(s => s.shop).join(', ');
+            } else if (questUsage.length > 0) {
                 usageText = questUsage.map(q => q.quest + ' (' + q.type + ')').join(', ');
             } else if (attachedTo.length > 0) {
                 usageText = attachedTo.join(', ');
@@ -24793,6 +25084,7 @@
         }
 
         // ============ UI TAB — custom UI skins (builder doc) ============
+        // PORT-SKIP(monogame): builder/editor. The uiConfig DATA it produces is a port target (schema §A + runtime §B); this editor is not ported. docs/PORTING.md §D.
         // The UI tab shows a LIST of skinnable slots (quest log button + panel). Each "Set Up"
         // opens a FULL-PAGE editor (mirrors the animated-prop editor): Load Image -> sheet view with
         // a frame grid you CLICK to include/exclude frames -> live preview + speed -> Static/Animated
@@ -27581,6 +27873,7 @@
         }
 
         // Apply both skins to their DOM elements (idempotent; safe to call repeatedly).
+        // PORT-TODO(monogame): custom quest-log UI runtime — render uiConfig skins (animated sprite, %-layout, active/completed text zones, text style). docs/PORTING.md §B.
         function applyUiSkins() {
             const tracker = document.getElementById('questTracker');
             if (tracker && uiSkinReady('questLogButton')) {
@@ -31275,54 +31568,27 @@ Item Receive Display:
 
             // Interact key (A) - for dialogs, doors, NPCs, and shops
             if ((e.key === 'a' || e.key === 'A') && !player.attacking) {
-                // Check for shop interaction first
+                // Shop NPCs open via their assigned dialog (shop.dialogId) — a normal authored
+                // dialog that contains an 'Open Shop' choice. No synthetic greeting, no choice
+                // injection, no shadowing of a real dialog (the shop dialog IS the conversation).
                 const shopResult = checkShopInteraction();
                 if (shopResult && shopResult.shopIndex >= 0 && !activeDialog) {
-                    // Show shop greeting dialog with Open Shop / Leave choices
                     const shop = shops[shopResult.shopIndex];
-                    const shopName = shop?.name || 'Shop';
-
-                    // Check if shop has a custom greeting dialog by ID
-                    const dialogId = parseInt(shop?.greetingDialogId);
-                    if (!isNaN(dialogId) && dialogs[dialogId]) {
-                        // Use existing dialog - but add shop choices to last page if not present
-                        const greetingDialog = JSON.parse(JSON.stringify(dialogs[dialogId])); // Deep copy
-                        const lastPage = greetingDialog.pages[greetingDialog.pages.length - 1];
-                        if (!lastPage.choices || lastPage.choices.length === 0) {
-                            lastPage.choices = [
-                                { text: 'Open Shop', action: 'shop' },
-                                { text: 'Leave', action: 'close' }
-                            ];
-                        }
+                    const did = parseInt(shop?.dialogId);
+                    if (!isNaN(did) && dialogs[did]) {
                         activeDialog = {
-                            dialog: greetingDialog,
-                            pageIndex: 0,
-                            npc: shopResult.npc,
-                            isShopGreeting: true,
-                            shopIndex: shopResult.shopIndex
-                        };
-                    } else {
-                        // Use custom greeting text or default
-                        const greetingText = (shop?.greetingDialogId || shop?.greeting || 'Welcome! Would you like to browse my wares?').trim();
-                        activeDialog = {
-                            dialog: {
-                                name: shopName,
-                                pages: [{
-                                    text: greetingText || 'Welcome! Would you like to browse my wares?',
-                                    choices: [
-                                        { text: 'Open Shop', action: 'shop' },
-                                        { text: 'Leave', action: 'close' }
-                                    ]
-                                }]
-                            },
+                            dialog: dialogs[did],
                             pageIndex: 0,
                             npc: shopResult.npc,
                             shopIndex: shopResult.shopIndex
                         };
+                        dialogSelectedChoice = 0;
+                        resetDialogTyping();
+                        renderDialogBox();
+                        return;
                     }
-                    dialogSelectedChoice = 0;
-                    resetDialogTyping();
-                    renderDialogBox();
+                    // Defensive fallback: shop has no valid dialog assigned — open it directly.
+                    openShop(shopResult.shopIndex);
                     return;
                 }
                 handleInteract();
@@ -31909,6 +32175,7 @@ Item Receive Display:
             { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }
         ];
 
+        // PORT-TODO(monogame): collision = rotation-aware tiles + scaled-bounds anim props (registry pass, scale/nudge/mirror/rotation inverse). docs/PORTING.md §B.
         function checkCollision(x, y, w, h) {
             const tileSize = gridSize * TILE_SCALE;
             const pixelScale = tileSize / gridSize;
@@ -31973,6 +32240,47 @@ Item Receive Display:
                     }
                 }
 
+                // Animated props: test the point against each placed prop's SCALED bounds.
+                // (The per-tile scan below can't see scale/nudge overflow beyond the footprint tiles.)
+                if (typeof animatedTileRegistry !== 'undefined' && animatedTileRegistry) {
+                    for (let ri = 0; ri < animatedTileRegistry.length; ri++) {
+                        const reg = animatedTileRegistry[ri];
+                        const rlayer = layers[reg.li];
+                        if (!rlayer || !rlayer[reg.y]) continue;
+                        const rcell = rlayer[reg.y][reg.x];
+                        if (!rcell || rcell.type !== 'animTile') continue;
+                        const rprop = animatedPropsData[rcell.propIndex];
+                        if (!rprop) continue;
+                        const rTimer = animPropFrameTimers[reg.x + ',' + reg.y + ',' + reg.li] || { frame: 0 };
+                        let rmask = null;
+                        if (rprop.collisionMasks) {
+                            const fc = (rprop.frames && rprop.frames.length) || 1;
+                            rmask = rprop.collisionMasks[rTimer.frame % fc] || rprop.collisionMasks[0];
+                        } else if (rprop.collisionMask) {
+                            rmask = rprop.collisionMask;
+                        }
+                        if (!rmask) continue;
+                        const cs = rcell.scale || 1;
+                        const tw = rcell.tilesW || 1, th = rcell.tilesH || 1;
+                        const propW = tw * tileSize, propH = th * tileSize;
+                        const rectX = reg.x * tileSize - propW * (cs - 1) / 2 + (rcell.nudgeX || 0) * pixelScale;
+                        const rectY = reg.y * tileSize - propH * (cs - 1) / 2 + (rcell.nudgeY || 0) * pixelScale;
+                        if (point.x < rectX || point.x >= rectX + propW * cs || point.y < rectY || point.y >= rectY + propH * cs) continue;
+                        let mfx = (point.x - rectX) / cs / pixelScale;
+                        const mfy = (point.y - rectY) / cs / pixelScale;
+                        if (rcell.mirror) mfx = (tw * gridSize) - 1 - mfx;
+                        let rmx = Math.floor(mfx), rmy = Math.floor(mfy);
+                        // Rotated square-footprint props: invert rotation into mask space.
+                        if (rcell.rotation && tw === th) {
+                            const rc = unrotateMaskCoord(rmx, rmy, tw * gridSize, rcell.rotation, false);
+                            rmx = rc[0]; rmy = rc[1];
+                        }
+                        if (rmy >= 0 && rmy < rmask.length && rmask[rmy] && rmx >= 0 && rmx < rmask[rmy].length && rmask[rmy][rmx]) {
+                            return true;
+                        }
+                    }
+                }
+
                 // Check ALL layers for collision
                 for (let li = 0; li < layers.length; li++) {
                     const layer = layers[li];
@@ -31985,69 +32293,29 @@ Item Receive Display:
                         const key = cell.type === 'tile'
                             ? tilesetIdx + ':' + cell.x + ',' + cell.y
                             : cell.x + ',' + cell.y;
-                        // Use tile collision masks for tiles, prop collision masks for props (by propIndex)
+                        // Use tile collision masks for tiles, prop collision masks for props.
+                        // (Animated props are handled by the scaled-bounds registry pass above.)
                         let mask = null;
-                        let maskOffsetX = 0;
-                        let maskOffsetY = 0;
-
                         if (cell.type === 'prop') {
                             const propIdx = cell.propIndex || 0;
                             const propKey = cell.x + ',' + cell.y;
                             mask = propCollisionMasksAll[propIdx] ? propCollisionMasksAll[propIdx][propKey] : null;
-                        } else if (cell.type === 'animTile') {
-                            // Animated tile - get collision from prop data (per-frame)
-                            const propData = animatedPropsData[cell.propIndex];
-                            if (propData) {
-                                // Get current animation frame for this prop
-                                const animKey = tileX + ',' + tileY + ',' + li;
-                                const timer = animPropFrameTimers[animKey] || { frame: 0 };
-                                const currentFrame = timer.frame;
-
-                                // Check for per-frame collision masks first, fall back to single mask
-                                if (propData.collisionMasks && propData.collisionMasks[currentFrame]) {
-                                    mask = propData.collisionMasks[currentFrame];
-                                } else if (propData.collisionMask) {
-                                    // Legacy single mask format
-                                    mask = propData.collisionMask;
-                                }
-
-                                // For multi-tile props, offset into the mask
-                                maskOffsetX = (cell.offsetX || 0) * gridSize;
-                                maskOffsetY = (cell.offsetY || 0) * gridSize;
-                            }
-                        } else {
+                        } else if (cell.type === 'tile') {
                             mask = collisionMasks[key];
                         }
 
                         if (mask) {
-                            // Check pixel-level collision (works for both tiles and props)
-                            const localX = Math.floor((point.x % tileSize) / pixelScale);
-                            const localY = Math.floor((point.y % tileSize) / pixelScale);
-
-                            let maskX, maskY;
-                            if (cell.type === 'animTile' && ((cell.scale && cell.scale !== 1) || cell.nudgeX || cell.nudgeY || cell.mirror)) {
-                                // Inverse-transform the sample point so collision matches the RENDERED prop:
-                                // per-instance scale (about the prop's center), pixel nudge, and horizontal mirror.
-                                const tw = cell.tilesW || 1, th = cell.tilesH || 1;
-                                const pmw = tw * gridSize, pmh = th * gridSize;
-                                const cs = cell.scale || 1;
-                                let sx = (localX + maskOffsetX) - (cell.nudgeX || 0);
-                                let sy = (localY + maskOffsetY) - (cell.nudgeY || 0);
-                                sx = (sx - pmw / 2) / cs + pmw / 2;
-                                sy = (sy - pmh / 2) / cs + pmh / 2;
-                                if (cell.mirror) sx = pmw - 1 - sx;
-                                maskX = Math.floor(sx);
-                                maskY = Math.floor(sy);
-                            } else {
-                                // Apply offset for multi-tile animated props
-                                maskX = localX + maskOffsetX;
-                                maskY = localY + maskOffsetY;
+                            let localX = Math.floor((point.x % tileSize) / pixelScale);
+                            let localY = Math.floor((point.y % tileSize) / pixelScale);
+                            // Rotated/flipped tiles: invert the render transform (rotate then flip)
+                            // so the collision mask matches the rotated sprite.
+                            if (cell.type === 'tile' && (cell.rotation || cell.flipped)) {
+                                const rc = unrotateMaskCoord(localX, localY, gridSize, cell.rotation, cell.flipped);
+                                localX = rc[0]; localY = rc[1];
                             }
-
-                            if (maskY >= 0 && maskY < mask.length && mask[maskY]) {
-                                if (maskX >= 0 && maskX < mask[maskY].length && mask[maskY][maskX]) {
-                                    return true;
-                                }
+                            if (localY >= 0 && localY < mask.length && mask[localY] &&
+                                localX >= 0 && localX < mask[localY].length && mask[localY][localX]) {
+                                return true;
                             }
                         } else if (cell.type === 'tile' && tileCollisions[key]) {
                             // Full tile collision (no mask = solid tile)
@@ -34740,35 +35008,7 @@ Item Receive Display:
                             ctx.fillRect(px, py, tileSize, tileSize);
                         }
 
-                        // Draw collision overlay if debug enabled (all layers)
-                        if (showCollision) {
-                            // Include tileset index in collision key
-                            const tilesetIdx = cell.tilesetIndex || 0;
-                            const key = tilesetIdx + ':' + cell.x + ',' + cell.y;
-                            const mask = collisionMasks[key];
-
-                            if (mask) {
-                                // Draw pixel-level collision
-                                const pixelSize = tileSize / gridSize;
-                                ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                                for (let my = 0; my < gridSize; my++) {
-                                    for (let mx = 0; mx < gridSize; mx++) {
-                                        if (mask[my] && mask[my][mx]) {
-                                            ctx.fillRect(
-                                                px + mx * pixelSize,
-                                                py + my * pixelSize,
-                                                pixelSize,
-                                                pixelSize
-                                            );
-                                        }
-                                    }
-                                }
-                            } else if (tileCollisions[key]) {
-                                // Full tile collision
-                                ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                                ctx.fillRect(px, py, tileSize, tileSize);
-                            }
-                        }
+                        // (collision overlay is drawn once, rotation-aware, by drawCollisionDebugOverlay PASS 5)
                     } else if (cell.type === 'prop') {
                         const propIdx = cell.propIndex || 0;
                         const propImg = propImages[propIdx];
@@ -34812,6 +35052,21 @@ Item Receive Display:
         }
 
         // === Y-SORTING FUNCTIONS ===
+
+        // PORT-TODO(monogame): rotation-aware mask remap — collision/overlay must match rotated sprite. See docs/PORTING.md §B.
+        // Map a tile-local sample (mx,my in 0..N-1) back to UNROTATED mask coords, inverting
+        // drawTileWithEffects (rotate CW by θ∈{0,90,180,270}, then horizontal flip). Shared by
+        // collision detection AND the C-key overlay so they always agree with the rendered sprite.
+        function unrotateMaskCoord(mx, my, N, rotation, flipped) {
+            const r = (((rotation || 0) % 360) + 360) % 360;
+            let sx, sy;
+            if (r === 90) { sx = my; sy = N - 1 - mx; }
+            else if (r === 180) { sx = N - 1 - mx; sy = N - 1 - my; }
+            else if (r === 270) { sx = N - 1 - my; sy = mx; }
+            else { sx = mx; sy = my; }
+            if (flipped) sx = N - 1 - sx;
+            return [sx, sy];
+        }
 
         // Object pool for Y-sorting to avoid GC pauses
         // Pre-allocated array and objects - reuse instead of creating new ones each frame
@@ -35142,17 +35397,13 @@ Item Receive Display:
         }
 
         // Draw only the trunk (bottom) portion of an animated tile with split line
+        // PORT-TODO(monogame): anim-prop depth-split — Flip (splitFlipped) + per-instance scale on the trunk/canopy cut. docs/PORTING.md §B.
         function drawAnimTileTrunk(cell, tx, ty, li, camX, camY, tileSize) {
             const propData = animatedPropsData[cell.propIndex];
             const propImg = animPropImages[cell.propIndex];
             if (!propData || !propImg || !propImg.complete) return;
             if (!propData.frames || propData.frames.length === 0) return;
             if (!propData.splitLine) return;
-
-            // Round to integers to prevent tile seams (+ per-instance pixel nudge)
-            const px = Math.round(tx * tileSize - camX + (cell.nudgeX || 0) * (tileSize / gridSize));
-            const py = Math.round(ty * tileSize - camY + (cell.nudgeY || 0) * (tileSize / gridSize));
-            const scale = tileSize / gridSize;
 
             // Use origin tile position for synced animation
             const originX = tx - (cell.offsetX || 0);
@@ -35166,14 +35417,32 @@ Item Receive Display:
             const offsetX = cell.offsetX || 0;
             const offsetY = cell.offsetY || 0;
 
-            // Per-instance horizontal mirror (match drawAnimTile): reflect about the prop's screen-center.
+            // Per-instance scale geometry (mirror drawAnimTile) so the split cut aligns with the
+            // scaled sprite. dscale converts a source-pixel height into scaled destination pixels.
+            const propScale = cell.scale || 1;
+            const scaledTileSize = tileSize * propScale;
+            const dscale = scaledTileSize / gridSize;
+            const tilesW = cell.tilesW || 1, tilesH = cell.tilesH || 1;
+            const propWidth = tilesW * tileSize, propHeight = tilesH * tileSize;
+            const propCenterOffsetX = (propWidth * propScale - propWidth) / 2;
+            const propCenterOffsetY = (propHeight * propScale - propHeight) / 2;
+            const originPx = Math.floor(originX * tileSize - camX);
+            const originPy = Math.floor(originY * tileSize - camY);
+            const drawX = originPx - propCenterOffsetX + (offsetX * tileSize) * propScale;
+            const drawY = originPy - propCenterOffsetY + (offsetY * tileSize) * propScale;
+
+            // Per-instance pixel nudge + horizontal mirror (about the scaled prop center), like drawAnimTile.
+            const _nx = (cell.nudgeX || 0) * (tileSize / gridSize);
+            const _ny = (cell.nudgeY || 0) * (tileSize / gridSize);
             const mirror = cell.mirror;
-            const _twTrunk = cell.tilesW || 1;
-            const _cxTrunk = (originX * tileSize - camX) + (_twTrunk * tileSize) / 2 + (cell.nudgeX || 0) * (tileSize / gridSize);
+            const _cxTrunk = originPx - propCenterOffsetX + (propWidth * propScale) / 2;
             const blit = (sx, sy, sw, sh, dx, dy, dw, dh) => {
-                if (mirror) { ctx.save(); ctx.translate(_cxTrunk, 0); ctx.scale(-1, 1); ctx.translate(-_cxTrunk, 0); }
+                const wrap = _nx || _ny || mirror;
+                if (wrap) ctx.save();
+                if (_nx || _ny) ctx.translate(_nx, _ny);
+                if (mirror) { ctx.translate(_cxTrunk, 0); ctx.scale(-1, 1); ctx.translate(-_cxTrunk, 0); }
                 ctx.drawImage(propImg, sx, sy, sw, sh, dx, dy, dw, dh);
-                if (mirror) ctx.restore();
+                if (wrap) ctx.restore();
             };
 
             // Get split Y for this specific tile within the prop
@@ -35194,43 +35463,46 @@ Item Receive Display:
                 if (offsetX === 0 && offsetY === 0) splitY = propData.splitLine;
             }
 
+            const srcXBase = frame.x + offsetX * gridSize;
+            const srcYBase = frame.y + offsetY * gridSize;
+            ctx.imageSmoothingEnabled = false;
+
             // If no split for this tile, draw full tile
             if (splitY === null || splitY === undefined) {
-                const srcX = frame.x + offsetX * gridSize;
-                const srcY = frame.y + offsetY * gridSize;
-                ctx.imageSmoothingEnabled = false;
-                blit(srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
+                blit(srcXBase, srcYBase, gridSize, gridSize, drawX, drawY, scaledTileSize, scaledTileSize);
                 return;
             }
 
-            // Handle splitY being an array (freeform line) - use minimum for trunk rendering
+            // Flip: which half is the Y-sorted trunk. Normal = trunk BELOW split; flipped = ABOVE.
+            const isFlipped = (propData.splitFlipped && propData.splitFlipped[tileKey]) || false;
+
+            // Flatten freeform line to the largest trunk region (no gaps):
+            // normal trunk (below) uses the lowest split; flipped trunk (above) uses the highest.
             let localSplitY;
             if (Array.isArray(splitY)) {
-                // Use minimum value for trunk rendering (draw trunk where split is lowest)
-                localSplitY = Math.min(...splitY);
+                localSplitY = isFlipped ? Math.max(...splitY) : Math.min(...splitY);
             } else {
                 localSplitY = splitY;
             }
 
-            // Only draw if split is within this tile
-            if (localSplitY <= 0) {
-                // Split is above this tile - draw full tile
-                const srcX = frame.x + offsetX * gridSize;
-                const srcY = frame.y + offsetY * gridSize;
-                ctx.imageSmoothingEnabled = false;
-                blit(srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
-            } else if (localSplitY < gridSize) {
-                // Split is within this tile - draw only trunk (below split)
-                const srcX = frame.x + offsetX * gridSize;
-                const srcY = frame.y + offsetY * gridSize + localSplitY;
-                const srcH = gridSize - localSplitY;
-                const destY = py + localSplitY * scale;
-                const destH = srcH * scale;
-
-                ctx.imageSmoothingEnabled = false;
-                blit(srcX, srcY, gridSize, srcH, px, destY, tileSize, destH);
+            if (isFlipped) {
+                // FLIPPED: trunk is ABOVE the split line
+                if (localSplitY >= gridSize) {
+                    blit(srcXBase, srcYBase, gridSize, gridSize, drawX, drawY, scaledTileSize, scaledTileSize);
+                } else if (localSplitY > 0) {
+                    blit(srcXBase, srcYBase, gridSize, localSplitY, drawX, drawY, scaledTileSize, localSplitY * dscale);
+                }
+                // localSplitY <= 0: trunk is empty (split at top)
+            } else {
+                // NORMAL: trunk is BELOW the split line
+                if (localSplitY <= 0) {
+                    blit(srcXBase, srcYBase, gridSize, gridSize, drawX, drawY, scaledTileSize, scaledTileSize);
+                } else if (localSplitY < gridSize) {
+                    const srcH = gridSize - localSplitY;
+                    blit(srcXBase, srcYBase + localSplitY, gridSize, srcH, drawX, drawY + localSplitY * dscale, scaledTileSize, srcH * dscale);
+                }
+                // localSplitY >= gridSize: trunk is empty (split below tile)
             }
-            // If localSplitY >= gridSize, split is below this tile - don't draw trunk here
         }
 
         function drawTileFull(cell, tx, ty, camX, camY, tileSize) {
@@ -35243,27 +35515,7 @@ Item Receive Display:
                 drawTileWithEffects(ctx, cellTileset, cell.x, cell.y, gridSize, px, py, tileSize, cell.rotation || 0, cell.flipped || false);
             }
 
-            // Draw collision overlay if debug enabled
-            if (showCollision) {
-                const tilesetIdx = cell.tilesetIndex || 0;
-                const key = tilesetIdx + ':' + cell.x + ',' + cell.y;
-                const mask = collisionMasks[key];
-
-                if (mask) {
-                    const pixelSize = tileSize / gridSize;
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                    for (let my = 0; my < gridSize; my++) {
-                        for (let mx = 0; mx < gridSize; mx++) {
-                            if (mask[my] && mask[my][mx]) {
-                                ctx.fillRect(px + mx * pixelSize, py + my * pixelSize, pixelSize, pixelSize);
-                            }
-                        }
-                    }
-                } else if (tileCollisions[key]) {
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                    ctx.fillRect(px, py, tileSize, tileSize);
-                }
-            }
+            // (collision overlay is drawn once, rotation-aware, by drawCollisionDebugOverlay PASS 5)
         }
 
         function drawTileTrunk(cell, tx, ty, camX, camY, tileSize) {
@@ -35331,24 +35583,7 @@ Item Receive Display:
             ctx.drawImage(cellTileset, cell.x, cell.y, gridSize, gridSize, px, py, tileSize, tileSize);
             ctx.restore();
 
-            // Draw collision overlay if debug enabled
-            if (showCollision) {
-                const mask = collisionMasks[key];
-                if (mask) {
-                    const pixelSize = tileSize / gridSize;
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                    for (let my = 0; my < gridSize; my++) {
-                        for (let mx = 0; mx < gridSize; mx++) {
-                            if (mask[my] && mask[my][mx]) {
-                                ctx.fillRect(px + mx * pixelSize, py + my * pixelSize, pixelSize, pixelSize);
-                            }
-                        }
-                    }
-                } else if (tileCollisions[key]) {
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                    ctx.fillRect(px, py, tileSize, tileSize);
-                }
-            }
+            // (collision overlay is drawn once, rotation-aware, by drawCollisionDebugOverlay PASS 5)
         }
 
         function drawCanopyOverlay(camX, camY, tileSize) {
@@ -35463,47 +35698,71 @@ Item Receive Display:
                             let splitY = null;
 
                             if (typeof propData.splitLine === 'object' && !Array.isArray(propData.splitLine)) {
-                                // Try per-frame format first: "frameIndex:tileX,tileY"
                                 const perFrameKey = frameIdx + ':' + tileKey;
                                 splitY = propData.splitLine[perFrameKey];
-
-                                // Fall back to shared format: "tileX,tileY"
-                                if (splitY === undefined || splitY === null) {
-                                    splitY = propData.splitLine[tileKey];
-                                }
+                                if (splitY === undefined || splitY === null) splitY = propData.splitLine[tileKey];
                             } else if (typeof propData.splitLine === 'number') {
-                                // Old format: single number (only applies to tile 0,0)
                                 if (offsetX === 0 && offsetY === 0) splitY = propData.splitLine;
                             }
 
                             // If no split for this tile, skip canopy
                             if (splitY === null || splitY === undefined) continue;
 
-                            // Handle splitY being an array (freeform line) - use maximum for canopy rendering
+                            // Flip: canopy = the player-covering half. Normal = ABOVE split; flipped = BELOW.
+                            const isFlipped = (propData.splitFlipped && propData.splitFlipped[tileKey]) || false;
+
+                            // Flatten freeform line: normal canopy (above) uses the highest split; flipped (below) uses the lowest.
                             let localSplitY;
                             if (Array.isArray(splitY)) {
-                                // Use maximum value for canopy rendering (draw canopy where split is highest)
-                                localSplitY = Math.max(...splitY);
+                                localSplitY = isFlipped ? Math.min(...splitY) : Math.max(...splitY);
                             } else {
                                 localSplitY = splitY;
                             }
 
-                            // Only draw canopy if split is within this tile
-                            if (localSplitY > 0 && localSplitY < gridSize) {
-                                const srcX = frame.x + offsetX * gridSize;
-                                const srcY = frame.y + offsetY * gridSize;
-                                const srcH = localSplitY;
-                                const destH = srcH * scale;
+                            // Per-instance scale/nudge/mirror geometry (match drawAnimTile + drawAnimTileTrunk)
+                            const propScale = cell.scale || 1;
+                            const scaledTileSize = tileSize * propScale;
+                            const dscale = scaledTileSize / gridSize;
+                            const tilesW = cell.tilesW || 1, tilesH = cell.tilesH || 1;
+                            const propWidth = tilesW * tileSize, propHeight = tilesH * tileSize;
+                            const propCenterOffsetX = (propWidth * propScale - propWidth) / 2;
+                            const propCenterOffsetY = (propHeight * propScale - propHeight) / 2;
+                            const originPx = Math.floor(originX * tileSize - camX);
+                            const originPy = Math.floor(originY * tileSize - camY);
+                            const drawX = originPx - propCenterOffsetX + (offsetX * tileSize) * propScale;
+                            const drawY = originPy - propCenterOffsetY + (offsetY * tileSize) * propScale;
+                            const _nx = (cell.nudgeX || 0) * (tileSize / gridSize);
+                            const _ny = (cell.nudgeY || 0) * (tileSize / gridSize);
+                            const mirror = cell.mirror;
+                            const _cx = originPx - propCenterOffsetX + (propWidth * propScale) / 2;
+                            const blit = (sx, sy, sw, sh, dx, dy, dw, dh) => {
+                                const wrap = _nx || _ny || mirror;
+                                if (wrap) ctx.save();
+                                if (_nx || _ny) ctx.translate(_nx, _ny);
+                                if (mirror) { ctx.translate(_cx, 0); ctx.scale(-1, 1); ctx.translate(-_cx, 0); }
+                                ctx.drawImage(propImg, sx, sy, sw, sh, dx, dy, dw, dh);
+                                if (wrap) ctx.restore();
+                            };
 
-                                ctx.imageSmoothingEnabled = false;
-                                ctx.drawImage(propImg, srcX, srcY, gridSize, srcH, px, py, tileSize, destH);
-                            } else if (localSplitY >= gridSize) {
-                                // Full tile is canopy (split at bottom)
-                                const srcX = frame.x + offsetX * gridSize;
-                                const srcY = frame.y + offsetY * gridSize;
+                            const srcXBase = frame.x + offsetX * gridSize;
+                            const srcYBase = frame.y + offsetY * gridSize;
+                            ctx.imageSmoothingEnabled = false;
 
-                                ctx.imageSmoothingEnabled = false;
-                                ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
+                            if (isFlipped) {
+                                // FLIPPED: canopy is BELOW the split line
+                                if (localSplitY <= 0) {
+                                    blit(srcXBase, srcYBase, gridSize, gridSize, drawX, drawY, scaledTileSize, scaledTileSize);
+                                } else if (localSplitY < gridSize) {
+                                    const srcH = gridSize - localSplitY;
+                                    blit(srcXBase, srcYBase + localSplitY, gridSize, srcH, drawX, drawY + localSplitY * dscale, scaledTileSize, srcH * dscale);
+                                }
+                            } else {
+                                // NORMAL: canopy is ABOVE the split line
+                                if (localSplitY > 0 && localSplitY < gridSize) {
+                                    blit(srcXBase, srcYBase, gridSize, localSplitY, drawX, drawY, scaledTileSize, localSplitY * dscale);
+                                } else if (localSplitY >= gridSize) {
+                                    blit(srcXBase, srcYBase, gridSize, gridSize, drawX, drawY, scaledTileSize, scaledTileSize);
+                                }
                             }
                         }
                     }
@@ -35546,10 +35805,15 @@ Item Receive Display:
 
                             if (mask) {
                                 ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                                for (let my = 0; my < gridSize; my++) {
-                                    for (let mx = 0; mx < gridSize; mx++) {
-                                        if (mask[my] && mask[my][mx]) {
-                                            ctx.fillRect(px + mx * pixelSize, py + my * pixelSize, pixelSize, pixelSize);
+                                const rotated = cell.rotation || cell.flipped;
+                                // Iterate DESTINATION pixels; map each back to the unrotated mask so the
+                                // red overlay rotates with the tile (and matches collision detection).
+                                for (let dy = 0; dy < gridSize; dy++) {
+                                    for (let dx = 0; dx < gridSize; dx++) {
+                                        let sx = dx, sy = dy;
+                                        if (rotated) { const rc = unrotateMaskCoord(dx, dy, gridSize, cell.rotation, cell.flipped); sx = rc[0]; sy = rc[1]; }
+                                        if (mask[sy] && mask[sy][sx]) {
+                                            ctx.fillRect(px + dx * pixelSize, py + dy * pixelSize, pixelSize, pixelSize);
                                         }
                                     }
                                 }
@@ -35569,6 +35833,62 @@ Item Receive Display:
                                             ctx.fillRect(px + mx * pixelSize, py + my * pixelSize, pixelSize, pixelSize);
                                         }
                                     }
+                                }
+                            }
+                        } else if (cell.type === 'animTile') {
+                            // Animated-prop collision overlay: draw the CURRENT frame's mask,
+                            // transformed by the same per-instance scale/nudge/mirror as drawAnimTile,
+                            // so the red mask sits exactly on the rendered (possibly scaled) prop.
+                            const propData = animatedPropsData[cell.propIndex];
+                            if (propData) {
+                                const offX = cell.offsetX || 0, offY = cell.offsetY || 0;
+                                const originX = x - offX, originY = y - offY;
+                                const aKey = originX + ',' + originY + ',' + li;
+                                const timer = animPropFrameTimers[aKey] || { frame: 0 };
+                                let mask = null;
+                                if (propData.collisionMasks) {
+                                    const fcount = (propData.frames && propData.frames.length) || 1;
+                                    mask = propData.collisionMasks[timer.frame % fcount] || propData.collisionMasks[0];
+                                } else if (propData.collisionMask) {
+                                    mask = propData.collisionMask;
+                                }
+                                if (mask) {
+                                    // Replicate drawAnimTile's prop-center scale transform for THIS tile
+                                    const propScale = cell.scale || 1;
+                                    const tilesW = cell.tilesW || 1, tilesH = cell.tilesH || 1;
+                                    const propWidth = tilesW * tileSize, propHeight = tilesH * tileSize;
+                                    const propCenterOffsetX = (propWidth * propScale - propWidth) / 2;
+                                    const propCenterOffsetY = (propHeight * propScale - propHeight) / 2;
+                                    const originPx = Math.floor(originX * tileSize - camX);
+                                    const originPy = Math.floor(originY * tileSize - camY);
+                                    const drawX = originPx - propCenterOffsetX + (offX * tileSize) * propScale;
+                                    const drawY = originPy - propCenterOffsetY + (offY * tileSize) * propScale;
+                                    const cellPixel = (tileSize * propScale) / gridSize;
+
+                                    const _nx = (cell.nudgeX || 0) * (tileSize / gridSize);
+                                    const _ny = (cell.nudgeY || 0) * (tileSize / gridSize);
+                                    const _nudged = _nx || _ny;
+                                    if (_nudged) { ctx.save(); ctx.translate(_nx, _ny); }
+                                    if (cell.mirror) {
+                                        ctx.save();
+                                        const centerScreenX = originPx - propCenterOffsetX + (propWidth * propScale) / 2;
+                                        ctx.translate(centerScreenX, 0); ctx.scale(-1, 1); ctx.translate(-centerScreenX, 0);
+                                    }
+                                    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
+                                    const moX = offX * gridSize, moY = offY * gridSize;
+                                    // Single-tile rotated props: map dest->source so overlay matches collision.
+                                    const rotSingle = cell.rotation && tilesW === 1 && tilesH === 1;
+                                    for (let dy = 0; dy < gridSize; dy++) {
+                                        for (let dx = 0; dx < gridSize; dx++) {
+                                            let sx = dx + moX, sy = dy + moY;
+                                            if (rotSingle) { const rc = unrotateMaskCoord(dx, dy, gridSize, cell.rotation, false); sx = rc[0]; sy = rc[1]; }
+                                            if (mask[sy] && mask[sy][sx]) {
+                                                ctx.fillRect(drawX + dx * cellPixel, drawY + dy * cellPixel, cellPixel + 0.5, cellPixel + 0.5);
+                                            }
+                                        }
+                                    }
+                                    if (cell.mirror) ctx.restore();
+                                    if (_nudged) ctx.restore();
                                 }
                             }
                         }

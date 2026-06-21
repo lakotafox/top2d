@@ -1234,35 +1234,7 @@
                             ctx.fillRect(px, py, tileSize, tileSize);
                         }
 
-                        // Draw collision overlay if debug enabled (all layers)
-                        if (showCollision) {
-                            // Include tileset index in collision key
-                            const tilesetIdx = cell.tilesetIndex || 0;
-                            const key = tilesetIdx + ':' + cell.x + ',' + cell.y;
-                            const mask = collisionMasks[key];
-
-                            if (mask) {
-                                // Draw pixel-level collision
-                                const pixelSize = tileSize / gridSize;
-                                ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                                for (let my = 0; my < gridSize; my++) {
-                                    for (let mx = 0; mx < gridSize; mx++) {
-                                        if (mask[my] && mask[my][mx]) {
-                                            ctx.fillRect(
-                                                px + mx * pixelSize,
-                                                py + my * pixelSize,
-                                                pixelSize,
-                                                pixelSize
-                                            );
-                                        }
-                                    }
-                                }
-                            } else if (tileCollisions[key]) {
-                                // Full tile collision
-                                ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                                ctx.fillRect(px, py, tileSize, tileSize);
-                            }
-                        }
+                        // (collision overlay is drawn once, rotation-aware, by drawCollisionDebugOverlay PASS 5)
                     } else if (cell.type === 'prop') {
                         const propIdx = cell.propIndex || 0;
                         const propImg = propImages[propIdx];

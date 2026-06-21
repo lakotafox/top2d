@@ -402,6 +402,7 @@
         }
 
         // Apply both skins to their DOM elements (idempotent; safe to call repeatedly).
+        // PORT-TODO(monogame): custom quest-log UI runtime — render uiConfig skins (animated sprite, %-layout, active/completed text zones, text style). docs/PORTING.md §B.
         function applyUiSkins() {
             const tracker = document.getElementById('questTracker');
             if (tracker && uiSkinReady('questLogButton')) {

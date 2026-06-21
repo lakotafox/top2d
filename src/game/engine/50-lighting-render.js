@@ -506,54 +506,27 @@ Item Receive Display:
 
             // Interact key (A) - for dialogs, doors, NPCs, and shops
             if ((e.key === 'a' || e.key === 'A') && !player.attacking) {
-                // Check for shop interaction first
+                // Shop NPCs open via their assigned dialog (shop.dialogId) — a normal authored
+                // dialog that contains an 'Open Shop' choice. No synthetic greeting, no choice
+                // injection, no shadowing of a real dialog (the shop dialog IS the conversation).
                 const shopResult = checkShopInteraction();
                 if (shopResult && shopResult.shopIndex >= 0 && !activeDialog) {
-                    // Show shop greeting dialog with Open Shop / Leave choices
                     const shop = shops[shopResult.shopIndex];
-                    const shopName = shop?.name || 'Shop';
-
-                    // Check if shop has a custom greeting dialog by ID
-                    const dialogId = parseInt(shop?.greetingDialogId);
-                    if (!isNaN(dialogId) && dialogs[dialogId]) {
-                        // Use existing dialog - but add shop choices to last page if not present
-                        const greetingDialog = JSON.parse(JSON.stringify(dialogs[dialogId])); // Deep copy
-                        const lastPage = greetingDialog.pages[greetingDialog.pages.length - 1];
-                        if (!lastPage.choices || lastPage.choices.length === 0) {
-                            lastPage.choices = [
-                                { text: 'Open Shop', action: 'shop' },
-                                { text: 'Leave', action: 'close' }
-                            ];
-                        }
+                    const did = parseInt(shop?.dialogId);
+                    if (!isNaN(did) && dialogs[did]) {
                         activeDialog = {
-                            dialog: greetingDialog,
-                            pageIndex: 0,
-                            npc: shopResult.npc,
-                            isShopGreeting: true,
-                            shopIndex: shopResult.shopIndex
-                        };
-                    } else {
-                        // Use custom greeting text or default
-                        const greetingText = (shop?.greetingDialogId || shop?.greeting || 'Welcome! Would you like to browse my wares?').trim();
-                        activeDialog = {
-                            dialog: {
-                                name: shopName,
-                                pages: [{
-                                    text: greetingText || 'Welcome! Would you like to browse my wares?',
-                                    choices: [
-                                        { text: 'Open Shop', action: 'shop' },
-                                        { text: 'Leave', action: 'close' }
-                                    ]
-                                }]
-                            },
+                            dialog: dialogs[did],
                             pageIndex: 0,
                             npc: shopResult.npc,
                             shopIndex: shopResult.shopIndex
                         };
+                        dialogSelectedChoice = 0;
+                        resetDialogTyping();
+                        renderDialogBox();
+                        return;
                     }
-                    dialogSelectedChoice = 0;
-                    resetDialogTyping();
-                    renderDialogBox();
+                    // Defensive fallback: shop has no valid dialog assigned — open it directly.
+                    openShop(shopResult.shopIndex);
                     return;
                 }
                 handleInteract();
@@ -1140,6 +1113,7 @@ Item Receive Display:
             { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }
         ];
 
+        // PORT-TODO(monogame): collision = rotation-aware tiles + scaled-bounds anim props (registry pass, scale/nudge/mirror/rotation inverse). docs/PORTING.md §B.
         function checkCollision(x, y, w, h) {
             const tileSize = gridSize * TILE_SCALE;
             const pixelScale = tileSize / gridSize;
@@ -1204,6 +1178,47 @@ Item Receive Display:
                     }
                 }
 
+                // Animated props: test the point against each placed prop's SCALED bounds.
+                // (The per-tile scan below can't see scale/nudge overflow beyond the footprint tiles.)
+                if (typeof animatedTileRegistry !== 'undefined' && animatedTileRegistry) {
+                    for (let ri = 0; ri < animatedTileRegistry.length; ri++) {
+                        const reg = animatedTileRegistry[ri];
+                        const rlayer = layers[reg.li];
+                        if (!rlayer || !rlayer[reg.y]) continue;
+                        const rcell = rlayer[reg.y][reg.x];
+                        if (!rcell || rcell.type !== 'animTile') continue;
+                        const rprop = animatedPropsData[rcell.propIndex];
+                        if (!rprop) continue;
+                        const rTimer = animPropFrameTimers[reg.x + ',' + reg.y + ',' + reg.li] || { frame: 0 };
+                        let rmask = null;
+                        if (rprop.collisionMasks) {
+                            const fc = (rprop.frames && rprop.frames.length) || 1;
+                            rmask = rprop.collisionMasks[rTimer.frame % fc] || rprop.collisionMasks[0];
+                        } else if (rprop.collisionMask) {
+                            rmask = rprop.collisionMask;
+                        }
+                        if (!rmask) continue;
+                        const cs = rcell.scale || 1;
+                        const tw = rcell.tilesW || 1, th = rcell.tilesH || 1;
+                        const propW = tw * tileSize, propH = th * tileSize;
+                        const rectX = reg.x * tileSize - propW * (cs - 1) / 2 + (rcell.nudgeX || 0) * pixelScale;
+                        const rectY = reg.y * tileSize - propH * (cs - 1) / 2 + (rcell.nudgeY || 0) * pixelScale;
+                        if (point.x < rectX || point.x >= rectX + propW * cs || point.y < rectY || point.y >= rectY + propH * cs) continue;
+                        let mfx = (point.x - rectX) / cs / pixelScale;
+                        const mfy = (point.y - rectY) / cs / pixelScale;
+                        if (rcell.mirror) mfx = (tw * gridSize) - 1 - mfx;
+                        let rmx = Math.floor(mfx), rmy = Math.floor(mfy);
+                        // Rotated square-footprint props: invert rotation into mask space.
+                        if (rcell.rotation && tw === th) {
+                            const rc = unrotateMaskCoord(rmx, rmy, tw * gridSize, rcell.rotation, false);
+                            rmx = rc[0]; rmy = rc[1];
+                        }
+                        if (rmy >= 0 && rmy < rmask.length && rmask[rmy] && rmx >= 0 && rmx < rmask[rmy].length && rmask[rmy][rmx]) {
+                            return true;
+                        }
+                    }
+                }
+
                 // Check ALL layers for collision
                 for (let li = 0; li < layers.length; li++) {
                     const layer = layers[li];
@@ -1216,69 +1231,29 @@ Item Receive Display:
                         const key = cell.type === 'tile'
                             ? tilesetIdx + ':' + cell.x + ',' + cell.y
                             : cell.x + ',' + cell.y;
-                        // Use tile collision masks for tiles, prop collision masks for props (by propIndex)
+                        // Use tile collision masks for tiles, prop collision masks for props.
+                        // (Animated props are handled by the scaled-bounds registry pass above.)
                         let mask = null;
-                        let maskOffsetX = 0;
-                        let maskOffsetY = 0;
-
                         if (cell.type === 'prop') {
                             const propIdx = cell.propIndex || 0;
                             const propKey = cell.x + ',' + cell.y;
                             mask = propCollisionMasksAll[propIdx] ? propCollisionMasksAll[propIdx][propKey] : null;
-                        } else if (cell.type === 'animTile') {
-                            // Animated tile - get collision from prop data (per-frame)
-                            const propData = animatedPropsData[cell.propIndex];
-                            if (propData) {
-                                // Get current animation frame for this prop
-                                const animKey = tileX + ',' + tileY + ',' + li;
-                                const timer = animPropFrameTimers[animKey] || { frame: 0 };
-                                const currentFrame = timer.frame;
-
-                                // Check for per-frame collision masks first, fall back to single mask
-                                if (propData.collisionMasks && propData.collisionMasks[currentFrame]) {
-                                    mask = propData.collisionMasks[currentFrame];
-                                } else if (propData.collisionMask) {
-                                    // Legacy single mask format
-                                    mask = propData.collisionMask;
-                                }
-
-                                // For multi-tile props, offset into the mask
-                                maskOffsetX = (cell.offsetX || 0) * gridSize;
-                                maskOffsetY = (cell.offsetY || 0) * gridSize;
-                            }
-                        } else {
+                        } else if (cell.type === 'tile') {
                             mask = collisionMasks[key];
                         }
 
                         if (mask) {
-                            // Check pixel-level collision (works for both tiles and props)
-                            const localX = Math.floor((point.x % tileSize) / pixelScale);
-                            const localY = Math.floor((point.y % tileSize) / pixelScale);
-
-                            let maskX, maskY;
-                            if (cell.type === 'animTile' && ((cell.scale && cell.scale !== 1) || cell.nudgeX || cell.nudgeY || cell.mirror)) {
-                                // Inverse-transform the sample point so collision matches the RENDERED prop:
-                                // per-instance scale (about the prop's center), pixel nudge, and horizontal mirror.
-                                const tw = cell.tilesW || 1, th = cell.tilesH || 1;
-                                const pmw = tw * gridSize, pmh = th * gridSize;
-                                const cs = cell.scale || 1;
-                                let sx = (localX + maskOffsetX) - (cell.nudgeX || 0);
-                                let sy = (localY + maskOffsetY) - (cell.nudgeY || 0);
-                                sx = (sx - pmw / 2) / cs + pmw / 2;
-                                sy = (sy - pmh / 2) / cs + pmh / 2;
-                                if (cell.mirror) sx = pmw - 1 - sx;
-                                maskX = Math.floor(sx);
-                                maskY = Math.floor(sy);
-                            } else {
-                                // Apply offset for multi-tile animated props
-                                maskX = localX + maskOffsetX;
-                                maskY = localY + maskOffsetY;
+                            let localX = Math.floor((point.x % tileSize) / pixelScale);
+                            let localY = Math.floor((point.y % tileSize) / pixelScale);
+                            // Rotated/flipped tiles: invert the render transform (rotate then flip)
+                            // so the collision mask matches the rotated sprite.
+                            if (cell.type === 'tile' && (cell.rotation || cell.flipped)) {
+                                const rc = unrotateMaskCoord(localX, localY, gridSize, cell.rotation, cell.flipped);
+                                localX = rc[0]; localY = rc[1];
                             }
-
-                            if (maskY >= 0 && maskY < mask.length && mask[maskY]) {
-                                if (maskX >= 0 && maskX < mask[maskY].length && mask[maskY][maskX]) {
-                                    return true;
-                                }
+                            if (localY >= 0 && localY < mask.length && mask[localY] &&
+                                localX >= 0 && localX < mask[localY].length && mask[localY][localX]) {
+                                return true;
                             }
                         } else if (cell.type === 'tile' && tileCollisions[key]) {
                             // Full tile collision (no mask = solid tile)

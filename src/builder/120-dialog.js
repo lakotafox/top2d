@@ -352,11 +352,19 @@
                 return;
             }
 
+            // Check if any shop uses this dialog (shop.dialogId)
+            const usedByShops = (typeof shops !== 'undefined' && Array.isArray(shops))
+                ? shops.filter(s => s && parseInt(s.dialogId) === index) : [];
+            if (usedByShops.length > 0) {
+                alert('Cannot delete: This dialog is assigned to ' + usedByShops.length + ' shop(s). Reassign the shop first.');
+                return;
+            }
+
             dialogs.splice(index, 1);
 
             // Wave 5: cascade reindex — placedDialogTiles, placedNpcs.dialogIndex,
             // quest hook IDs (startDialogId/activeDialogId/completeDialogId/declineDialogId),
-            // shops[].greetingDialogId.
+            // shops[].dialogId.
             reindexDialogReferences(index);
 
             broadcastEdit({ editType: 'deleteDialog', index: index });
@@ -398,7 +406,8 @@
                     }
                 });
 
-                // Check which quests use this dialog
+                // Check which quests use this dialog (all FOUR slots — declineDialogId was missing,
+                // which mislabeled decline-only dialogs as "regular").
                 quests.forEach(quest => {
                     if (parseInt(quest.startDialogId) === i) {
                         questUsage.push({ quest: quest.name || quest.id, type: 'Start' });
@@ -409,7 +418,20 @@
                     if (parseInt(quest.completeDialogId) === i) {
                         questUsage.push({ quest: quest.name || quest.id, type: 'Complete' });
                     }
+                    if (parseInt(quest.declineDialogId) === i) {
+                        questUsage.push({ quest: quest.name || quest.id, type: 'Decline' });
+                    }
                 });
+
+                // Check which shops use this dialog (shop.dialogId)
+                const shopUsage = [];
+                if (typeof shops !== 'undefined' && Array.isArray(shops)) {
+                    shops.forEach((shop, sIdx) => {
+                        if (shop && parseInt(shop.dialogId) === i) {
+                            shopUsage.push({ shop: shop.name || 'Shop ' + (sIdx + 1) });
+                        }
+                    });
+                }
 
                 return {
                     dialog: d,
@@ -417,15 +439,24 @@
                     pageCount,
                     attachedTo,
                     questUsage,
+                    shopUsage,
+                    isShopDialog: shopUsage.length > 0,
                     isQuestDialog: questUsage.length > 0
                 };
             });
 
-            // Separate into quest dialogs and regular dialogs
-            const questDialogs = dialogInfo.filter(d => d.isQuestDialog);
-            const regularDialogs = dialogInfo.filter(d => !d.isQuestDialog);
+            // Separate into shop / quest / regular dialogs (precedence: shop > quest > regular)
+            const shopDialogs = dialogInfo.filter(d => d.isShopDialog);
+            const questDialogs = dialogInfo.filter(d => d.isQuestDialog && !d.isShopDialog);
+            const regularDialogs = dialogInfo.filter(d => !d.isQuestDialog && !d.isShopDialog);
 
             let html = '';
+
+            // Shop Dialogs section
+            if (shopDialogs.length > 0) {
+                html += '<div style="font-size:11px; color:#8f8; font-weight:bold; margin:8px 0 4px 0; border-bottom:1px solid #8f8; padding-bottom:2px;">SHOP DIALOGS</div>';
+                html += shopDialogs.map(info => renderDialogItem(info)).join('');
+            }
 
             // Quest Dialogs section
             if (questDialogs.length > 0) {
@@ -448,14 +479,16 @@
         }
 
         function renderDialogItem(info) {
-            const { dialog, index, pageCount, attachedTo, questUsage, isQuestDialog } = info;
+            const { dialog, index, pageCount, attachedTo, questUsage, shopUsage } = info;
             const isSelected = currentDialogTileIndex === index;
             const bgColor = isSelected ? '#4a7c59' : '#333';
             const borderStyle = isSelected ? '2px solid #8f8' : '2px solid transparent';
 
             // Build usage text
             let usageText = '';
-            if (questUsage.length > 0) {
+            if (shopUsage && shopUsage.length > 0) {
+                usageText = '🛒 ' + shopUsage.map(s => s.shop).join(', ');
+            } else if (questUsage.length > 0) {
                 usageText = questUsage.map(q => q.quest + ' (' + q.type + ')').join(', ');
             } else if (attachedTo.length > 0) {
                 usageText = attachedTo.join(', ');

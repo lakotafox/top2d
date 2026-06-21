@@ -99,7 +99,7 @@
                 inventory: [],      // Items for sale: { itemIndex, buyPrice, stock }
                 buyList: [],        // Items shop buys: { itemIndex, sellPrice }
                 defaultSellRate: 50,
-                greetingDialogId: '',
+                dialogId: -1,
                 musicIndex: -1,
                 uiStyle: {
                     borderColor: '#ffaa00',
@@ -156,7 +156,7 @@
                     inventory: [],
                     buyList: [],
                     defaultSellRate: 50,
-                    greetingDialogId: '',
+                    dialogId: -1,
                     musicIndex: -1,
                     uiStyle: {
                         borderColor: '#ffaa00',
@@ -182,7 +182,18 @@
             const sellRate = shop.defaultSellRate || 50;
             document.getElementById('shopEditorSellRate').value = sellRate;
             document.getElementById('sellRateDisplay').textContent = sellRate;
-            document.getElementById('shopEditorGreeting').value = shop.greeting || shop.greetingDialogId || '';
+
+            // Populate the greeting-dialog dropdown (+ "create new" option) and select shop.dialogId
+            const dlgSelect = document.getElementById('shopEditorDialog');
+            if (dlgSelect) {
+                let opts = '<option value="-1">➕ (Create new shop dialog)</option>';
+                dialogs.forEach((d, di) => {
+                    opts += '<option value="' + di + '">' + (d.name || ('Dialog ' + di)) + '</option>';
+                });
+                dlgSelect.innerHTML = opts;
+                const did = (shop.dialogId !== undefined && shop.dialogId !== null && shop.dialogId !== '') ? parseInt(shop.dialogId) : -1;
+                dlgSelect.value = (!isNaN(did) && did >= 0 && did < dialogs.length) ? String(did) : '-1';
+            }
 
             // Populate music dropdown
             const musicSelect = document.getElementById('shopEditorMusic');
@@ -214,13 +225,83 @@
 
             shop.name = document.getElementById('shopEditorName').value || 'Unnamed Shop';
             shop.defaultSellRate = parseInt(document.getElementById('shopEditorSellRate').value) || 50;
-            shop.greetingDialogId = document.getElementById('shopEditorGreeting').value || '';
             shop.musicIndex = parseInt(document.getElementById('shopEditorMusic').value);
+
+            // Assign the greeting dialog (shop.dialogId) + ensure it can open the shop.
+            ensureShopDialog(shop);
 
             broadcastEdit({ editType: 'updateShop', index: editingShopIndex, shop: shop });
             closeShopEditor();
             updateShopList();
             updateSelectedShopInfo();
+            if (typeof updateDialogList === 'function') updateDialogList();
+        }
+
+        // Build a minimal shop dialog (matches the dialog editor's save shape) with the two
+        // required choices: Yes -> open shop, no -> close.
+        function makeShopDialog(name, text) {
+            return {
+                name: name,
+                style: 1,
+                width: 280,
+                height: 80,
+                typeSpeed: 30,
+                colors: { background: '#1a1a2e', border: '#fa0', text: '#ffffff', accent: '#fa0' },
+                pages: [{
+                    speaker: name,
+                    text: text,
+                    choices: [
+                        { text: 'Yes', action: 'shop' },
+                        { text: 'no', action: 'close' }
+                    ]
+                }]
+            };
+        }
+
+        // Resolve the shop's greeting dialog from the dropdown; create one if none, and
+        // auto-inject the Open Shop / Leave choices so the shop is always openable.
+        function ensureShopDialog(shop) {
+            const select = document.getElementById('shopEditorDialog');
+            let did = select ? parseInt(select.value) : -1;
+
+            if (isNaN(did) || did < 0 || did >= dialogs.length) {
+                // Create a fresh shop dialog (placeholder text the creator can edit later)
+                const dlg = makeShopDialog((shop.name || 'Shop') + ' Shop', "(please set up this shop's dialog)");
+                dialogs.push(dlg);
+                did = dialogs.length - 1;
+                broadcastEdit({ editType: 'addDialog', dialog: dlg });
+            } else {
+                // Existing dialog: ensure an 'shop' choice + a 'close' choice exist somewhere.
+                const dlg = dialogs[did];
+                if (!dlg.pages || dlg.pages.length === 0) {
+                    dlg.pages = [{ speaker: shop.name || 'Shop', text: 'do you want to open shop?' }];
+                }
+                const hasShop = dlg.pages.some(p => (p.choices || []).some(c => c.action === 'shop'));
+                const hasClose = dlg.pages.some(p => (p.choices || []).some(c => c.action === 'close'));
+                if (!hasShop || !hasClose) {
+                    const lastPage = dlg.pages[dlg.pages.length - 1];
+                    if (!lastPage.choices) lastPage.choices = [];
+                    if (!lastPage.text && !hasShop) lastPage.text = 'do you want to open shop?';
+                    if (!hasShop) lastPage.choices.push({ text: 'Yes', action: 'shop' });
+                    if (!hasClose) lastPage.choices.push({ text: 'no', action: 'close' });
+                    broadcastEdit({ editType: 'updateDialog', index: did, dialog: dlg });
+                }
+            }
+            shop.dialogId = did;
+            // Drop legacy ad-hoc greeting fields
+            delete shop.greeting;
+            delete shop.greetingDialogId;
+        }
+
+        // "Edit" button next to the dropdown — open the dialog editor for the assigned dialog.
+        function editShopDialog() {
+            const select = document.getElementById('shopEditorDialog');
+            const did = select ? parseInt(select.value) : -1;
+            if (!isNaN(did) && did >= 0 && did < dialogs.length && typeof openDialogEditor === 'function') {
+                openDialogEditor(did);
+            } else {
+                alert('Pick an existing dialog to edit, or just Save to auto-create one.');
+            }
         }
 
         function deleteShopFromEditor() {

@@ -1,5 +1,20 @@
         // === Y-SORTING FUNCTIONS ===
 
+        // PORT-TODO(monogame): rotation-aware mask remap — collision/overlay must match rotated sprite. See docs/PORTING.md §B.
+        // Map a tile-local sample (mx,my in 0..N-1) back to UNROTATED mask coords, inverting
+        // drawTileWithEffects (rotate CW by θ∈{0,90,180,270}, then horizontal flip). Shared by
+        // collision detection AND the C-key overlay so they always agree with the rendered sprite.
+        function unrotateMaskCoord(mx, my, N, rotation, flipped) {
+            const r = (((rotation || 0) % 360) + 360) % 360;
+            let sx, sy;
+            if (r === 90) { sx = my; sy = N - 1 - mx; }
+            else if (r === 180) { sx = N - 1 - mx; sy = N - 1 - my; }
+            else if (r === 270) { sx = N - 1 - my; sy = mx; }
+            else { sx = mx; sy = my; }
+            if (flipped) sx = N - 1 - sx;
+            return [sx, sy];
+        }
+
         // Object pool for Y-sorting to avoid GC pauses
         // Pre-allocated array and objects - reuse instead of creating new ones each frame
         const ENTITY_POOL_SIZE = 200; // Max entities to Y-sort (player + NPCs + items + other players)
@@ -329,17 +344,13 @@
         }
 
         // Draw only the trunk (bottom) portion of an animated tile with split line
+        // PORT-TODO(monogame): anim-prop depth-split — Flip (splitFlipped) + per-instance scale on the trunk/canopy cut. docs/PORTING.md §B.
         function drawAnimTileTrunk(cell, tx, ty, li, camX, camY, tileSize) {
             const propData = animatedPropsData[cell.propIndex];
             const propImg = animPropImages[cell.propIndex];
             if (!propData || !propImg || !propImg.complete) return;
             if (!propData.frames || propData.frames.length === 0) return;
             if (!propData.splitLine) return;
-
-            // Round to integers to prevent tile seams (+ per-instance pixel nudge)
-            const px = Math.round(tx * tileSize - camX + (cell.nudgeX || 0) * (tileSize / gridSize));
-            const py = Math.round(ty * tileSize - camY + (cell.nudgeY || 0) * (tileSize / gridSize));
-            const scale = tileSize / gridSize;
 
             // Use origin tile position for synced animation
             const originX = tx - (cell.offsetX || 0);
@@ -353,14 +364,32 @@
             const offsetX = cell.offsetX || 0;
             const offsetY = cell.offsetY || 0;
 
-            // Per-instance horizontal mirror (match drawAnimTile): reflect about the prop's screen-center.
+            // Per-instance scale geometry (mirror drawAnimTile) so the split cut aligns with the
+            // scaled sprite. dscale converts a source-pixel height into scaled destination pixels.
+            const propScale = cell.scale || 1;
+            const scaledTileSize = tileSize * propScale;
+            const dscale = scaledTileSize / gridSize;
+            const tilesW = cell.tilesW || 1, tilesH = cell.tilesH || 1;
+            const propWidth = tilesW * tileSize, propHeight = tilesH * tileSize;
+            const propCenterOffsetX = (propWidth * propScale - propWidth) / 2;
+            const propCenterOffsetY = (propHeight * propScale - propHeight) / 2;
+            const originPx = Math.floor(originX * tileSize - camX);
+            const originPy = Math.floor(originY * tileSize - camY);
+            const drawX = originPx - propCenterOffsetX + (offsetX * tileSize) * propScale;
+            const drawY = originPy - propCenterOffsetY + (offsetY * tileSize) * propScale;
+
+            // Per-instance pixel nudge + horizontal mirror (about the scaled prop center), like drawAnimTile.
+            const _nx = (cell.nudgeX || 0) * (tileSize / gridSize);
+            const _ny = (cell.nudgeY || 0) * (tileSize / gridSize);
             const mirror = cell.mirror;
-            const _twTrunk = cell.tilesW || 1;
-            const _cxTrunk = (originX * tileSize - camX) + (_twTrunk * tileSize) / 2 + (cell.nudgeX || 0) * (tileSize / gridSize);
+            const _cxTrunk = originPx - propCenterOffsetX + (propWidth * propScale) / 2;
             const blit = (sx, sy, sw, sh, dx, dy, dw, dh) => {
-                if (mirror) { ctx.save(); ctx.translate(_cxTrunk, 0); ctx.scale(-1, 1); ctx.translate(-_cxTrunk, 0); }
+                const wrap = _nx || _ny || mirror;
+                if (wrap) ctx.save();
+                if (_nx || _ny) ctx.translate(_nx, _ny);
+                if (mirror) { ctx.translate(_cxTrunk, 0); ctx.scale(-1, 1); ctx.translate(-_cxTrunk, 0); }
                 ctx.drawImage(propImg, sx, sy, sw, sh, dx, dy, dw, dh);
-                if (mirror) ctx.restore();
+                if (wrap) ctx.restore();
             };
 
             // Get split Y for this specific tile within the prop
@@ -381,43 +410,46 @@
                 if (offsetX === 0 && offsetY === 0) splitY = propData.splitLine;
             }
 
+            const srcXBase = frame.x + offsetX * gridSize;
+            const srcYBase = frame.y + offsetY * gridSize;
+            ctx.imageSmoothingEnabled = false;
+
             // If no split for this tile, draw full tile
             if (splitY === null || splitY === undefined) {
-                const srcX = frame.x + offsetX * gridSize;
-                const srcY = frame.y + offsetY * gridSize;
-                ctx.imageSmoothingEnabled = false;
-                blit(srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
+                blit(srcXBase, srcYBase, gridSize, gridSize, drawX, drawY, scaledTileSize, scaledTileSize);
                 return;
             }
 
-            // Handle splitY being an array (freeform line) - use minimum for trunk rendering
+            // Flip: which half is the Y-sorted trunk. Normal = trunk BELOW split; flipped = ABOVE.
+            const isFlipped = (propData.splitFlipped && propData.splitFlipped[tileKey]) || false;
+
+            // Flatten freeform line to the largest trunk region (no gaps):
+            // normal trunk (below) uses the lowest split; flipped trunk (above) uses the highest.
             let localSplitY;
             if (Array.isArray(splitY)) {
-                // Use minimum value for trunk rendering (draw trunk where split is lowest)
-                localSplitY = Math.min(...splitY);
+                localSplitY = isFlipped ? Math.max(...splitY) : Math.min(...splitY);
             } else {
                 localSplitY = splitY;
             }
 
-            // Only draw if split is within this tile
-            if (localSplitY <= 0) {
-                // Split is above this tile - draw full tile
-                const srcX = frame.x + offsetX * gridSize;
-                const srcY = frame.y + offsetY * gridSize;
-                ctx.imageSmoothingEnabled = false;
-                blit(srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
-            } else if (localSplitY < gridSize) {
-                // Split is within this tile - draw only trunk (below split)
-                const srcX = frame.x + offsetX * gridSize;
-                const srcY = frame.y + offsetY * gridSize + localSplitY;
-                const srcH = gridSize - localSplitY;
-                const destY = py + localSplitY * scale;
-                const destH = srcH * scale;
-
-                ctx.imageSmoothingEnabled = false;
-                blit(srcX, srcY, gridSize, srcH, px, destY, tileSize, destH);
+            if (isFlipped) {
+                // FLIPPED: trunk is ABOVE the split line
+                if (localSplitY >= gridSize) {
+                    blit(srcXBase, srcYBase, gridSize, gridSize, drawX, drawY, scaledTileSize, scaledTileSize);
+                } else if (localSplitY > 0) {
+                    blit(srcXBase, srcYBase, gridSize, localSplitY, drawX, drawY, scaledTileSize, localSplitY * dscale);
+                }
+                // localSplitY <= 0: trunk is empty (split at top)
+            } else {
+                // NORMAL: trunk is BELOW the split line
+                if (localSplitY <= 0) {
+                    blit(srcXBase, srcYBase, gridSize, gridSize, drawX, drawY, scaledTileSize, scaledTileSize);
+                } else if (localSplitY < gridSize) {
+                    const srcH = gridSize - localSplitY;
+                    blit(srcXBase, srcYBase + localSplitY, gridSize, srcH, drawX, drawY + localSplitY * dscale, scaledTileSize, srcH * dscale);
+                }
+                // localSplitY >= gridSize: trunk is empty (split below tile)
             }
-            // If localSplitY >= gridSize, split is below this tile - don't draw trunk here
         }
 
         function drawTileFull(cell, tx, ty, camX, camY, tileSize) {
@@ -430,27 +462,7 @@
                 drawTileWithEffects(ctx, cellTileset, cell.x, cell.y, gridSize, px, py, tileSize, cell.rotation || 0, cell.flipped || false);
             }
 
-            // Draw collision overlay if debug enabled
-            if (showCollision) {
-                const tilesetIdx = cell.tilesetIndex || 0;
-                const key = tilesetIdx + ':' + cell.x + ',' + cell.y;
-                const mask = collisionMasks[key];
-
-                if (mask) {
-                    const pixelSize = tileSize / gridSize;
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                    for (let my = 0; my < gridSize; my++) {
-                        for (let mx = 0; mx < gridSize; mx++) {
-                            if (mask[my] && mask[my][mx]) {
-                                ctx.fillRect(px + mx * pixelSize, py + my * pixelSize, pixelSize, pixelSize);
-                            }
-                        }
-                    }
-                } else if (tileCollisions[key]) {
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                    ctx.fillRect(px, py, tileSize, tileSize);
-                }
-            }
+            // (collision overlay is drawn once, rotation-aware, by drawCollisionDebugOverlay PASS 5)
         }
 
         function drawTileTrunk(cell, tx, ty, camX, camY, tileSize) {
@@ -518,24 +530,7 @@
             ctx.drawImage(cellTileset, cell.x, cell.y, gridSize, gridSize, px, py, tileSize, tileSize);
             ctx.restore();
 
-            // Draw collision overlay if debug enabled
-            if (showCollision) {
-                const mask = collisionMasks[key];
-                if (mask) {
-                    const pixelSize = tileSize / gridSize;
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                    for (let my = 0; my < gridSize; my++) {
-                        for (let mx = 0; mx < gridSize; mx++) {
-                            if (mask[my] && mask[my][mx]) {
-                                ctx.fillRect(px + mx * pixelSize, py + my * pixelSize, pixelSize, pixelSize);
-                            }
-                        }
-                    }
-                } else if (tileCollisions[key]) {
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                    ctx.fillRect(px, py, tileSize, tileSize);
-                }
-            }
+            // (collision overlay is drawn once, rotation-aware, by drawCollisionDebugOverlay PASS 5)
         }
 
         function drawCanopyOverlay(camX, camY, tileSize) {
@@ -650,47 +645,71 @@
                             let splitY = null;
 
                             if (typeof propData.splitLine === 'object' && !Array.isArray(propData.splitLine)) {
-                                // Try per-frame format first: "frameIndex:tileX,tileY"
                                 const perFrameKey = frameIdx + ':' + tileKey;
                                 splitY = propData.splitLine[perFrameKey];
-
-                                // Fall back to shared format: "tileX,tileY"
-                                if (splitY === undefined || splitY === null) {
-                                    splitY = propData.splitLine[tileKey];
-                                }
+                                if (splitY === undefined || splitY === null) splitY = propData.splitLine[tileKey];
                             } else if (typeof propData.splitLine === 'number') {
-                                // Old format: single number (only applies to tile 0,0)
                                 if (offsetX === 0 && offsetY === 0) splitY = propData.splitLine;
                             }
 
                             // If no split for this tile, skip canopy
                             if (splitY === null || splitY === undefined) continue;
 
-                            // Handle splitY being an array (freeform line) - use maximum for canopy rendering
+                            // Flip: canopy = the player-covering half. Normal = ABOVE split; flipped = BELOW.
+                            const isFlipped = (propData.splitFlipped && propData.splitFlipped[tileKey]) || false;
+
+                            // Flatten freeform line: normal canopy (above) uses the highest split; flipped (below) uses the lowest.
                             let localSplitY;
                             if (Array.isArray(splitY)) {
-                                // Use maximum value for canopy rendering (draw canopy where split is highest)
-                                localSplitY = Math.max(...splitY);
+                                localSplitY = isFlipped ? Math.min(...splitY) : Math.max(...splitY);
                             } else {
                                 localSplitY = splitY;
                             }
 
-                            // Only draw canopy if split is within this tile
-                            if (localSplitY > 0 && localSplitY < gridSize) {
-                                const srcX = frame.x + offsetX * gridSize;
-                                const srcY = frame.y + offsetY * gridSize;
-                                const srcH = localSplitY;
-                                const destH = srcH * scale;
+                            // Per-instance scale/nudge/mirror geometry (match drawAnimTile + drawAnimTileTrunk)
+                            const propScale = cell.scale || 1;
+                            const scaledTileSize = tileSize * propScale;
+                            const dscale = scaledTileSize / gridSize;
+                            const tilesW = cell.tilesW || 1, tilesH = cell.tilesH || 1;
+                            const propWidth = tilesW * tileSize, propHeight = tilesH * tileSize;
+                            const propCenterOffsetX = (propWidth * propScale - propWidth) / 2;
+                            const propCenterOffsetY = (propHeight * propScale - propHeight) / 2;
+                            const originPx = Math.floor(originX * tileSize - camX);
+                            const originPy = Math.floor(originY * tileSize - camY);
+                            const drawX = originPx - propCenterOffsetX + (offsetX * tileSize) * propScale;
+                            const drawY = originPy - propCenterOffsetY + (offsetY * tileSize) * propScale;
+                            const _nx = (cell.nudgeX || 0) * (tileSize / gridSize);
+                            const _ny = (cell.nudgeY || 0) * (tileSize / gridSize);
+                            const mirror = cell.mirror;
+                            const _cx = originPx - propCenterOffsetX + (propWidth * propScale) / 2;
+                            const blit = (sx, sy, sw, sh, dx, dy, dw, dh) => {
+                                const wrap = _nx || _ny || mirror;
+                                if (wrap) ctx.save();
+                                if (_nx || _ny) ctx.translate(_nx, _ny);
+                                if (mirror) { ctx.translate(_cx, 0); ctx.scale(-1, 1); ctx.translate(-_cx, 0); }
+                                ctx.drawImage(propImg, sx, sy, sw, sh, dx, dy, dw, dh);
+                                if (wrap) ctx.restore();
+                            };
 
-                                ctx.imageSmoothingEnabled = false;
-                                ctx.drawImage(propImg, srcX, srcY, gridSize, srcH, px, py, tileSize, destH);
-                            } else if (localSplitY >= gridSize) {
-                                // Full tile is canopy (split at bottom)
-                                const srcX = frame.x + offsetX * gridSize;
-                                const srcY = frame.y + offsetY * gridSize;
+                            const srcXBase = frame.x + offsetX * gridSize;
+                            const srcYBase = frame.y + offsetY * gridSize;
+                            ctx.imageSmoothingEnabled = false;
 
-                                ctx.imageSmoothingEnabled = false;
-                                ctx.drawImage(propImg, srcX, srcY, gridSize, gridSize, px, py, tileSize, tileSize);
+                            if (isFlipped) {
+                                // FLIPPED: canopy is BELOW the split line
+                                if (localSplitY <= 0) {
+                                    blit(srcXBase, srcYBase, gridSize, gridSize, drawX, drawY, scaledTileSize, scaledTileSize);
+                                } else if (localSplitY < gridSize) {
+                                    const srcH = gridSize - localSplitY;
+                                    blit(srcXBase, srcYBase + localSplitY, gridSize, srcH, drawX, drawY + localSplitY * dscale, scaledTileSize, srcH * dscale);
+                                }
+                            } else {
+                                // NORMAL: canopy is ABOVE the split line
+                                if (localSplitY > 0 && localSplitY < gridSize) {
+                                    blit(srcXBase, srcYBase, gridSize, localSplitY, drawX, drawY, scaledTileSize, localSplitY * dscale);
+                                } else if (localSplitY >= gridSize) {
+                                    blit(srcXBase, srcYBase, gridSize, gridSize, drawX, drawY, scaledTileSize, scaledTileSize);
+                                }
                             }
                         }
                     }
@@ -733,10 +752,15 @@
 
                             if (mask) {
                                 ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-                                for (let my = 0; my < gridSize; my++) {
-                                    for (let mx = 0; mx < gridSize; mx++) {
-                                        if (mask[my] && mask[my][mx]) {
-                                            ctx.fillRect(px + mx * pixelSize, py + my * pixelSize, pixelSize, pixelSize);
+                                const rotated = cell.rotation || cell.flipped;
+                                // Iterate DESTINATION pixels; map each back to the unrotated mask so the
+                                // red overlay rotates with the tile (and matches collision detection).
+                                for (let dy = 0; dy < gridSize; dy++) {
+                                    for (let dx = 0; dx < gridSize; dx++) {
+                                        let sx = dx, sy = dy;
+                                        if (rotated) { const rc = unrotateMaskCoord(dx, dy, gridSize, cell.rotation, cell.flipped); sx = rc[0]; sy = rc[1]; }
+                                        if (mask[sy] && mask[sy][sx]) {
+                                            ctx.fillRect(px + dx * pixelSize, py + dy * pixelSize, pixelSize, pixelSize);
                                         }
                                     }
                                 }
@@ -756,6 +780,62 @@
                                             ctx.fillRect(px + mx * pixelSize, py + my * pixelSize, pixelSize, pixelSize);
                                         }
                                     }
+                                }
+                            }
+                        } else if (cell.type === 'animTile') {
+                            // Animated-prop collision overlay: draw the CURRENT frame's mask,
+                            // transformed by the same per-instance scale/nudge/mirror as drawAnimTile,
+                            // so the red mask sits exactly on the rendered (possibly scaled) prop.
+                            const propData = animatedPropsData[cell.propIndex];
+                            if (propData) {
+                                const offX = cell.offsetX || 0, offY = cell.offsetY || 0;
+                                const originX = x - offX, originY = y - offY;
+                                const aKey = originX + ',' + originY + ',' + li;
+                                const timer = animPropFrameTimers[aKey] || { frame: 0 };
+                                let mask = null;
+                                if (propData.collisionMasks) {
+                                    const fcount = (propData.frames && propData.frames.length) || 1;
+                                    mask = propData.collisionMasks[timer.frame % fcount] || propData.collisionMasks[0];
+                                } else if (propData.collisionMask) {
+                                    mask = propData.collisionMask;
+                                }
+                                if (mask) {
+                                    // Replicate drawAnimTile's prop-center scale transform for THIS tile
+                                    const propScale = cell.scale || 1;
+                                    const tilesW = cell.tilesW || 1, tilesH = cell.tilesH || 1;
+                                    const propWidth = tilesW * tileSize, propHeight = tilesH * tileSize;
+                                    const propCenterOffsetX = (propWidth * propScale - propWidth) / 2;
+                                    const propCenterOffsetY = (propHeight * propScale - propHeight) / 2;
+                                    const originPx = Math.floor(originX * tileSize - camX);
+                                    const originPy = Math.floor(originY * tileSize - camY);
+                                    const drawX = originPx - propCenterOffsetX + (offX * tileSize) * propScale;
+                                    const drawY = originPy - propCenterOffsetY + (offY * tileSize) * propScale;
+                                    const cellPixel = (tileSize * propScale) / gridSize;
+
+                                    const _nx = (cell.nudgeX || 0) * (tileSize / gridSize);
+                                    const _ny = (cell.nudgeY || 0) * (tileSize / gridSize);
+                                    const _nudged = _nx || _ny;
+                                    if (_nudged) { ctx.save(); ctx.translate(_nx, _ny); }
+                                    if (cell.mirror) {
+                                        ctx.save();
+                                        const centerScreenX = originPx - propCenterOffsetX + (propWidth * propScale) / 2;
+                                        ctx.translate(centerScreenX, 0); ctx.scale(-1, 1); ctx.translate(-centerScreenX, 0);
+                                    }
+                                    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
+                                    const moX = offX * gridSize, moY = offY * gridSize;
+                                    // Single-tile rotated props: map dest->source so overlay matches collision.
+                                    const rotSingle = cell.rotation && tilesW === 1 && tilesH === 1;
+                                    for (let dy = 0; dy < gridSize; dy++) {
+                                        for (let dx = 0; dx < gridSize; dx++) {
+                                            let sx = dx + moX, sy = dy + moY;
+                                            if (rotSingle) { const rc = unrotateMaskCoord(dx, dy, gridSize, cell.rotation, false); sx = rc[0]; sy = rc[1]; }
+                                            if (mask[sy] && mask[sy][sx]) {
+                                                ctx.fillRect(drawX + dx * cellPixel, drawY + dy * cellPixel, cellPixel + 0.5, cellPixel + 0.5);
+                                            }
+                                        }
+                                    }
+                                    if (cell.mirror) ctx.restore();
+                                    if (_nudged) ctx.restore();
                                 }
                             }
                         }

@@ -234,8 +234,8 @@
             if (typeof shops !== 'undefined' && Array.isArray(shops)) {
                 for (const s of shops) {
                     if (!s) continue;
-                    if (s.greetingDialogId !== undefined && s.greetingDialogId !== null && s.greetingDialogId !== '') {
-                        s.greetingDialogId = shift(s.greetingDialogId);
+                    if (s.dialogId !== undefined && s.dialogId !== null && s.dialogId !== '' && s.dialogId >= 0) {
+                        s.dialogId = shift(s.dialogId);
                     }
                 }
             }
@@ -335,7 +335,53 @@
         function migrateProjectData(p) {
             if (!p || typeof p !== 'object') return p;
             const v = (typeof p.version === 'number') ? p.version : 1;
-            // Future: if (v < 2) { ...migrate v1 -> v2... p.version = 2; }
+
+            // v1 -> v2: shops dropped the ad-hoc greeting/greetingDialogId and now reference a real
+            // dialog via shop.dialogId (a normal authored dialog with an 'Open Shop' choice).
+            if (v < 2) {
+                if (Array.isArray(p.shops)) {
+                    p.dialogs = Array.isArray(p.dialogs) ? p.dialogs : [];
+                    const mkShopDialog = (name, text) => ({
+                        name: name, style: 1, width: 280, height: 80, typeSpeed: 30,
+                        colors: { background: '#1a1a2e', border: '#fa0', text: '#ffffff', accent: '#fa0' },
+                        pages: [{ speaker: name, text: text, choices: [ { text: 'Yes', action: 'shop' }, { text: 'no', action: 'close' } ] }]
+                    });
+                    const ensureChoices = (dlg, shopName) => {
+                        if (!dlg) return;
+                        if (!dlg.pages || dlg.pages.length === 0) dlg.pages = [{ speaker: shopName, text: 'do you want to open shop?' }];
+                        const hasShop = dlg.pages.some(pg => (pg.choices || []).some(c => c.action === 'shop'));
+                        const hasClose = dlg.pages.some(pg => (pg.choices || []).some(c => c.action === 'close'));
+                        if (!hasShop || !hasClose) {
+                            const lp = dlg.pages[dlg.pages.length - 1];
+                            if (!lp.choices) lp.choices = [];
+                            if (!lp.text && !hasShop) lp.text = 'do you want to open shop?';
+                            if (!hasShop) lp.choices.push({ text: 'Yes', action: 'shop' });
+                            if (!hasClose) lp.choices.push({ text: 'no', action: 'close' });
+                        }
+                    };
+                    p.shops.forEach((shop, i) => {
+                        if (!shop) return;
+                        if (!(shop.dialogId !== undefined && shop.dialogId !== null && shop.dialogId !== '' && shop.dialogId >= 0)) {
+                            const g = shop.greetingDialogId;
+                            const gNum = parseInt(g);
+                            if (!isNaN(gNum) && p.dialogs[gNum]) {
+                                shop.dialogId = gNum; // greetingDialogId was a numeric dialog index
+                            } else {
+                                const text = (typeof g === 'string' && g.trim()) ? g.trim()
+                                    : (typeof shop.greeting === 'string' && shop.greeting.trim()) ? shop.greeting.trim()
+                                    : "(please set up this shop's dialog)";
+                                p.dialogs.push(mkShopDialog((shop.name || ('Shop ' + (i + 1))) + ' Shop', text));
+                                shop.dialogId = p.dialogs.length - 1;
+                            }
+                        }
+                        ensureChoices(p.dialogs[shop.dialogId], shop.name || 'Shop'); // make sure it can open the shop
+                        delete shop.greeting;
+                        delete shop.greetingDialogId;
+                    });
+                }
+                p.version = 2;
+            }
+
             return p;
         }
         // ===== end Wave 0 helpers =====

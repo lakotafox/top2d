@@ -1,4 +1,5 @@
         // ============ UI TAB — custom UI skins (builder doc) ============
+        // PORT-SKIP(monogame): builder/editor. The uiConfig DATA it produces is a port target (schema §A + runtime §B); this editor is not ported. docs/PORTING.md §D.
         // The UI tab shows a LIST of skinnable slots (quest log button + panel). Each "Set Up"
         // opens a FULL-PAGE editor (mirrors the animated-prop editor): Load Image -> sheet view with
         // a frame grid you CLICK to include/exclude frames -> live preview + speed -> Static/Animated

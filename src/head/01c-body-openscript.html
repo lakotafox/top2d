@@ -497,12 +497,23 @@
                                 <input type="checkbox" id="animPropFlatLine" checked>
                                 <span>Flat Line</span>
                             </label>
+                            <label style="font-size:10px; display:flex; align-items:center; gap:4px; cursor:pointer;" title="Flip: bottom covers player (for rocks, ledges)">
+                                <input type="checkbox" id="animPropSplitFlip" onchange="toggleAnimPropSplitFlip()">
+                                <span>Flip</span>
+                            </label>
                             <span style="font-size:10px;">Y:</span>
                             <input type="number" id="animPropSplitY" value="8" min="0" max="16" style="width:40px; padding:2px; font-size:10px;">
                             <button onclick="setAnimPropSplitY()" style="padding:2px 6px; font-size:9px; background:#0aa;">Set Y</button>
-                            <button onclick="clearAnimPropSplit()" style="padding:2px 6px; font-size:9px; background:#a55;">Clear</button>
+                            <button id="animPropSplitEraseBtn" onclick="toggleAnimPropSplitErase()" title="Toggle erase: click/drag tiles to remove their split" style="padding:2px 6px; font-size:9px; background:#555;">Erase</button>
                         </div>
-                        <div style="font-size:9px; color:#888; margin-top:4px;">C = Canopy (top) | T = Trunk (Y-sorted)</div>
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:6px;">
+                            <span style="font-size:10px; color:#aaa;">Copy from:</span>
+                            <select id="animPropSplitFrameSelect" onchange="setAnimPropSplitFrame(this.value)" style="padding:2px; font-size:9px;">
+                                <option value="0">Frame 1</option>
+                            </select>
+                            <button onclick="copySplitToAllFrames()" style="padding:2px 6px; font-size:9px; background:#0aa;">Copy to All Frames</button>
+                        </div>
+                        <div style="font-size:9px; color:#888; margin-top:4px;">C = Canopy (covers player) | T = Trunk (Y-sorted). Flip swaps them.</div>
                     </div>
 
                     <p style="font-size:10px; color:#666;">Paint on any frame. Collision/split data applies to all frames.</p>
@@ -907,11 +918,14 @@
                     <input type="text" id="shopEditorName" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; margin-top:4px; box-sizing:border-box;" placeholder="General Store">
                 </div>
 
-                <!-- Greeting Message -->
+                <!-- Greeting Dialog -->
                 <div style="margin-bottom:12px;">
-                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Greeting Message (optional):</label>
-                    <textarea id="shopEditorGreeting" rows="2" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px; margin-top:4px; box-sizing:border-box; resize:vertical; font-family:inherit;" placeholder="Welcome to my shop! Take a look around..."></textarea>
-                    <div style="font-size:9px; color:#666; margin-top:2px;">Shown when player opens shop</div>
+                    <label style="font-size:11px; color:#fa0; font-weight:bold;">Greeting Dialog:</label>
+                    <div style="display:flex; gap:6px; margin-top:4px;">
+                        <select id="shopEditorDialog" style="flex:1; padding:8px; background:#1a1a1a; border:1px solid #555; color:#fff; border-radius:3px;"></select>
+                        <button onclick="editShopDialog()" style="padding:8px 10px; background:#448; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">Edit</button>
+                    </div>
+                    <div style="font-size:9px; color:#666; margin-top:2px;">Dialog shown when talking to this shop's NPC. It needs an "Open Shop" choice — auto-added on save if missing.</div>
                 </div>
 
                 <!-- Default Sell Rate -->

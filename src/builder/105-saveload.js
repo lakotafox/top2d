@@ -97,6 +97,7 @@
             }));
 
             // Save all animated props — spread-with-strip so new fields round-trip without drift.
+            // PORT-TODO(monogame): save-schema added since the split — uiConfig + animatedProps[].splitFlipped must load in C#. docs/PORTING.md §A.
             const animPropsData = animatedProps.map(prop => {
                 const copy = { ...prop };
                 delete copy._spriteImg;
@@ -1592,7 +1593,7 @@
                     if (edit.index >= 0 && edit.index < dialogs.length) {
                         dialogs.splice(edit.index, 1);
                         // Wave 5: full cascade — placedDialogTiles, placedNpcs.dialogIndex,
-                        // quest hook IDs, shops[].greetingDialogId.
+                        // quest hook IDs, shops[].dialogId.
                         reindexDialogReferences(edit.index);
                         updateDialogList();
                         if (typeof renderQuestList === 'function') renderQuestList();
@@ -2780,6 +2781,7 @@
                         fps: propData.fps || 8,
                         collisionMasks: propData.collisionMasks || legacyMask,
                         splitLine: propData.splitLine || null,
+                        splitFlipped: propData.splitFlipped || null,
                         giveItem: propData.giveItem || false,
                         giveItemIndex: propData.giveItemIndex ?? -1,
                         lockItemIndex: propData.lockItemIndex ?? -1,

@@ -1,4 +1,5 @@
         // ===== ANIMATED PROPS FUNCTIONS =====
+        // PORT-SKIP(monogame): builder/editor (split tool, Flip, copy-to-all, erase-split). Editor is cut; not ported. docs/PORTING.md §D.
         let animPropEditorImage = null;
         let animPropEditorData = null;
         let animPropEditorFrameW = 16;
@@ -8,7 +9,11 @@
         let animPropTool = 'none'; // 'none', 'collision', 'erase', 'split'
         let animPropCollisionMasks = {}; // Per-frame collision: { frameIndex: 2D array }
         let animPropCollisionFrame = 0; // Which frame we're editing collision for
-        let animPropSplitLine = null; // Array of Y values per column (like tileSplitLines)
+        let animPropSplitLine = null; // { "frameIndex:tileX,tileY": [Y per column] } per-frame split lines
+        let animPropSplitFlipped = {}; // { "tileX,tileY": true } - flip which half covers player (frame-agnostic, like tileSplitLineFlipped)
+        let animPropSplitTarget = null; // { frameIndex, tileX, tileY, frame } - tile locked during a split drag (like selectedSplitTile)
+        let animPropSplitFrame = 0; // Source frame for "Copy split to all frames"
+        let animPropSplitErase = false; // Split sub-mode: erase a tile's split (square by square)
         let animPropPainting = false;
 
         function animPropZoomIn() {
@@ -77,6 +82,9 @@
                 }
                 animPropCollisionFrame = 0;
                 animPropSplitLine = prop.splitLine ? JSON.parse(JSON.stringify(prop.splitLine)) : null;
+                animPropSplitFlipped = prop.splitFlipped ? JSON.parse(JSON.stringify(prop.splitFlipped)) : {};
+                animPropSplitFrame = 0;
+                animPropSplitTarget = null;
 
                 // Load giveItem settings
                 document.getElementById('animPropGiveItem').checked = prop.giveItem || false;
@@ -127,6 +135,9 @@
                 animPropCollisionMasks = {};
                 animPropCollisionFrame = 0;
                 animPropSplitLine = null;
+                animPropSplitFlipped = {};
+                animPropSplitFrame = 0;
+                animPropSplitTarget = null;
                 animPropFrames = []; // Ensure frames list is cleared
                 document.getElementById('animPropNameInput').value = '';
                 document.getElementById('animPropType').value = 'loop';
@@ -376,22 +387,28 @@
                             const tileStartX = frame.x + tx * gridSize;
                             const tileStartY = frame.y + ty * gridSize;
 
-                            // Fill canopy region (above split line) with semi-transparent cyan
-                            ctx.fillStyle = 'rgba(0, 255, 255, 0.25)';
+                            // Flipped tiles cover the player with the BOTTOM half (trunk on top).
+                            // Color/label them orange like the tiles tab; cyan when normal.
+                            const isFlipped = !!animPropSplitFlipped[tx + ',' + ty];
+                            const lineColor = isFlipped ? '#fa0' : '#0ff';
+
+                            // Fill the canopy region (the half that covers the player)
+                            ctx.fillStyle = isFlipped ? 'rgba(255, 170, 0, 0.25)' : 'rgba(0, 255, 255, 0.25)';
                             ctx.beginPath();
-                            ctx.moveTo(tileStartX * scale, tileStartY * scale);
+                            const edgeY = isFlipped ? (tileStartY + gridSize) : tileStartY; // canopy base edge
+                            ctx.moveTo(tileStartX * scale, edgeY * scale);
                             for (let col = 0; col < gridSize; col++) {
                                 const splitY = Array.isArray(splitYArray) ? splitYArray[col] : splitYArray;
                                 const lineX = (tileStartX + col + 0.5) * scale;
                                 const lineY = (tileStartY + splitY) * scale;
                                 ctx.lineTo(lineX, lineY);
                             }
-                            ctx.lineTo((tileStartX + gridSize) * scale, tileStartY * scale);
+                            ctx.lineTo((tileStartX + gridSize) * scale, edgeY * scale);
                             ctx.closePath();
                             ctx.fill();
 
-                            // Draw freeform split line in cyan
-                            ctx.strokeStyle = '#0ff';
+                            // Draw freeform split line
+                            ctx.strokeStyle = lineColor;
                             ctx.lineWidth = 2;
                             ctx.beginPath();
                             for (let col = 0; col < gridSize; col++) {
@@ -411,14 +428,16 @@
                                 ? splitYArray.reduce((a, b) => a + b, 0) / splitYArray.length
                                 : splitYArray;
 
-                            // Draw C (canopy - above line) and T (trunk - below line) labels
-                            ctx.fillStyle = '#0ff';
+                            // C = canopy (covers player), T = trunk (Y-sorted). Flip swaps which half is which.
+                            const topLabel = isFlipped ? 'T' : 'C';
+                            const botLabel = isFlipped ? 'C' : 'T';
+                            ctx.fillStyle = lineColor;
                             ctx.textAlign = 'center';
                             if (avgSplitY > 4) {
-                                ctx.fillText('C', (tileStartX + gridSize / 2) * scale, (tileStartY + avgSplitY / 2) * scale + 4);
+                                ctx.fillText(topLabel, (tileStartX + gridSize / 2) * scale, (tileStartY + avgSplitY / 2) * scale + 4);
                             }
                             if (avgSplitY < gridSize - 4) {
-                                ctx.fillText('T', (tileStartX + gridSize / 2) * scale, (tileStartY + avgSplitY + (gridSize - avgSplitY) / 2) * scale + 4);
+                                ctx.fillText(botLabel, (tileStartX + gridSize / 2) * scale, (tileStartY + avgSplitY + (gridSize - avgSplitY) / 2) * scale + 4);
                             }
                         }
                     }
@@ -432,8 +451,6 @@
         let animPropBrushRectW = 8;
         let animPropBrushRectH = 4;
         let animPropBrushPreviewPos = null; // { x, y } for brush preview
-        let animPropFlatLineY = null; // Y position locked when flat line mode + dragging
-
         // Tool switching for animated prop editor
         function setAnimPropTool(tool) {
             animPropTool = tool;
@@ -441,6 +458,11 @@
                 const btn = document.getElementById('animPropTool' + t);
                 if (btn) btn.classList.toggle('active', t.toLowerCase() === tool);
             });
+
+            // Reset the split erase sub-mode whenever the tool changes
+            animPropSplitErase = false;
+            const splitEraseBtn = document.getElementById('animPropSplitEraseBtn');
+            if (splitEraseBtn) splitEraseBtn.style.background = '#555';
 
             // Show/hide brush section for collision/erase tools
             const brushSection = document.getElementById('animPropBrushSection');
@@ -520,6 +542,57 @@
             console.log('[ANIM PROP] Copied collision from frame', animPropCollisionFrame + 1, 'to all frames');
         }
 
+        function setAnimPropSplitFrame(frameIdx) {
+            animPropSplitFrame = parseInt(frameIdx) || 0;
+        }
+
+        function updateAnimPropSplitFrameDropdown() {
+            const select = document.getElementById('animPropSplitFrameSelect');
+            if (!select) return;
+            select.innerHTML = '';
+            animPropFrames.forEach((frame, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = 'Frame ' + (i + 1);
+                if (i === animPropSplitFrame) opt.selected = true;
+                select.appendChild(opt);
+            });
+            if (animPropSplitFrame >= animPropFrames.length) {
+                animPropSplitFrame = Math.max(0, animPropFrames.length - 1);
+            }
+        }
+
+        // Make every other frame EXACTLY mirror the source frame's split lines — including
+        // erased tiles (set where the source has a split, delete where it doesn't). Additive-only
+        // copying left stale splits on targets after you erased a tile on the source.
+        function copySplitToAllFrames() {
+            if (animPropFrames.length === 0) return;
+            if (!animPropSplitLine || typeof animPropSplitLine !== 'object' || Array.isArray(animPropSplitLine)) {
+                animPropSplitLine = {};
+            }
+            const src = animPropSplitFrame;
+            const srcFrame = animPropFrames[src];
+            if (!srcFrame) return;
+            const tilesW = Math.ceil(srcFrame.w / gridSize);
+            const tilesH = Math.ceil(srcFrame.h / gridSize);
+            for (let i = 0; i < animPropFrames.length; i++) {
+                if (i === src) continue;
+                for (let ty = 0; ty < tilesH; ty++) {
+                    for (let tx = 0; tx < tilesW; tx++) {
+                        const key = i + ':' + tx + ',' + ty;
+                        const srcLine = animPropSplitLine[src + ':' + tx + ',' + ty];
+                        if (srcLine) {
+                            animPropSplitLine[key] = JSON.parse(JSON.stringify(srcLine));
+                        } else {
+                            delete animPropSplitLine[key]; // mirror the source's erased tiles
+                        }
+                    }
+                }
+            }
+            animPropDrawCanvas();
+            console.log('[ANIM PROP] Mirrored split from frame', src + 1, 'to all frames');
+        }
+
         function setAnimPropSplitY() {
             const yVal = parseInt(document.getElementById('animPropSplitY').value) || 8;
             if (animPropFrames.length === 0) return;
@@ -547,9 +620,36 @@
             animPropDrawCanvas();
         }
 
-        function clearAnimPropSplit() {
-            animPropSplitLine = null;
-            animPropDrawCanvas();
+        // Toggle the split "erase" sub-mode: when on, clicking/dragging deletes a tile's split.
+        function toggleAnimPropSplitErase() {
+            animPropSplitErase = !animPropSplitErase;
+            const btn = document.getElementById('animPropSplitEraseBtn');
+            if (btn) btn.style.background = animPropSplitErase ? '#d33' : '#555';
+            const canvas = document.getElementById('animPropEditorCanvas');
+            if (canvas) canvas.style.cursor = animPropSplitErase ? 'not-allowed' : 'crosshair';
+        }
+
+        // Erase the split line for whichever tile is under the cursor (square by square).
+        function animPropEraseSplitAt(px, py) {
+            for (let i = 0; i < animPropFrames.length; i++) {
+                const f = animPropFrames[i];
+                if (px >= f.x && px < f.x + f.w && py >= f.y && py < f.y + f.h) {
+                    const tileX = Math.floor((px - f.x) / gridSize);
+                    const tileY = Math.floor((py - f.y) / gridSize);
+                    const tk = tileX + ',' + tileY;
+                    if (animPropSplitLine && typeof animPropSplitLine === 'object') {
+                        delete animPropSplitLine[i + ':' + tk]; // per-frame key
+                        delete animPropSplitLine[tk];           // legacy shared key
+                    }
+                    // Drop the tile's flip once no frame keeps a split for it
+                    let stillSplit = false;
+                    for (let j = 0; j < animPropFrames.length; j++) {
+                        if (animPropSplitLine && animPropSplitLine[j + ':' + tk]) { stillSplit = true; break; }
+                    }
+                    if (!stillSplit && animPropSplitFlipped) delete animPropSplitFlipped[tk];
+                    return;
+                }
+            }
         }
 
         // Collision/split painting helpers
@@ -632,69 +732,81 @@
             }
         }
 
+        // Split painting — behaves like the tiles-tab tool (handleSplitClick/handleSplitDrag):
+        // on mousedown we lock onto the clicked frame+tile; the drag stays on that tile and the
+        // line follows the mouse live (no bottom-snap, no frozen flat-line Y).
         function animPropPaintSplit(px, py, isStart = false) {
             if (animPropFrames.length === 0) return;
 
-            // Find which frame was clicked
-            let clickedFrameIndex = -1;
-            let clickedFrame = null;
-            for (let i = 0; i < animPropFrames.length; i++) {
-                const frame = animPropFrames[i];
-                if (px >= frame.x && px < frame.x + frame.w &&
-                    py >= frame.y && py < frame.y + frame.h) {
-                    clickedFrameIndex = i;
-                    clickedFrame = frame;
-                    break;
-                }
+            // Erase sub-mode: delete the split for whichever tile is under the cursor (no tile-lock,
+            // so a drag wipes each square it crosses).
+            if (animPropSplitErase) {
+                animPropEraseSplitAt(px, py);
+                return;
             }
-            if (!clickedFrame) return;
 
-            // Calculate which tile within the frame was clicked
-            const localX = px - clickedFrame.x;
-            const localY = py - clickedFrame.y;
+            let frameIndex, frame, tileX, tileY;
+            if (isStart) {
+                // Detect which frame + tile was clicked, then lock onto it for the drag
+                let clickedFrameIndex = -1, clickedFrame = null;
+                for (let i = 0; i < animPropFrames.length; i++) {
+                    const f = animPropFrames[i];
+                    if (px >= f.x && px < f.x + f.w && py >= f.y && py < f.y + f.h) {
+                        clickedFrameIndex = i; clickedFrame = f; break;
+                    }
+                }
+                if (!clickedFrame) return;
+                frame = clickedFrame;
+                frameIndex = clickedFrameIndex;
+                tileX = Math.floor((px - frame.x) / gridSize);
+                tileY = Math.floor((py - frame.y) / gridSize);
+                animPropSplitTarget = { frameIndex, tileX, tileY, frame };
+                // Sync the Flip checkbox to this tile's current state
+                const flipCb = document.getElementById('animPropSplitFlip');
+                if (flipCb) flipCb.checked = !!animPropSplitFlipped[tileX + ',' + tileY];
+            } else {
+                if (!animPropSplitTarget) return;
+                ({ frameIndex, tileX, tileY, frame } = animPropSplitTarget);
+            }
 
-            const tileX = Math.floor(localX / gridSize);
-            const tileY = Math.floor(localY / gridSize);
-
-            // Position within the tile
-            const tileLocalX = localX - (tileX * gridSize);
-            const tileLocalY = localY - (tileY * gridSize);
-
-            // Clamp Y value
-            let clampedY = Math.round(tileLocalY);
-            if (tileLocalY >= gridSize - 2) clampedY = gridSize;
-            clampedY = Math.max(0, Math.min(gridSize, clampedY));
-
-            // Clamp X for column index
+            // Position within the LOCKED tile, clamped (mirror handleSplitDrag)
+            const tileLocalX = px - (frame.x + tileX * gridSize);
+            const tileLocalY = py - (frame.y + tileY * gridSize);
+            const clampedY = Math.max(0, Math.min(gridSize, Math.floor(tileLocalY)));
             const clampedX = Math.max(0, Math.min(gridSize - 1, Math.floor(tileLocalX)));
 
-            // Check flat line mode
             const flatLineCheckbox = document.getElementById('animPropFlatLine');
             const flatLineMode = flatLineCheckbox && flatLineCheckbox.checked;
 
-            // Initialize split lines object if needed
             if (!animPropSplitLine || typeof animPropSplitLine !== 'object' || Array.isArray(animPropSplitLine)) {
                 animPropSplitLine = {};
             }
-
-            // Key format: "frameIndex:tileX,tileY" for per-frame splits
-            const key = clickedFrameIndex + ':' + tileX + ',' + tileY;
+            const key = frameIndex + ':' + tileX + ',' + tileY;
 
             if (flatLineMode) {
-                // Flat line mode: set entire tile to same Y value
-                if (isStart) {
-                    animPropFlatLineY = clampedY;
-                }
-                const yVal = (animPropFlatLineY !== null) ? animPropFlatLineY : clampedY;
-                animPropSplitLine[key] = new Array(gridSize).fill(yVal);
+                // Flat line follows the mouse live (every column = current Y)
+                animPropSplitLine[key] = new Array(gridSize).fill(clampedY);
             } else {
-                // Freeform mode: initialize array if needed, then set this column
-                if (!animPropSplitLine[key] || !Array.isArray(animPropSplitLine[key])) {
-                    const defaultY = Math.floor(gridSize / 2);
-                    animPropSplitLine[key] = new Array(gridSize).fill(defaultY);
+                // Freeform: set only the hovered column
+                if (!Array.isArray(animPropSplitLine[key])) {
+                    animPropSplitLine[key] = new Array(gridSize).fill(Math.floor(gridSize / 2));
                 }
                 animPropSplitLine[key][clampedX] = clampedY;
             }
+        }
+
+        // Flip which half of the selected split tile covers the player (mirror toggleSplitFlip).
+        // Flip is keyed by prop-local tile (frame-agnostic) — a tile's orientation is constant.
+        function toggleAnimPropSplitFlip() {
+            if (!animPropSplitTarget) return;
+            const tileKey = animPropSplitTarget.tileX + ',' + animPropSplitTarget.tileY;
+            const cb = document.getElementById('animPropSplitFlip');
+            if (cb && cb.checked) {
+                animPropSplitFlipped[tileKey] = true;
+            } else {
+                delete animPropSplitFlipped[tileKey];
+            }
+            animPropDrawCanvas();
         }
 
         // Canvas drag handlers for animated prop editor (multi-tile selection)
@@ -782,7 +894,7 @@
 
             if (animPropPainting) {
                 animPropPainting = false;
-                animPropFlatLineY = null; // Reset flat line Y lock
+                animPropSplitTarget = null; // End split drag (unlock tile)
                 return;
             }
 
@@ -817,7 +929,7 @@
 
         document.getElementById('animPropEditorCanvas').addEventListener('mouseleave', function(e) {
             animPropPainting = false;
-            animPropFlatLineY = null; // Reset flat line Y lock
+            animPropSplitTarget = null; // End split drag (unlock tile)
             animPropBrushPreviewPos = null; // Clear brush preview
             if (animPropIsDragging) {
                 animPropIsDragging = false;
@@ -832,8 +944,9 @@
             container.innerHTML = '';
             document.getElementById('animPropFrameCount').textContent = animPropFrames.length;
 
-            // Update collision frame dropdown when frames change
+            // Update collision + split frame dropdowns when frames change
             updateAnimPropCollisionFrameDropdown();
+            updateAnimPropSplitFrameDropdown();
 
             if (animPropFrames.length === 0) {
                 container.innerHTML = '<div style="color:#666; font-size:11px;">Click or drag on sprite sheet to select frames</div>';
@@ -1057,6 +1170,7 @@
                 fps: parseInt(document.getElementById('animPropSpeedSlider').value) || 8,
                 collisionMasks: Object.keys(animPropCollisionMasks).length > 0 ? JSON.parse(JSON.stringify(animPropCollisionMasks)) : null,
                 splitLine: animPropSplitLine ? JSON.parse(JSON.stringify(animPropSplitLine)) : null,
+                splitFlipped: (animPropSplitFlipped && Object.keys(animPropSplitFlipped).length) ? JSON.parse(JSON.stringify(animPropSplitFlipped)) : null,
                 giveItem: giveItem,
                 giveItemIndex: giveItemIndex,
                 lockItemIndex: lockItemIndex,
